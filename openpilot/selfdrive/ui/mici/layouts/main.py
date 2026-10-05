@@ -10,7 +10,7 @@ from openpilot.selfdrive.ui.body.layouts.onroad import BodyLayout
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.scroller import Scroller
 from openpilot.system.ui.lib.application import gui_app
-from openpilot.selfdrive.ui.layouts.settings.trip_seed import tick_trip
+from openpilot.selfdrive.ui.layouts.settings.common import tick_trip
 
 
 ONROAD_DELAY = 2.5  # seconds

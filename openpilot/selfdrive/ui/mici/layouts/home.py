@@ -241,11 +241,12 @@ class MiciHomeLayout(Widget):
       return
     self._trip_at = now
     try:
-      t = json.loads(open(TRIP_PATH).read())
+      from openpilot.selfdrive.ui.layouts.settings.trip_stats import stats_view
+      t = stats_view()
     except Exception:
       t = {}
-    self._last_txt = ("Today ", self._fmt_trip(t.get("today_m", 0) or 0, t.get("today_eng_m", 0) or 0))
-    self._week_txt = ("Week ", self._fmt_trip(t.get("week_m", 0) or 0, t.get("week_eng_m", 0) or 0))
+    self._last_txt = ("Today ", self._fmt_trip(t.get("today_m", 0) or 0, t.get("today_e", 0) or 0))
+    self._week_txt = ("Week ", self._fmt_trip(t.get("week_m", 0) or 0, t.get("week_e", 0) or 0))
 
   def set_callbacks(self, on_settings: Callable | None = None, on_alerts: Callable | None = None,
                     alert_count_callback: Callable[[], int] | None = None,
