@@ -1,8 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 50 50">
-  <!-- Set Speed Assist (TeslaPilot Highland-Dev). 50x50, white + longitudinal green. -->
-  <path d="M11.56,40.44 A19.0,19.0 0 1 1 38.44,40.44" fill="none" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="4" stroke-linecap="round"/>
-  <path d="M11.56,40.44 A19.0,19.0 0 0 1 33.33,9.92" fill="none" stroke="#00FF40" stroke-width="4" stroke-linecap="round"/>
-  <line x1="33.03" y1="17.42" x2="39.46" y2="9.76" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
-  <path d="M17,31 L25,23 L33,31" fill="none" stroke="#00FF40" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M19,40 L25,34 L31,40" fill="none" stroke="#00FF40" stroke-opacity="0.6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Set Speed Assist (TeslaPilot Highland-Dev) v2. 50x50, longitudinal green. -->
+  <path d="M15,35 L15,29 Q15,26.5 18,26 L23,25 L28.5,18.5 Q30,17 32.5,17 L38,17 Q40.5,17 42,19 L45.5,24.5 Q48,25.5 48,28.5 L48,33 Q48,35 47.5,35 A6.5,6.5 0 0 0 34.5,35 L28.5,35 A6.5,6.5 0 0 0 15.5,35 Z M30,20 L33,20 L33,24.5 L26.5,24.5 Z M35,20 L38,20 Q39.2,20 40,21.2 L42,24.5 L35,24.5 Z" fill="#00FF40" fill-rule="evenodd"/>
+  <circle cx="22" cy="35.5" r="4.2" fill="#00FF40"/>
+  <circle cx="41" cy="35.5" r="4.2" fill="#00FF40"/>
+  <line x1="3" y1="21" x2="13" y2="21" stroke="#00FF40" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="6" y1="28" x2="12" y2="28" stroke="#00FF40" stroke-opacity="0.75" stroke-width="3.5" stroke-linecap="round"/>
+  <line x1="2" y1="35" x2="9" y2="35" stroke="#00FF40" stroke-opacity="0.5" stroke-width="3.5" stroke-linecap="round"/>
 </svg>
