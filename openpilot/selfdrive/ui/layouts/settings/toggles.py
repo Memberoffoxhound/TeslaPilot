@@ -44,6 +44,11 @@ DESCRIPTIONS = {
   "CompassSize": tr_noop(
     "Theme. Custom onroad compass: small (left, hides with MAX) or large (top-right, stays engaged)."
   ),
+  "SetSpeedAssist": tr_noop(
+    "Accelerate up to the set speed, or the personality's following distance behind a lead, when the driving model " +
+    "would drive slower. The model still decides when to slow down. Requires openpilot longitudinal control. " +
+    "From sunnypilot (zephleggett)."
+  ),
   "IsLdwEnabled": tr_noop(
     "Receive alerts to steer back into the lane when your vehicle drifts over a detected lane line " +
     "without a turn signal activated while driving over 31 mph (50 km/h)."
@@ -91,6 +96,12 @@ class TogglesLayout(Widget):
         lambda: tr("Auto Lane Change"),
         DESCRIPTIONS["AutoLaneChangeEnabled"],
         "warning.png",
+        False,
+      ),
+      "SetSpeedAssist": (
+        lambda: tr("Set Speed Assist"),
+        DESCRIPTIONS["SetSpeedAssist"],
+        "speed_limit.png",
         False,
       ),
       "IsLdwEnabled": (
@@ -235,6 +246,7 @@ class TogglesLayout(Widget):
 
     if ui_state.CP is not None:
       self._long_personality_setting.action_item.set_enabled(ui_state.has_longitudinal_control)
+    self._toggles["SetSpeedAssist"].action_item.set_enabled(ui_state.has_longitudinal_control)
 
     # TODO: make a param control list item so we don't need to manage internal state as much here
     # refresh toggles from params to mirror external changes
