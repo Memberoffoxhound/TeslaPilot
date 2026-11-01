@@ -22,7 +22,7 @@ from openpilot.common.version import RELEASE_BRANCHES
 HOME_PADDING = 8
 ALERTS_ZONE_WIDTH = 180
 MICI_WORDMARK_SIZE = 80
-SSA_ICON_SIZE = 50
+SSA_ICON_SIZE = 48
 
 
 def _wordmark_font() -> rl.Font:
@@ -184,6 +184,10 @@ class MiciHomeLayout(Widget):
     self._chestnut_failed_icon = IconWidget("icons_mici/chestnut_orange.png", (68, 40))
     self._mic_icon = IconWidget("icons_mici/microphone.png", (32, 46))
     self._body_icon = IconWidget("icons_mici/body.png", (54, 37))
+    # Set Speed Assist shortcut: shown only while the toggle is on with openpilot longitudinal,
+    # just left of the chestnut (Jetlink GPU link) icons; the row closes up when either is hidden
+    self._ssa_icon = IconWidget("icons_mici/set_speed_assist.png", (SSA_ICON_SIZE, SSA_ICON_SIZE))
+    self._ssa_icon.set_visible(False)
 
     self._alerts_pill = AlertsPill()
 
@@ -192,6 +196,7 @@ class MiciHomeLayout(Widget):
       NetworkIcon(),
       self._long_badge,
       self._usb_icon,
+      self._ssa_icon,
       self._chestnut_icon,
       self._chestnut_loading_icon,
       self._chestnut_failed_icon,
@@ -207,8 +212,6 @@ class MiciHomeLayout(Widget):
     self._week_txt = ("Week", "0mi 0%")
     self._trip_hit = rl.Rectangle(0, 0, 0, 0)
     self._on_stats_click: Callable | None = None
-    # Set Speed Assist shortcut: only with openpilot longitudinal, dim while the toggle is off
-    self._ssa_icon = gui_app.texture("icons_mici/set_speed_assist.png", SSA_ICON_SIZE, SSA_ICON_SIZE)
     self._ssa_on = False
     self._ssa_hit = rl.Rectangle(0, 0, 0, 0)
     self._on_ssa_click: Callable | None = None
@@ -322,19 +325,16 @@ class MiciHomeLayout(Widget):
     self._chestnut_failed_icon.set_visible(not usb_unknown and chestnut_state in (ChestnutState.UNCOMPILED, ChestnutState.FAILED))
     self._mic_icon.set_visible(ui_state.recording_audio)
     self._body_icon.set_visible(bool(ui_state.is_body))
+    self._ssa_icon.set_visible(self._ssa_on and bool(ui_state.has_longitudinal_control))
 
     footer_rect = rl.Rectangle(self.rect.x + HOME_PADDING, self.rect.y + self.rect.height - 48, self.rect.width - HOME_PADDING, 48)
     self._status_bar_layout.render(footer_rect)
+    if self._ssa_icon.is_visible:
+      r = self._ssa_icon.rect
+      self._ssa_hit = rl.Rectangle(r.x - 8, r.y - 8, r.width + 16, r.height + 8)
+    else:
+      self._ssa_hit = rl.Rectangle(0, 0, 0, 0)
 
     self._alerts_pill.set_position(self.rect.x + self.rect.width - self._alerts_pill.rect.width - HOME_PADDING,
                                    self.rect.y + self.rect.height - self._alerts_pill.rect.height)
     self._alerts_pill.render()
-
-    self._ssa_hit = rl.Rectangle(0, 0, 0, 0)
-    if ui_state.has_longitudinal_control:
-      ssa_x = self.rect.x + self.rect.width - HOME_PADDING - SSA_ICON_SIZE
-      if self._alert_count_callback and self._alert_count_callback() > 0:
-        ssa_x -= self._alerts_pill.rect.width + 12
-      ssa_y = self.rect.y + self.rect.height - SSA_ICON_SIZE
-      rl.draw_texture_ex(self._ssa_icon, rl.Vector2(ssa_x, ssa_y), 0.0, 1.0, rl.Color(255, 255, 255, 255 if self._ssa_on else 100))
-      self._ssa_hit = rl.Rectangle(ssa_x - 8, ssa_y - 8, SSA_ICON_SIZE + 16, SSA_ICON_SIZE + 8)
