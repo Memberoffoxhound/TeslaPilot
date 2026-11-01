@@ -22,7 +22,7 @@ class SettingsLayout(NavScroller):
     super().__init__()
     self._params = Params()
 
-    toggles_panel = TogglesLayoutMici()
+    self._toggles_panel = toggles_panel = TogglesLayoutMici()
     toggles_btn = SettingsBigButton("toggles", "", gui_app.texture("icons_mici/settings.png", 64, 64))
     toggles_btn.set_click_callback(lambda: gui_app.push_widget(toggles_panel))
 
@@ -75,6 +75,11 @@ class SettingsLayout(NavScroller):
   @property
   def stats_layout(self):
     return self._stats_layout
+
+  def show_set_speed_assist(self):
+    gui_app.push_widget(self._toggles_panel)
+    self._toggles_panel.set_shown_callback(self._toggles_panel.scroll_to_set_speed_assist)
+
   def show_pairing(self):
     gui_app.push_widget(self)
     # add settings in the back stack without showing its entrance animation.

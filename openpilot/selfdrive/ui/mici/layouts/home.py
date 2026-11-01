@@ -22,6 +22,7 @@ from openpilot.common.version import RELEASE_BRANCHES
 HOME_PADDING = 8
 ALERTS_ZONE_WIDTH = 180
 MICI_WORDMARK_SIZE = 80
+SSA_ICON_SIZE = 50
 
 
 def _wordmark_font() -> rl.Font:
@@ -206,6 +207,11 @@ class MiciHomeLayout(Widget):
     self._week_txt = ("Week", "0mi 0%")
     self._trip_hit = rl.Rectangle(0, 0, 0, 0)
     self._on_stats_click: Callable | None = None
+    # Set Speed Assist shortcut: only with openpilot longitudinal, dim while the toggle is off
+    self._ssa_icon = gui_app.texture("icons_mici/set_speed_assist.png", SSA_ICON_SIZE, SSA_ICON_SIZE)
+    self._ssa_on = False
+    self._ssa_hit = rl.Rectangle(0, 0, 0, 0)
+    self._on_ssa_click: Callable | None = None
 
   def _update_state(self):
     self._refresh_trip()
@@ -218,18 +224,24 @@ class MiciHomeLayout(Widget):
     t = tripstats.view(ui_state.params)
     self._day_txt = ("Day", fmt_trip(t["today_m"], t["today_e"], ui_state.is_metric))
     self._week_txt = ("Week", fmt_trip(t["week_m"], t["week_e"], ui_state.is_metric))
+    self._ssa_on = ui_state.params.get_bool("SetSpeedAssist")
 
   def set_callbacks(self, on_settings: Callable | None = None, on_alerts: Callable | None = None,
                     on_stats: Callable | None = None,
+                    on_set_speed_assist: Callable | None = None,
                     alert_count_callback: Callable[[], int] | None = None,
                     alert_icon_callback: Callable[[], rl.Texture | None] | None = None):
     self._on_settings_click = on_settings
     self._on_alerts_click = on_alerts
     self._on_stats_click = on_stats
+    self._on_ssa_click = on_set_speed_assist
     self._alert_count_callback = alert_count_callback
     self._alerts_pill.set_alert_count_callback(alert_count_callback, alert_icon_callback)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
+    if self._on_ssa_click and self._ssa_hit.width > 0 and rl.check_collision_point_rec(mouse_pos, self._ssa_hit):
+      self._on_ssa_click()
+      return
     if (self._on_stats_click and self._trip_hit.width > 0 and
         rl.check_collision_point_rec(mouse_pos, self._trip_hit)):
       self._on_stats_click()
@@ -317,3 +329,12 @@ class MiciHomeLayout(Widget):
     self._alerts_pill.set_position(self.rect.x + self.rect.width - self._alerts_pill.rect.width - HOME_PADDING,
                                    self.rect.y + self.rect.height - self._alerts_pill.rect.height)
     self._alerts_pill.render()
+
+    self._ssa_hit = rl.Rectangle(0, 0, 0, 0)
+    if ui_state.has_longitudinal_control:
+      ssa_x = self.rect.x + self.rect.width - HOME_PADDING - SSA_ICON_SIZE
+      if self._alert_count_callback and self._alert_count_callback() > 0:
+        ssa_x -= self._alerts_pill.rect.width + 12
+      ssa_y = self.rect.y + self.rect.height - SSA_ICON_SIZE
+      rl.draw_texture_ex(self._ssa_icon, rl.Vector2(ssa_x, ssa_y), 0.0, 1.0, rl.Color(255, 255, 255, 255 if self._ssa_on else 100))
+      self._ssa_hit = rl.Rectangle(ssa_x - 8, ssa_y - 8, SSA_ICON_SIZE + 16, SSA_ICON_SIZE + 8)
