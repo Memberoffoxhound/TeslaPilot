@@ -19,6 +19,7 @@ from openpilot.selfdrive.controls.lib.set_speed_assist import SetSpeedAssist
 T_IDXS = np.asarray(ModelConstants.T_IDXS)
 V_EGO = 20.
 A_FLOOR = 0.5
+V_CRUISE_MS = V_EGO + 5.
 RISE = float(np.interp(V_EGO, J_CRUISE_BP, J_CRUISE_VALS))
 SETTLE = int(2. / (J_CRUISE_VALS[-1] * DT_MDL)) + 10
 
@@ -34,7 +35,7 @@ def car_params(op_long=True):
 def build_sm(v_ego=V_EGO, yaw_rate=0., throttle_prob=1., lane_change=False):
   cs = messaging.new_message('carState')
   cs.carState.vEgo = v_ego
-  cs.carState.vCruise = (V_EGO + 5.) * 3.6
+  cs.carState.vCruise = V_CRUISE_MS * 3.6
   md = messaging.new_message('modelV2')
   md.modelV2.velocity.x = np.full(len(T_IDXS), v_ego).tolist()
   md.modelV2.orientationRate.z = np.broadcast_to(np.asarray(yaw_rate, dtype=float), T_IDXS.shape).tolist()
@@ -172,9 +173,11 @@ class TestSetSpeedAssistPlanner(OpenpilotTestCase):
 
   def test_on_drives_to_the_set_speed(self, mocker):
     p = planner(mocker, True)
-    assert p.a_cruise > 1.
-    assert np.isclose(p.output_a_target, p.a_cruise)
-    assert np.isclose(p.set_speed_assist.lift, p.a_cruise)
+    # toward the set speed at a production ACC's pace, not the cruise planner's
+    approach = ssa.approach_accel(V_EGO, V_CRUISE_MS)
+    assert p.a_cruise > 1. > approach
+    assert np.isclose(p.output_a_target, approach)
+    assert np.isclose(p.set_speed_assist.lift, approach)
 
     pm = mocker.MagicMock()
     p.publish(planner_sm(), pm)
