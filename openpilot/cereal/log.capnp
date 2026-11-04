@@ -130,11 +130,11 @@ struct OnroadEvent @0xc4fa6047f024e718 {
     excessiveActuation @96;
     bigModelLoading @100;
     bigModelFailed @102;
-    teslaStepAside @105;
+    teslaStepAside @106;
     # Jetlink's big model joining mid-drive (selfdrive/selfdrived/jetlink_events.py)
-    jetlinkBigModelAvailable @106;
-    jetlinkBigModelLost @107;
-    jetlinkBigModelActive @108;
+    jetlinkBigModelAvailable @107;
+    jetlinkBigModelLost @108;
+    jetlinkBigModelActive @109;
 
     lowBatteryDEPRECATED @40;
     soundsUnavailableDEPRECATED @47;
