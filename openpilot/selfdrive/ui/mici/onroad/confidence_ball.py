@@ -1,5 +1,5 @@
 import math
-import pyray as rl
+import raylib_nb as rl
 from openpilot.selfdrive.ui.mici.onroad import SIDE_PANEL_WIDTH
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.layouts.settings.common import tesla_theme, THEME_TESLA_RGB
@@ -23,18 +23,11 @@ def draw_circle_gradient(center_x: float, center_y: float, radius: int,
 
 
 class ConfidenceBall(Widget):
-  def __init__(self, demo: bool = False):
+  def __init__(self):
     super().__init__()
-    self._demo = demo
     self._confidence_filter = FirstOrderFilter(-0.5, 0.5, 1 / gui_app.target_fps)
 
-  def update_filter(self, value: float):
-    self._confidence_filter.update(value)
-
   def _update_state(self):
-    if self._demo:
-      return
-
     # animate status dot in from bottom
     if ui_state.status == UIStatus.DISENGAGED:
       self._confidence_filter.update(-0.5)
@@ -55,7 +48,7 @@ class ConfidenceBall(Widget):
     dot_height = self._rect.y + dot_height
 
     # confidence zones
-    if ui_state.status == UIStatus.ENGAGED or self._demo:
+    if ui_state.status == UIStatus.ENGAGED:
       if self._confidence_filter.x > 0.5:
         if tesla_theme():
           top_dot_color = rl.Color(90, 168, 245, 255)

@@ -5,7 +5,7 @@ import math
 import time
 from datetime import date
 
-import pyray as rl
+import raylib_nb as rl
 
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.layouts.settings.common import theme_color

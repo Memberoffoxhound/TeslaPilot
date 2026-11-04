@@ -5,7 +5,7 @@ import math
 import time
 
 from openpilot.cereal import log
-import pyray as rl
+import raylib_nb as rl
 from collections.abc import Callable
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.layouts import HBoxLayout
@@ -30,9 +30,8 @@ def _wordmark_font() -> rl.Font:
   try:
     chars = "TESLAPILOT"
     cps = sorted(map(ord, chars))
-    buf = rl.ffi.new("int[]", cps)
     with as_file(FONT_DIR) as fs:
-      font = rl.load_font_ex((fs / "TESLA.ttf").as_posix(), 200, rl.ffi.cast("int *", buf), len(cps))
+      font = rl.load_font_ex((fs / "TESLA.ttf").as_posix(), 200, cps, len(cps))
     if font.glyphCount > 0:
       rl.gen_texture_mipmaps(font.texture)
       rl.set_texture_filter(font.texture, rl.TextureFilter.TEXTURE_FILTER_TRILINEAR)
@@ -242,11 +241,11 @@ class MiciHomeLayout(Widget):
     self._alerts_pill.set_alert_count_callback(alert_count_callback, alert_icon_callback)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    if self._on_ssa_click and self._ssa_hit.width > 0 and rl.check_collision_point_rec(mouse_pos, self._ssa_hit):
+    if self._on_ssa_click and self._ssa_hit.width > 0 and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._ssa_hit):
       self._on_ssa_click()
       return
     if (self._on_stats_click and self._trip_hit.width > 0 and
-        rl.check_collision_point_rec(mouse_pos, self._trip_hit)):
+        rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._trip_hit)):
       self._on_stats_click()
       return
     relative_x = mouse_pos.x - self.rect.x

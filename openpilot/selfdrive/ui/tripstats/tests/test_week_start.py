@@ -91,7 +91,7 @@ def test_ui_uses_the_gps_zone_rule(monkeypatch, tmp_path):
 
 
 def test_statistics_rows_follow_the_week():
-  pytest.importorskip("pyray")
+  pytest.importorskip("raylib_nb")
   common = Path(importlib.util.find_spec("openpilot.common.params").origin).parent
   if not any(common.glob("libparams_c.*")):                  # a tree without the built params library skips this
     pytest.skip("params library not built (libparams_c)")

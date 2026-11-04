@@ -31,7 +31,7 @@ PROBE = textwrap.dedent('''
   mod.ui_state, mod.UIStatus, mod.ChestnutState, mod.device = ui, UIStatus, CS, SimpleNamespace(awake=True)
   sys.modules["openpilot.selfdrive.ui.ui_state"] = mod
 
-  import pyray as rl
+  import raylib_nb as rl
   from openpilot.system.ui.lib.application import gui_app
   rl.set_trace_log_level(rl.TraceLogLevel.LOG_NONE)
   rl.set_config_flags(rl.ConfigFlags.FLAG_WINDOW_HIDDEN)

@@ -4,7 +4,7 @@
 link toggle (off / usb / iOS pills), on Highland's widgets. The toggle writes
 through jetlink_adapter.set_link_mode, which falls back to the raw params file
 for a stale params library and turns ADB off with the link on."""
-import pyray as rl
+import raylib_nb as rl
 
 from openpilot.selfdrive import jetlink_adapter
 from openpilot.selfdrive.ui.accelerator_link import LINK_MODE_LABELS, link_mode

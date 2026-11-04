@@ -354,7 +354,7 @@ def test_module_is_brand_free_and_light():
     mods = [n.module or "" for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)]
     mods += [a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names]
     ok = allowed + (("openpilot.cereal",) if f.name == "tz.py" else ())
-    assert all(not m.startswith(("openpilot", "opendbc", "cereal", "pyray")) or m.startswith(ok) for m in mods), (f.name, mods)
+    assert all(not m.startswith(("openpilot", "opendbc", "cereal", "pyray", "raylib_nb")) or m.startswith(ok) for m in mods), (f.name, mods)
     tree.body = tree.body[1:]
     code = ast.unparse(tree).lower()
     for word in ("tesla", "jetlink", "gear", "park", "chicago", "america/", "asia/", "europe/", "australia/"):

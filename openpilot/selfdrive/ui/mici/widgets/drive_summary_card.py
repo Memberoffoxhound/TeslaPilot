@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import time
 
-import pyray as rl
+import raylib_nb as rl
 
 from openpilot.selfdrive.ui import tripstats as ts
 from openpilot.selfdrive.ui.tripstats import card as tc

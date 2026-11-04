@@ -2,7 +2,7 @@
 import os
 import time
 
-import pyray as rl
+import raylib_nb as rl
 
 SHOT_DIR = "/data/media/0/screenshots"
 SHOT_PLAY = "/data/screenshot_play"

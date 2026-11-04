@@ -1,6 +1,6 @@
 import math
 
-import pyray as rl
+import raylib_nb as rl
 from openpilot.cereal import messaging, log
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog

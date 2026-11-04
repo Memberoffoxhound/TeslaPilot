@@ -1,7 +1,7 @@
 """The "Day 52mi 24%   Week 330mi 64%" row (home) and block (trip card)."""
 from __future__ import annotations
 
-import pyray as rl
+import raylib_nb as rl
 
 from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.tripstats.store import engaged_pct

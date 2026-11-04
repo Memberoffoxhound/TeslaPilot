@@ -16,11 +16,7 @@ export VECLIB_MAXIMUM_THREADS=1
 export QCOM_PRIORITY=12
 
 if [ -z "$AGNOS_VERSION" ]; then
-  export AGNOS_VERSION="19.7"
+  export AGNOS_VERSION="20.2"
 fi
 
 export STAGING_ROOT="/data/safe_staging"
-
-# Highland: always fingerprint as 2025 Tesla Model 3 until updated
-# fingerprinting semantics are figured out. See README disclaimer.
-export FINGERPRINT="${FINGERPRINT:-TESLA_MODEL_3}"
