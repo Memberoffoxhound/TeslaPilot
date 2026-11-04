@@ -345,7 +345,8 @@ def test_jetlink_runs_the_pick(params_root):
     mp.select(REF_A)
     m.step()
     models = Models(op)  # its slot cache lives INDEX_TTL
-    assert models.selected_slot() == {'name': 'Alpha (October 01, 2026)', 'ref': REF_A}
+    # v0.8.12 on: a pick also carries its sha256, None for a catalog pick
+    assert models.selected_slot() == {'name': 'Alpha (October 01, 2026)', 'ref': REF_A, 'sha256': None}
     selected = models.selected_model()
     assert selected['ref'] == REF_A
     store_ptrs = {REF_A: {'oid': 'f' * 64, 'size': 1234}}

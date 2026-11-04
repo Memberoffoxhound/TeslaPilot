@@ -57,16 +57,20 @@ MODES = ('off', 'usb', 'ios')
 # the params jetlink reads and writes, all declared in params_keys.h. big_model
 # and catalog are Highland's model manager's (openpilot/selfdrive/modelmanager),
 # the keys zoompilot's adapter names: the pick ({ref, displayName, ...}) and the
-# big-model catalog it caches
-_Keys = namedtuple('_Keys', 'link offroad progress spec pointers big_model catalog charge_phone')
+# big-model catalog it caches. select is where the UI queues a pick by its ref
+# for the model manager; jetlink writes a newer pick made on the Jetson or in
+# an app there, so the comma's list follows it
+_Keys = namedtuple('_Keys', 'link offroad progress spec pointers big_model catalog charge_phone select')
 KEYS = _Keys(link='JetlinkLink', offroad='IsOffroad', progress='AcceleratorProgress', spec='JetlinkSpec',
              pointers='JetlinkModelPointers', big_model='ModelManager_ActiveBundleChestnut',
-             catalog='ModelManager_ModelsCache_Chestnut', charge_phone='JetlinkChargePhone')
+             catalog='ModelManager_ModelsCache_Chestnut', charge_phone='JetlinkChargePhone',
+             select='ModelManager_DownloadRef')
 
 # every key this adapter declares in params_keys.h, and its type there
 JSON_KEYS = frozenset({KEYS.progress, KEYS.spec, KEYS.pointers, KEYS.big_model, KEYS.catalog})
 INT_KEYS = frozenset({KEYS.link})
 BOOL_KEYS = frozenset({KEYS.charge_phone})
+STRING_KEYS = frozenset({KEYS.select})
 
 # the offroad alert reason() feeds (params_keys.h, alerts_offroad.json), zoompilot's name
 OFFROAD_ALERT = 'Offroad_AcceleratorUnavailable'
@@ -220,6 +224,8 @@ def file_get(key: str):
       return int(raw)
     if key in BOOL_KEYS:
       return raw.strip() in (b'1', b'true', b'True')
+    if key in STRING_KEYS:
+      return raw.decode()
     return raw
   except Exception:
     return None

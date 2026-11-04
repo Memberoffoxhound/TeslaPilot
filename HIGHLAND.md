@@ -73,7 +73,7 @@ Hold display 3s → `/data/media/0/screenshots`. Web GUI `system/webgui` on **80
 
 Big model on a phone or computer plugged into the comma's USB-C port. Synced with zoompilot develop `93b6ca9`:
 
-- `jetlink_repo` pinned at `d19b83b` (jetlink **v0.8.8**), what zoompilot develop pins.
+- `jetlink_repo` pinned at `af9df78` (jetlink **v0.8.13**), what zoompilot develop pins. A model picked on the Jetson or in an app drives on the comma too, and the comma's list follows it.
 - modeld picks the big model as zoompilot does: `chestnut_compiled() and (chestnut_present() or jetlink_adapter.chestnut_cable())`. `chestnut_cable()` is a cable on the USB-C port while the link is off, so an iPhone/USB link never waits 10 s for a chestnut.
 - `selfdrive/jetlink_adapter`: jetlink's `Stock` adapter and `Hooks`, behind Highland's lazy gate. With **Settings → models → jetlink** off nothing imports jetlink.
 - selfdrived: `jetlinkBigModelAvailable` / `jetlinkBigModelLost` / `jetlinkBigModelActive` (log.capnp @106–108; `teslaStepAside` is @105, after comma's `userBookmarkNotPaired` @104) plus `bigModelLoading` no-entry for about 1 s after a swap. None of them disengage.

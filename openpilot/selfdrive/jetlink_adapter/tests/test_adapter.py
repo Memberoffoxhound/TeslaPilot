@@ -260,3 +260,11 @@ def test_modeld_asks_the_adapter_about_the_cable():
   source = (Path(BASEDIR) / 'openpilot/selfdrive/modeld/modeld.py').read_text()
   assert 'jetlink_adapter.chestnut_cable()' in source
   assert 'cable_connected' not in source
+
+
+def test_select_is_the_model_managers_queue(params_root):
+  # jetlink writes a newer pick made on the server where the UI queues one
+  from openpilot.selfdrive import modelmanager as mm
+  assert ja.KEYS.select == mm.DOWNLOAD_REF
+  ja.file_put(ja.KEYS.select, 'abc123')
+  assert ja.file_get(ja.KEYS.select) == 'abc123'
