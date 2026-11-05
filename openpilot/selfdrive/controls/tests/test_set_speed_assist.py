@@ -136,6 +136,8 @@ def planner_sm(engaged=False):
   for service in ('radarState', 'selfdriveState'):
     sm[service] = getattr(messaging.new_message(service), service)
   sm['selfdriveState'].enabled = engaged
+  # standard, so comma's Aggressive starting boost stays out of these checks
+  sm['selfdriveState'].personality = log.LongitudinalPersonality.standard
   return sm
 
 
