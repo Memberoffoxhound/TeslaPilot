@@ -232,6 +232,14 @@ def download_one(oid, size):
       return dst
 
 
+def fetch_exclude():
+  # Highland keeps lfs.fetchexclude in .lfsconfig, like stock Git LFS read it
+  value = git("config", "--get", "lfs.fetchexclude", check=False).decode().strip()
+  if not value and (ROOT / ".lfsconfig").is_file():
+    value = git("config", "--file", str(ROOT / ".lfsconfig"), "--get", "lfs.fetchexclude", check=False).decode().strip()
+  return value
+
+
 def excluded(name, patterns):
   for pattern in filter(None, patterns.split(",")):
     pattern = pattern.strip().lstrip("/").rstrip("/")
@@ -280,7 +288,7 @@ def write_packets(source):
 
 
 def filter_process():
-  exclude = git("config", "--get", "lfs.fetchexclude", check=False).decode().strip()
+  exclude = fetch_exclude()
   list(read_packets(sys.stdin.buffer))
   write_packets((b"git-filter-server\n", b"version=2\n"))
   capabilities = {line.rstrip(b"\n") for line in read_packets(sys.stdin.buffer)}
@@ -387,7 +395,7 @@ def pull(exclude=None):
   install()
   found = pointers_for_index()
   if exclude is None:
-    exclude = git("config", "--get", "lfs.fetchexclude", check=False).decode().strip()
+    exclude = fetch_exclude()
   if exclude:
     found = {obj: kept for obj, paths in found.items() if (kept := [path for path in paths if not excluded(path, exclude)])}
   parallel(download_one, found)
