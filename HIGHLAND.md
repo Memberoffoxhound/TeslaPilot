@@ -2,9 +2,9 @@
 
 # TeslaPilot — Highland
 
-Working branch. Version **0.11.23**. Repo name is `openpilot` so `installer.comma.ai/Memberoffoxhound/Highland` works.
+These notes describe **Highland-Dev**: version **0.11.23**, synced through comma master `89e7e0a4c` (openpilot **0.11.3**).
 
-`master` is an unmodified comma.ai/openpilot mirror. **HighlandStage** is Highland rebased onto current comma master (AGNOS **19.7**, comma tinygrad ONNX/warp).
+AGNOS is **20.3** (`launch_env.sh`). The first boot on an older OS flashes it. Other branches may use different versions.
 
 ## opendbc pin
 
@@ -12,7 +12,7 @@ Working branch. Version **0.11.23**. Repo name is `openpilot` so `installer.comm
 
 Structure matches comma: gitlink SHA is what ships, not the branch tip. The SHA is **comma openpilot master's opendbc pin plus Tesla-only commits**:
 
-- base: `b3bd79a6` (commaai/opendbc, the pin in comma/openpilot master)
+- comma base: `1df34867` (the pin in comma master `89e7e0a4c`)
 - extras: 3-bit `DAS_steeringControlType`, cooperative steering, scroll-wheel cancel, `TESLA_MODEL_3` fingerprint pin, cached EPS FW fallback
 
 ```bash
@@ -24,11 +24,11 @@ git add opendbc_repo
 git commit -m "opendbc: bump Highland (comma pin + Tesla extras)"
 ```
 
-Current gitlink: `c16441e` (`Highland-sync`).
+Current gitlink: `044e8adc` (comma `1df34867` merged into Highland).
 
 ## Fingerprint
 
-This branch **always fingerprints as `TESLA_MODEL_3`** (2025 Model 3 / HW4 docs) until updated fingerprinting semantics are figured out. FW is still queried so FSD 14 flags can apply. `FINGERPRINT` is also defaulted in `launch_env.sh`. See the README disclaimer: Highland Teslas only.
+This branch **always fingerprints as `TESLA_MODEL_3`** (2025 Model 3 / HW4 docs) until updated fingerprinting semantics are figured out. FW is still queried so FSD 14 flags can apply. The pinned opendbc enforces this in `car_helpers.py`. See the README disclaimer: Highland Teslas only.
 
 ## Params
 
@@ -42,7 +42,7 @@ This branch **always fingerprints as `TESLA_MODEL_3`** (2025 Model 3 / HW4 docs)
 | `ParkOffroadState` | 0 | parkd's output: 0 none, 1 parking, 2 parked. Cleared on manager start only, re-asserted every second. |
 | `DriveSummary` | off | Trip card as the onroad page when a trip ends (stopped, ≥ 0.1 mi / 30 s); stock scroll to home after 20 s (`SHOW_S`) or a tap; swipe back to see it until the next drive. With `ParkOffroad`: up at the first Park sample with brightness held, and R/D skips `ONROAD_DELAY` and the brightness ramp. Any car; see PORTING.md. |
 | `DriveSummaryLast` | — | The one trip-stats store (JSON): 400 days of totals, lifetime, best stretch, best streak, last drive, drives not stored yet. See `selfdrive/ui/tripstats/README.md`. |
-| `Timezone` | — | Time zone for trip-stats days, looked up from `LastGPSPosition` in the offline 190 KB map (`tzgrid.bin`). Empty until the first GPS fix, then the system zone is used. Written off the UI thread. There is no manual override. |
+| `Timezone` | — | Time zone for trip-stats days, looked up from `LastGPSPosition` in the offline 190 KB map (`tzgrid.bin`). The system zone is used until the first GPS fix. Written off the UI thread. There is no manual override. |
 
 ## Trip stats
 
@@ -69,23 +69,21 @@ Tesla stock ACC until this is on. Experimental is gated on openpilot long.
 
 Hold display 3s → `/data/media/0/screenshots`. Web GUI `system/webgui` on **8089**, runs at boot (manager `RestartingPythonProcess`, always_run), no auth: stats, screenshots, UI screen recording.
 
-## Jetlink (branch `jetlink`)
+## Jetlink
 
-Big model on a phone or computer plugged into the comma's USB-C port. Synced with zoompilot develop `93b6ca9`:
+`jetlink_repo` is pinned at `9cfde98` (**v0.9.0**, adapter API 4). The comma, Jetson and phone runtime versions must agree.
 
-- `jetlink_repo` pinned at `af9df78` (jetlink **v0.8.13**), what zoompilot develop pins. A model picked on the Jetson or in an app drives on the comma too, and the comma's list follows it.
-- modeld picks the big model as zoompilot does: `chestnut_compiled() and (chestnut_present() or jetlink_adapter.chestnut_cable())`. `chestnut_cable()` is a cable on the USB-C port while the link is off, so an iPhone/USB link never waits 10 s for a chestnut.
-- `selfdrive/jetlink_adapter`: jetlink's `Stock` adapter and `Hooks`, behind Highland's lazy gate. With **Settings → models → jetlink** off nothing imports jetlink.
-- selfdrived: `jetlinkBigModelAvailable` / `jetlinkBigModelLost` / `jetlinkBigModelActive` (log.capnp @106–108; `teslaStepAside` is @105, after comma's `userBookmarkNotPaired` @104) plus `bigModelLoading` no-entry for about 1 s after a swap. None of them disengage.
-- hardwared: param `Offroad_AcceleratorUnavailable` (offroad alert "Jetlink unavailable: …"); powers the accelerator off with the comma. `launch_chffrplus.sh` stops charging out of the USB-C port from boot while the link is on.
-- UI, as zoompilot: the link drives the chestnut icons (`ChestnutState.WAITING` shows dim). The models panel holds active model / big model, the off/usb/iOS link toggle and charge phone. The data comes from jetlink's `Status` and its runtime record at `/dev/shm/jetlink/modeld.json`. There is no Highland live file and no Settings → jetlink page.
-- Own additions kept: model manager, ADB released while the link holds the port, Tesla step-aside, `lat_delay` written for the joining model. No LFS for any of it.
+- `selfdrive/jetlink_adapter` uses Jetlink's `Stock` adapter and `Hooks`; keep it aligned with zoompilot's porting guide.
+- **Settings → models** offers the big-model picker and off/USB/iOS link setting. There is no charge-phone control; `JetlinkChargePhone` remains default-off because Jetlink's keys require it.
+- Without a chestnut, Jetlink supplies its own model catalog and downloads the selected ONNX. With a chestnut, the model manager uses the chestnut HTTP catalog.
+- Jetlink's `Status` and `/dev/shm/jetlink/modeld.json` feed the existing chestnut icons. Waiting is dim; active is green.
+- selfdrived reports available/lost/active events (`log.capnp` @107–109; Tesla step-aside is @106). A swap briefly blocks entry with `bigModelLoading`; link events do not disengage.
+- hardwared reports an unavailable accelerator and coordinates shutdown. The launch hook stops USB-C charging while the link is enabled; ADB is unavailable while Jetlink owns the port.
+- modeld retains the stock USB-host exclusion when detecting a chestnut cable and publishes `lat_delay` for the joining model.
 
-## Upstream sync (Oct 2026)
+## CommaView
 
-`jetlink` = comma master `9fba666` merged once (one merge commit, no rebase), opendbc moved with panda to comma's pin `b3bd79a` plus the Tesla extras (`TeslaPilot-opendbc` `b04890d`). Tesla steering decode is comma's 3-bit-only one; panda safety is comma's, byte for byte. Experimental mode follows comma (always on with openpilot long); `LongModeBadge` stays.
-
-AGNOS: `jetlink` runs comma's **20.1**. `jetlink-agnos19` is the same code with one commit on top that stays on **19.7** (no OS flash) and keeps comma's `modem` process, which AGNOS 20 moved into the OS. If 20.1 hangs at boot, install `jetlink-agnos19`.
+Like sunnypilot, this tree carries no CommaView code, toggle or daemon. CommaView's external installer owns its UI patch, runtime and boot hook.
 
 ## Git LFS
 

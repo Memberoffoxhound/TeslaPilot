@@ -11,10 +11,10 @@ It is one person's project. There is no support, and you install it at your own 
 ## What you need
 
 - A **comma 4**. TeslaPilot is built and tested only on a comma 4.
-- **AGNOS 19.7.** TeslaPilot stays on AGNOS 19, so installing it doesn't flash a new OS.
+- **The OS required by your branch.** `Highland-Dev` uses **AGNOS 20.3** and flashes it on the first boot if needed. Check `launch_env.sh` before switching branches.
 - A **Tesla Model 3 Highland** with the Tesla B harness. It's driven daily on a 2026 Model 3 Highland.
 
-The version is **0.11.23**, based on comma openpilot 0.11.2 and synced with comma master.
+The fork reports version **0.11.23**. `Highland-Dev` is synced through comma openpilot **0.11.3** (`89e7e0a4c`).
 
 ## Install
 
@@ -26,7 +26,7 @@ installer.comma.ai/Memberoffoxhound/Highland
 
 The branch name is case-sensitive. To go back to stock openpilot, use `openpilot.comma.ai`.
 
-`Highland` is the main install branch. New features are tested on `jetlink-sync-agnos19` first.
+`Highland` is the main install branch; `Highland-Dev` is the development branch. Their code and OS requirements can differ.
 
 ## What's different from openpilot
 
