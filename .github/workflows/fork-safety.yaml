@@ -9,7 +9,7 @@ name: fork-safety
 
 on:
   push:
-    branches: [master, Highland]
+    branches: [master, Highland, Highland-Dev]
   pull_request:
   workflow_dispatch:
 
