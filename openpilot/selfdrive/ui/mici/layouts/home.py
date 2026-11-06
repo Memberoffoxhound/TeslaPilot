@@ -17,6 +17,7 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.ui_state import ui_state, ChestnutState
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.widgets.trip_row import GREY, WHITE, draw_trip_row, fmt_trip
+from openpilot.selfdrive.car.vehicle_profile import MAKES, make as car_make
 from openpilot.common.version import RELEASE_BRANCHES
 
 HOME_PADDING = 8
@@ -132,38 +133,90 @@ class NetworkIcon(Widget):
 
 
 class LongModeBadge(Widget):
+  """Footer: stock OEM cruise badge, or comma + LONG when openpilot long is on."""
 
   H = 48
-  LOGO_W = 48
   COL_W = 16
+  OP_LOGO_W = 30
+  LETTER_SZ = 11
 
   def __init__(self):
     super().__init__()
     self._comma = gui_app.texture("icons_mici/settings/comma_icon.png", 27, 48)
-    self._tesla = gui_app.texture("icons_mici/tesla_t.png", 48, 48)
+    self._logos = {
+      name: gui_app.texture(m.logo, m.logo_wh[0], m.logo_wh[1])
+      for name, m in MAKES.items() if m.logo is not None
+    }
     self._font = gui_app.font(FontWeight.BOLD)
     self._op = False
-    self.set_rect(rl.Rectangle(0, 0, float(self.LOGO_W + 4 + self.COL_W), float(self.H)))
+    self._make_name = "generic"
+    self._make = MAKES["generic"]
+    self._logo_w = float(self._make.logo_wh[0])
+    self._sync_rect()
     self.set_enabled(False)
+
+  def _sync_rect(self):
+    # keep layout-placed x/y; width tracks logo (+ OEM letters, unless text-only generic)
+    col = self.COL_W if self._op else self._make.col_w
+    side = 0 if (not self._op and self._make.text_rows is not None) else (4 + col)
+    self.set_rect(rl.Rectangle(self.rect.x, self.rect.y, float(self._logo_w + side), float(self.H)))
 
   def _update_state(self):
     self._op = bool(ui_state.has_longitudinal_control)
+    self._make_name = car_make(ui_state.CP)
+    self._make = MAKES[self._make_name]
+    self._logo_w = float(self.OP_LOGO_W if self._op else self._make.logo_wh[0])
+    self._sync_rect()
+
+  def _draw_letters(self, letters: str, lx: float, y: float, sz: int | None = None, col_w: int | None = None) -> None:
+    # equal slots so large OEM letters (Kia SCC) span the logo height
+    fsz = self.LETTER_SZ if sz is None else sz
+    col = self.COL_W if col_w is None else col_w
+    sizes = [measure_text_cached(self._font, ch, fsz) for ch in letters]
+    slot = self.H / len(letters)
+    for i, (ch, ch_sz) in enumerate(zip(letters, sizes, strict=False)):
+      cy = y + i * slot + (slot - ch_sz.y) / 2
+      rl.draw_text_ex(self._font, ch, rl.Vector2(lx + (col - ch_sz.x) / 2, cy), fsz, 0, WHITE)
+
+  def _draw_text_icon(self, rows: tuple[str, str], x: float, y: float, w: float) -> None:
+    # STOCK / ACC: largest bold size in the 50px slot; STOCK targets ~48px wide, tight rows
+    pad, gap = 1.0, 1.0
+    fsz = 40
+    while fsz > 8:
+      sizes = [measure_text_cached(self._font, row, fsz) for row in rows]
+      # measure is a hair wider than ink; allow ~1px so STOCK ink can hit ~48
+      if max(s.x for s in sizes) <= w + 1 and sum(s.y for s in sizes) + gap <= self.H - 2 * pad:
+        break
+      fsz -= 1
+    sizes = [measure_text_cached(self._font, row, fsz) for row in rows]
+    block = sum(s.y for s in sizes) + gap
+    cy = y + (self.H - block) / 2
+    for row, sz in zip(rows, sizes, strict=True):
+      rl.draw_text_ex(self._font, row, rl.Vector2(x + (w - sz.x) / 2, cy), fsz, 0, WHITE)
+      cy += sz.y + gap
 
   def _render(self, _) -> None:
     x, y = self.rect.x, self.rect.y
-    tex = self._comma if self._op else self._tesla
-    tx = x + (self.LOGO_W - tex.width) / 2
-    ty = y + (self.H - tex.height) / 2
-    rl.draw_texture_ex(tex, rl.Vector2(tx, ty), 0.0, 1.0, rl.WHITE)
-    letters = "LONG" if self._op else "TACC"
-    lsz = 11
-    sizes = [measure_text_cached(self._font, ch, lsz) for ch in letters]
-    gap = max(0.0, (self.H - sum(s.y for s in sizes)) / (len(letters) + 1))
-    lx = x + self.LOGO_W + 2
-    cy = y + gap
-    for ch, sz in zip(letters, sizes, strict=False):
-      rl.draw_text_ex(self._font, ch, rl.Vector2(lx + (self.COL_W - sz.x) / 2, cy), lsz, 0, WHITE)
-      cy += sz.y + gap
+    if self._op:
+      tex = self._comma
+      tx = x + (self._logo_w - tex.width) / 2
+      ty = y + (self.H - tex.height) / 2
+      rl.draw_texture_ex(tex, rl.Vector2(tx, ty), 0.0, 1.0, rl.WHITE)
+      letters = "LONG"
+    else:
+      m = self._make
+      if m.text_rows is not None:
+        # generic: STOCK/ACC two-row text is the whole badge (same bold font as TACC/SCC)
+        self._draw_text_icon(m.text_rows, x, y, self._logo_w)
+        return
+      tex = self._logos[self._make_name]
+      tx = x + (self._logo_w - tex.width) / 2
+      ty = y + (self.H - tex.height) / 2
+      rl.draw_texture_ex(tex, rl.Vector2(tx, ty), 0.0, 1.0, rl.WHITE)
+      letters = m.stock_label
+      self._draw_letters(letters, x + self._logo_w + 2, y, m.letter_sz, m.col_w)
+      return
+    self._draw_letters(letters, x + self._logo_w + 2, y)
 
 
 class MiciHomeLayout(Widget):

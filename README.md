@@ -163,3 +163,5 @@ openpilot and TeslaPilot are released under the [MIT license](LICENSE). Some par
 - **First day of the week** (`openpilot/selfdrive/ui/tripstats/weekstart.json`): from Unicode CLDR data, © Unicode, Inc., under the [Unicode License v3](https://www.unicode.org/license.txt).
 
 TeslaPilot isn't affiliated with Tesla, Inc. or comma.ai. The wordmark isn't Tesla's official logo.
+
+Tesla, Kia, and other brand names and logos are trademarks of their respective owners, used for identification only. TeslaPilot is not affiliated with or endorsed by them.
