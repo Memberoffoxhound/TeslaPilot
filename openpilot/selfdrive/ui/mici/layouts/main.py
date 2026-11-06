@@ -10,6 +10,7 @@ from openpilot.selfdrive.ui.body.layouts.onroad import BodyLayout
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.scroller import Scroller
 from openpilot.selfdrive.ui import tripstats
+from openpilot.selfdrive.ui.fingerprint_prompt import FingerprintPrompt
 from openpilot.selfdrive.ui.mici.widgets.drive_summary_card import DriveSummaryCard
 from openpilot.system.ui.lib.application import gui_app
 
@@ -24,6 +25,7 @@ class MiciMainLayout(Scroller):
 
     self._pm = messaging.PubMaster(['bookmarkButton', 'userBookmark'])
 
+    self._fingerprint = FingerprintPrompt(self)
     self._prev_onroad = False
     self._prev_standstill = False
     self._prev_parked = False
@@ -119,6 +121,9 @@ class MiciMainLayout(Scroller):
     if gui_app.widget_in_stack(self._onboarding_window):
       return
 
+    if self._fingerprint.tick():
+      return
+
     # trip summary: up from Park (or the offroad edge below) while the car is parked or off
     parked = ui_state.park.parked
     if ui_state.ignition and not parked and (ui_state.started or not self._summary.last):
@@ -160,6 +165,8 @@ class MiciMainLayout(Scroller):
     self._prev_standstill = CS.standstill
 
   def _on_interactive_timeout(self):
+    if self._fingerprint.active:
+      return
     # Don't pop if onboarding
     if gui_app.widget_in_stack(self._onboarding_window):
       return

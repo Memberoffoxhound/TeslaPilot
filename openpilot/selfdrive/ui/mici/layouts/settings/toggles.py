@@ -19,10 +19,10 @@ from openpilot.selfdrive.ui.mici.layouts.settings.initial_cruise_speed import In
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
 
 
-def _wire_confirm(page: NavScroller, title: str, bodies: list[str], on_confirm: Callable[[], None]) -> None:
+def _wire_confirm(page: NavScroller, title: str, bodies: list[str], on_confirm: Callable[[], None], label="slide to\nenable") -> None:
   warn = gui_app.texture("icons_mici/setup/warning.png", 64, 64)
   check = gui_app.texture("icons_mici/setup/driver_monitoring/dm_check.png", 64, 64)
-  accept = BigConfirmationCircleButton("slide to\nenable", check,
+  accept = BigConfirmationCircleButton(label, check,
                                        lambda: page.dismiss(on_confirm))
   page._scroller.add_widgets([
     GreyBigButton(title, "scroll to continue", warn),

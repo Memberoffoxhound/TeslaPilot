@@ -13,7 +13,7 @@ AGNOS is **20.3** (`launch_env.sh`). The first boot on an older OS flashes it. O
 Structure matches comma: gitlink SHA is what ships, not the branch tip. The SHA is **comma openpilot master's opendbc pin plus Tesla-only commits**:
 
 - comma base: `1df34867` (the pin in comma master `89e7e0a4c`)
-- extras: 3-bit `DAS_steeringControlType`, cooperative steering, scroll-wheel cancel, `TESLA_MODEL_3` fingerprint pin, cached EPS FW fallback
+- extras: 3-bit `DAS_steeringControlType`, cooperative steering, scroll-wheel cancel, local EPS fingerprint overlay after stock identification
 
 ```bash
 cd opendbc_repo
@@ -24,11 +24,11 @@ git add opendbc_repo
 git commit -m "opendbc: bump Highland (comma pin + Tesla extras)"
 ```
 
-Current gitlink: `044e8adc` (comma `1df34867` merged into Highland).
+Current gitlink: `bfff3f6e` (comma `1df34867` plus Highland changes).
 
 ## Fingerprint
 
-This branch **always fingerprints as `TESLA_MODEL_3`** (2025 Model 3 / HW4 docs) until updated fingerprinting semantics are figured out. FW is still queried so FSD 14 flags can apply. The pinned opendbc enforces this in `car_helpers.py`. See the README disclaimer: Highland Teslas only.
+Stock recognition runs first. Unknown cars remain onroad in dashcam mode. The UI can save a Model 3/Y EPS reply in `/data/teslapilot/fingerprints/tesla-fw-v1.json`; normal firmware matching uses it after restart. No platform is forced.
 
 ## Params
 
@@ -57,7 +57,7 @@ Older builds left `/data/trip_stats.json`, `/data/trip_seed_cache.json`, `/data/
 
 ## Alpha longitudinal (stock)
 
-A Highland car is forced to `TESLA_MODEL_3`. Stock master sets `alphaLongitudinalAvailable = True`.
+For a recognized Tesla, stock master sets `alphaLongitudinalAvailable = True`.
 
 - Visible on development branches (`AlphaLongitudinalEnabled` is `DEVELOPMENT_ONLY`).
 - Can change onroad while not engaged. Cannot while engaged.

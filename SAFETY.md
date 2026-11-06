@@ -18,7 +18,7 @@ comma will **ban the dongle from comma.ai servers** if a fork breaks the rules i
 | --- | --- | --- |
 | `openpilot/selfdrive/monitoring` | **No** | Stock comma driver monitoring. Always-On DM toggle is stock. |
 | `openpilot/selfdrive/selfdrived/helpers.py` | **No** | Stock excessive-actuation / longitudinal & lateral limits. |
-| `opendbc/safety/` (panda safety) | **No** | Car changes are in `opendbc/car/tesla/` and `opendbc/car/car_helpers.py` (forced Tesla fingerprint). The safety tree is unchanged; `opendbc/safety/modes/tesla.h` matches commaai/opendbc. |
+| `opendbc/safety/` (panda safety) | **No** | Car changes are in `opendbc/car/tesla/` and `opendbc/car/car_helpers.py` (stock identification and local firmware fallback). The safety tree is unchanged; `opendbc/safety/modes/tesla.h` matches commaai/opendbc. |
 | `panda` submodule | **No** | Still `commaai/panda`. |
 | Desire / lane change | Yes, Python | `desire_helper.py` + `auto_lane_change.py`. Planner desire, not panda limits. Off = stock nudge. On = blinker + BSM, engaged, 25 mph. |
 | Toggles UI | Yes | `AutoLaneChangeEnabled` bool, default off. Enable requires the warning slider. |

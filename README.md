@@ -10,7 +10,7 @@ It is one person's project. There is no support, and you install it at your own 
 
 - A **comma 4**. TeslaPilot is built and tested only on a comma 4.
 - **The OS required by your branch.** `Highland-Dev` uses **AGNOS 20.3** and flashes it on the first boot if needed. Check `launch_env.sh` before switching branches.
-- Built and tested on a **2026 Model 3 Highland** with the Tesla B harness. Until the fingerprint fallback ships, an unrecognized car is identified as a 2025 Model 3.
+- Built and tested on a **2026 Model 3 Highland** with the Tesla B harness.
 
 The fork reports version **0.11.23**. `Highland-Dev` is synced through comma openpilot **0.11.3** (`89e7e0a4c`).
 
@@ -107,15 +107,15 @@ Credit: [Zeph Leggett / zoompilot](https://github.com/zoompilot) — [zoompilot/
 
 Runs openpilot's big driving model on a phone or computer plugged into the comma's USB-C port. Set it up in **Settings → models**. While it's off, nothing changes.
 
-### Tesla fingerprint fallback (Tesla only, coming soon)
+### Tesla fingerprint fallback
 
-Stock fingerprinting always runs first. If it fails, the device asks **Are you on a Tesla?**
+Stock fingerprinting always runs first. An unrecognized car stays onroad in dashcam mode; the UI asks **Are you on a Tesla?**
 
 **No** — it apologizes and shows comma's usual unrecognized-car alert. Non-Teslas keep stock ignition on/offroad; only Tesla-only features (step aside, go offroad in park) stay off.
 
-**Yes** — pick year (newest first, including 2026) then Model 3 or Model Y, and confirm twice. The car's firmware is saved as a local fingerprint. Restart when offered and stay in Park until it comes back onroad; normal fingerprinting should recognize the car after that.
+**Yes** — pick a year/model (newest first, including 2026 Model 3/Y), and confirm twice. The car's firmware is saved as a local fingerprint. Restart when offered and stay in Park until it comes back onroad; normal fingerprinting should recognize the car after that.
 
-Optional: the device web page's **Submit fingerprint** opens a prefilled GitHub submission for review (no login on the comma). Accepted fingerprints land on `Highland-Dev` with credit to the submitter.
+The local EPS database lives in `/data/teslapilot/fingerprints/tesla-fw-v1.json` and survives updates. Remove an entry there to forget it on the next restart. Fingerprint sharing through the web UI is deferred; nothing is uploaded.
 
 ## Safety
 
