@@ -19,9 +19,8 @@ FULL_SPEED = 8.  # m/s. Full assist from this speed up.
 GAIN_BP = [-0.3, -0.1]  # Model accel over which the assist fades out as the model slows down.
 FADE_LAT_ACC_BP = [0.6, 1.0]  # Lat acc of the sharpest bend ahead over which the assist fades out.
 LIFT_FALL = 2.4  # m/s^3. Fast, so the assist never holds off the model's braking.
-# The floor closes on the target speed at a production ACC's pace: a CX-5's stock MRCC accel with no
-# lead, its p99 by speed, scaled by the shortfall (between its p50 and p90). The cruise planner asks
-# 1 m/s^2 per m/s of shortfall up to 2.0, which on a stepped automatic downshifts at every small gap.
+# Approach pace: CX-5 MRCC no-lead p99 acceleration by speed, scaled by speed shortfall.
+# This avoids the cruise planner's aggressive acceleration for small gaps.
 APPROACH_BP = [0., 4., 9., 14., 18., 25.]  # m/s
 APPROACH_V = [1.5, 1.75, 1.45, 1.05, 0.85, 0.65]  # m/s^2
 APPROACH_GAP_BP = [0., 1., 3., 5., 10.]  # m/s under the target speed
@@ -41,7 +40,7 @@ class SetSpeedAssist:
   Only with openpilot longitudinal control: the toggle does nothing otherwise.
   """
   def __init__(self, CP):
-    # the assist builds at the cruise planner's jerk; imported here because longitudinal_planner imports this module
+    # Local import avoids a cycle with longitudinal_planner.
     from openpilot.selfdrive.controls.lib.longitudinal_planner import J_CRUISE_BP, J_CRUISE_VALS
     self.rise_bp, self.rise_vals = J_CRUISE_BP, J_CRUISE_VALS
 

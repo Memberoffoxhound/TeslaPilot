@@ -145,10 +145,10 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"UptimeOnroad", {PERSISTENT, FLOAT, "0.0"}},
     {"TeslaStepAside", {PERSISTENT, BOOL, "1"}},  // step aside (noOutput, relay open) while Tesla Autosteer/FSD is selected or active
     {"TeslaSteppedAside", {CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_ON, BOOL}},  // card: this drive is stepped aside
-    // Park-offroad (Tesla) and the drive summary; see PORTING.md. The ParkOffroad toggle also sets DriveSummary.
+    // ParkOffroad also sets DriveSummary; see PORTING.md.
     {"ParkOffroad", {PERSISTENT, BOOL, "0"}},  // go offroad after Park is held 3 s; back onroad on R/D
     {"ParkOffroadState", {CLEAR_ON_MANAGER_START, INT, "0"}},  // parkd: 0 none, 1 parking, 2 parked offroad (no ignition-on clear: parkd owns it)
-    {"DriveSummary", {PERSISTENT, BOOL, "0"}},  // drive-summary "trip summary" card
+    {"DriveSummary", {PERSISTENT, BOOL, "0"}},  // trip summary card
     {"DriveSummaryLast", {PERSISTENT, JSON}},  // ui tripstats store: 400 days of totals, lifetime, last drive; see selfdrive/ui/tripstats
     {"Timezone", {PERSISTENT, STRING}},  // IANA zone at LastGPSPosition, for trip stats days; see selfdrive/ui/tripstats/tz.py
     {"ChestnutActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION | CLEAR_ON_IGNITION_ON, BOOL}},
@@ -160,11 +160,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"JetlinkLink", {PERSISTENT, INT, "0"}},
     {"JetlinkSpec", {PERSISTENT, JSON}},
     {"JetlinkChargePhone", {PERSISTENT, BOOL, "0"}},
-    // an enabled link that cannot run says why (hardwared, jetlink_adapter.reason()); zoompilot's name
+    // hardwared reports an enabled but unavailable accelerator.
     {"Offroad_AcceleratorUnavailable", {CLEAR_ON_MANAGER_START, JSON}},
-    // Model manager (openpilot/selfdrive/modelmanager, from sunnypilot's): the
-    // big-model catalog and pick, read by jetlink as keys.catalog / keys.big_model.
-    // Model manager params; jetlink keys.big_model / keys.catalog / keys.select.
+    // Model manager: jetlink keys.big_model / keys.catalog / keys.select.
     {"ModelManager_ActiveBundleChestnut", {PERSISTENT, JSON}},
     {"ModelManager_ModelsCache_Chestnut", {PERSISTENT, JSON}},
     {"ModelManager_LastSyncTime_Chestnut", {CLEAR_ON_MANAGER_START, INT, "0"}},

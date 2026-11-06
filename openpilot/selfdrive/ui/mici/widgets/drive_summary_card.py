@@ -30,7 +30,7 @@ HEAD_SIZE, HEAD_Y = 62, 2          # alert text1 is 70-82 Inter Bold; 62 leaves 
 HEAD_MIN = 50                      # smallest a long headline shrinks to
 VAL_SIZE, UNIT_SIZE, LBL_SIZE = 46, 24, 22
 VAL_Y, LBL_Y = 80, 130
-TL_Y, TL_H = 161, 18        # 1.5x the first 12 px bar: readable on the small screen; 8 px under the labels
+TL_Y, TL_H = 161, 18
 TRIP_Y = 189
 WHITE = (255, 255, 255)
 ASCENT = 0.80              # Inter baseline as a fraction of the raylib font size (x FONT_SCALE in draw)
@@ -42,7 +42,7 @@ def _col(rgb, a: float) -> rl.Color:
 
 VALUE_COL, DIM_COL = _col(WHITE, 1.0), _col(WHITE, 0.8)
 TRACK_COL = _col(WHITE, 0.15)
-# connect Timeline statusGradient: linear-gradient(rgba(0,0,0,0) 4%, rgba(255,255,255,.025) 10%, rgba(0,0,0,.1) 25%, rgba(0,0,0,.4))
+# comma connect Timeline's statusGradient.
 SHADE_STOPS = ((0.0, _col((0, 0, 0), 0.0)), (0.04, _col((0, 0, 0), 0.0)), (0.10, _col(WHITE, 0.025)),
                (0.25, _col((0, 0, 0), 0.1)), (1.0, _col((0, 0, 0), 0.4)))
 RUN_COLS = {st: _col(rgb, 1.0) for st, rgb in COLORS.items()}
@@ -139,7 +139,7 @@ class DriveSummaryCard:
     bcx = min(cx + hw + BADGE_GAP + br, x + w - PAD - br)
     draw_check_badge(bcx, y + HEAD_Y + HEAD_SIZE * 1.16 * 0.56, br, tc.accent_rgb())
 
-    # stats: evenly spaced columns, each value (+ unit on its baseline) centered over its label
+    # Center each value and unit above its label.
     vs, us, ls = VAL_SIZE, UNIT_SIZE, LBL_SIZE
     vy, ly = y + VAL_Y, y + LBL_Y
     if self._slots_w != w:

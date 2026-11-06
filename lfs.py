@@ -233,7 +233,7 @@ def download_one(oid, size):
 
 
 def fetch_exclude():
-  # Highland keeps lfs.fetchexclude in .lfsconfig, like stock Git LFS read it
+  # Honor .lfsconfig when local config has no exclusion, like Git LFS.
   value = git("config", "--get", "lfs.fetchexclude", check=False).decode().strip()
   if not value and (ROOT / ".lfsconfig").is_file():
     value = git("config", "--file", str(ROOT / ".lfsconfig"), "--get", "lfs.fetchexclude", check=False).decode().strip()

@@ -66,9 +66,7 @@ def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 def livestream(started: bool, params: Params, CP: car.CarParams) -> bool:
   return params.get_bool("IsLiveStreaming")
 
-# Second encoder process. Onroad encoderd already publishes qcam + HEVC.
-# Starting stream_encoderd while engaged starves controlsd (comm / lateral alerts).
-# Only run it offroad (parked LAN / Connect) or on the body.
+# Keep the second encoder offroad (except on body): onroad it can starve controlsd.
 def livestream_encoder(started: bool, params: Params, CP: car.CarParams) -> bool:
   return ((not started) and params.get_bool("IsLiveStreaming")) or (started and CP.notCar)
 
@@ -126,12 +124,9 @@ procs = [
   PythonProcess("tombstoned", "openpilot.system.tombstoned", always_run, enabled=not PC),
   PythonProcess("updated", "openpilot.system.updated.updated", only_offroad, enabled=not PC),
   PythonProcess("uploader", "openpilot.system.loggerd.uploader", always_run),
-  # Jetlink (iPhone/Jetson/Mac runs the large model). Off unless the Jetlink
-  # setting is on: should_run reads the JetlinkLink file and imports nothing.
-  # Runs onroad too, since it holds the USB gadget for the whole drive.
+  # Jetlink owns the USB gadget onroad and offroad while the link is enabled.
   RestartingPythonProcess(jetlink_adapter.OWNER, "openpilot.selfdrive.jetlink_adapter", jetlink_adapter.should_run, enabled=not PC),
-  # Tesla park-offroad (ParkOffroad toggle): watches DI_gear on bus 0 onroad and offroad, and only
-  # publishes ParkOffroadState, which hardwared turns into an onroad condition. Idle unless the toggle is on.
+  # parkd watches gear onroad and offroad; hardwared consumes ParkOffroadState.
   RestartingPythonProcess("parkd", "openpilot.selfdrive.car.park_offroad", park_offroad.should_run, enabled=not PC),
   # the big-model catalog and pick (from sunnypilot's model manager); offroad only
   RestartingPythonProcess("modelmanagerd", "openpilot.selfdrive.modelmanager.manager", only_offroad, enabled=not PC),

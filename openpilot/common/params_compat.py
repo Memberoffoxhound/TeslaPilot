@@ -1,9 +1,8 @@
-"""Params that survive a params library older than the key.
+"""Params access for ports whose prebuilt library does not know the new keys.
 
-tripstats, park_offroad and tesla_step_aside are meant to be copied to other
-forks, whose prebuilt params library may not know their keys yet: an unknown key
-reads and writes the raw params file, in params.cc's byte format, instead of
-raising. Standard library only, so tesla_step_aside stays light for card."""
+Unknown keys use raw files in params.cc's byte format. Standard library only,
+so card can import the Tesla helpers without heavy dependencies.
+"""
 import json
 import os
 

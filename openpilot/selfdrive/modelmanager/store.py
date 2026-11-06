@@ -1,9 +1,7 @@
 """The model manager's params, with the raw-file fallback.
 
-Params first; when the params library rejects the key (a params_pyx.so built
-before params_keys.h gained it, or no library at all) the param's own file in
-the params directory, in params.cc's byte format, matching params.cc.
-Never raises out of get().
+Unknown keys or an unavailable library fall back to files in params.cc's byte format.
+get() returns None for unreadable values.
 """
 from __future__ import annotations
 

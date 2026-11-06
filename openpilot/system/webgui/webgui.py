@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """TeslaPilot device web GUI: stats, screenshots, UI screen recording. Stdlib only.
 
-No auth (owner's call: single user). Binds 0.0.0.0:8089 (WEBGUI_HOST/WEBGUI_PORT), plain HTTP: anyone on the
-same wifi/hotspot can use it. Read-only on car/controls; writes no params.
-The UI process does the actual capture (system/ui/lib/screenshot.py, screenrec.py) via request files.
+Plain HTTP, no auth: anyone on the same network can use it. Defaults to 0.0.0.0:8089
+(WEBGUI_HOST/WEBGUI_PORT). Reads car state; requests UI captures through files, not params.
 """
 from __future__ import annotations
 
@@ -18,7 +17,7 @@ from urllib.parse import unquote, urlparse
 
 STATIC = Path(__file__).parent / "static" / "index.html"
 FONT_DIR = Path(__file__).parents[2] / "selfdrive/assets/fonts"
-FONTS = ("TESLA.ttf", "Inter-SemiBold.ttf")  # wordmark only: TESLA in TESLA.ttf (as on the device home), PILOT in Inter
+FONTS = ("TESLA.ttf", "Inter-SemiBold.ttf")  # wordmark fonts
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 MIN_FREE = 2 * 1024**3
 MAX_REC_S = 300
