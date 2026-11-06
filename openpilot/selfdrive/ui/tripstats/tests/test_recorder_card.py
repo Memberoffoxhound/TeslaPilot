@@ -19,16 +19,19 @@ def drive(rec, seconds, v, enabled, t0, wall0=1_760_000_000.0, dt=0.05, **kw):
   return t
 
 
-def test_classify():
-  assert rc.classify(True, "enabled", "normal") == rc.ENGAGED
-  assert rc.classify(True, "overriding", "normal") == rc.OVERRIDE
-  assert rc.classify(True, "preEnabled", "normal") == rc.OVERRIDE
-  assert rc.classify(False, "disabled", "normal") == rc.MANUAL          # stopped or moving: connect's blue
-  assert rc.classify(True, "enabled", "userPrompt") == rc.PROMPT
-  assert rc.classify(True, "overriding", "userPrompt") == rc.OVERRIDE   # same start: connect pushes overriding last
-  assert rc.classify(False, "disabled", "critical") == rc.CRITICAL
-  assert rc.classify(True, "enabled", "critical", "userBookmark/permanent") == rc.FLAG
-  assert rc.classify(False, "disabled", "normal", "userBookmarkNotPaired/permanent") == rc.FLAG
+@pytest.mark.parametrize("enabled,state,alert,alert_type,expected", [
+  (True, "enabled", "normal", "", rc.ENGAGED),
+  (True, "overriding", "normal", "", rc.OVERRIDE),
+  (True, "preEnabled", "normal", "", rc.OVERRIDE),
+  (False, "disabled", "normal", "", rc.MANUAL),
+  (True, "enabled", "userPrompt", "", rc.PROMPT),
+  (True, "overriding", "userPrompt", "", rc.OVERRIDE),
+  (False, "disabled", "critical", "", rc.CRITICAL),
+  (True, "enabled", "critical", "userBookmark/permanent", rc.FLAG),
+  (False, "disabled", "normal", "userBookmarkNotPaired/permanent", rc.FLAG),
+])
+def test_layers_initial_state(enabled, state, alert, alert_type, expected):
+  assert rc.Layers().status(0.0, enabled, state, alert, alert_type) == expected
 
 
 def test_connect_palette():

@@ -61,11 +61,6 @@ class Layers:
     return max(self._since, key=lambda layer: (self._since[layer][0], tie.index(layer)))
 
 
-def classify(enabled: bool, state: str, alert_status: str, alert_type: str = "") -> int:
-  """One frame on its own (every layer starting now): bookmark, override, alert, engaged, the blue background."""
-  return Layers().status(0.0, enabled, state, alert_status, alert_type)
-
-
 class Timeline:
   def __init__(self, n: int = N_BUCKETS, bucket_s: float = BUCKET_S0) -> None:
     self.n = n
