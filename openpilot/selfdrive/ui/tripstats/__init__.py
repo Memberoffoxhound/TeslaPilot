@@ -19,7 +19,6 @@ from openpilot.selfdrive.ui.tripstats.card import eligible
 from openpilot.selfdrive.ui.tripstats.recorder import MOVING_V, DriveRecorder
 
 PARAM_ENABLED = "DriveSummary"
-PARAM_LAST = store.PARAM
 SHOW_S = 20.0                # seconds the card holds the onroad page before the scroll to home
 SAVE_S = 30.0                # the drive in progress is stored this often, for a UI restart and the web GUI
 ZONE_S = 10.0                # the zone params are read again this often

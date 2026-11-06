@@ -51,8 +51,6 @@ KEY_TYPES = {ACTIVE_BIG: "json", CACHE_BIG: "json", SYNC_BIG: "int", DOWNLOAD_RE
 
 # stamped on the big-model catalog: it is jetlink's list, not the chestnut HTTP one
 JETLINK_KEY = "jetlink"
-# kept for readers of older caches; new writes use JETLINK_KEY
-EXTENDED_KEY = "extended"
 
 _REF = re.compile(r"[0-9a-f]{40}")
 _TRAILING_DATE = re.compile(r"\s*\([A-Za-z]+ \d{1,2}, \d{4}\)\s*$")

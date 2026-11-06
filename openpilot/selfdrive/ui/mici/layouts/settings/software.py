@@ -26,13 +26,6 @@ def _split_description(desc: str) -> tuple[str, str, str, str] | None:
   return version, branch, commit, date
 
 
-UPDATER_PROC = "openpilot.system.updated.updated"
-
-
-def _ping_updater(sig: str) -> None:
-  subprocess.run(f"pkill -{sig} -f {UPDATER_PROC}", shell=True)
-
-
 class UpdaterState(IntEnum):
   IDLE = 0
   WAITING_FOR_UPDATER = 1
