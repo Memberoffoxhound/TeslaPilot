@@ -2,25 +2,25 @@
 Copyright (c) 2026-, Zeph Leggett.
 
 This file is part of zoompilot and is licensed under the MIT License.
-Ported to Highland (Memberoffoxhound/openpilot) from zoompilot develop
-(openpilot/sunnypilot/jetlink_adapter/__init__.py) on jetlink v0.9.0's Stock
-base and Hooks (API 4), matching docs/porting.md "The adapter module".
-Highland changes, in short:
-  - lives at openpilot/selfdrive/jetlink_adapter (no sunnypilot tree here)
-  - Keys.big_model / Keys.catalog / Keys.select are Highland's model
-    manager's params (openpilot/selfdrive/modelmanager)
-  - in_control is jetlink's Stock rule (carState, carControl, selfdriveState):
-    no MADS / carControlSP; stock modeld's warp and ModelState reset
-  - get/put/remove fall back to the raw params files when the params library
-    on the device predates the Jetlink keys (UnknownKeyName)
-  - jetlinkd turns ADB off before the owner starts (release_adb)
-  - charge_phone / link_mode helpers for Highland's Models panel
+See the LICENSE.md file in the root directory for more details.
+
+Highland path: openpilot/selfdrive/jetlink_adapter (no sunnypilot tree).
+Layout, names and hooks match zoompilot develop so their Jetlink commits merge
+cleanly. Unavoidable diffs: Stock defaults (no MADS / modeld_v2), and
+default_big_model without sunnypilot.models; runtime is exported for the UI
+(Highland has no modelDataV2SP).
+
+jetlink on this fork: the adapter jetlink runs over, and the hooks manager,
+modeld, hardwared, selfdrived, the model manager and the UI call.
 
 jetlink (the jetlink_repo submodule) runs the large driving model on an
 attached Jetson, Mac or iPhone. Its stock adapter (jetlink.openpilot.stock)
 knows stock openpilot's paths; Adapter below is that with this fork's param
 names. The hooks (jetlink.openpilot.hooks) never raise and answer as if the
 link were off when jetlink is not checked out, or speaks another API.
+
+comma's chestnut board is not jetlink's business: modeld, hardwared and the
+UI handle it natively, and jetlink keeps the link off while one is fitted.
 
 manager imports this module to build the process list, and runs it as
 jetlinkd, the resident gadget owner, which stays at about 10 MB for the whole
@@ -47,32 +47,26 @@ OWNER = 'jetlinkd'
 MODES = ('off', 'usb', 'ios')
 
 # the params jetlink reads and writes, all declared in params_keys.h. big_model
-# and catalog are Highland's model manager's (openpilot/selfdrive/modelmanager),
-# and select is where a pick is asked for by its ref, which jetlink writes for a
-# newer pick made on the server
+# and catalog are the model manager's big-model slot and catalog
+# (models.helpers.ACTIVE_BUNDLE_KEYS['chestnut'] and ModelFetcher's cache), and
+# select is where a pick is asked for by its ref, which jetlink writes for a
+# newer pick made on the server: the owner cannot import the model manager, so
+# they are written out here
 _Keys = namedtuple('_Keys', 'link offroad progress spec big_model catalog charge_phone select')
 KEYS = _Keys(link='JetlinkLink', offroad='IsOffroad', progress='AcceleratorProgress', spec='JetlinkSpec',
              big_model='ModelManager_ActiveBundleChestnut',
              catalog='ModelManager_ModelsCache_Chestnut', charge_phone='JetlinkChargePhone',
              select='ModelManager_DownloadRef')
 
-# every key this adapter declares in params_keys.h, and its type there
-JSON_KEYS = frozenset({KEYS.progress, KEYS.spec, KEYS.big_model, KEYS.catalog})
-INT_KEYS = frozenset({KEYS.link})
-BOOL_KEYS = frozenset({KEYS.charge_phone})
-STRING_KEYS = frozenset({KEYS.select})
-
-# the offroad alert reason() feeds (params_keys.h, alerts_offroad.json)
-OFFROAD_ALERT = 'Offroad_AcceleratorUnavailable'
-
-# jetlink's power-off request (jetlink.comma.gadget.SHUTDOWN_REQUEST)
-SHUTDOWN_REQUEST = Path('/dev/shm/jetlink-shutdown')
-
 _AGNOS = os.path.isfile('/AGNOS')
 
 
 def _params_dir() -> Path:
-  """The params store's directory, by params.cc and hw.h's rule."""
+  """The params store's directory, by params.cc and hw.h's rule: PARAMS_ROOT,
+  else /data/params on a device and $HOME/.comma<OPENPILOT_PREFIX>/params
+  elsewhere, then /<OPENPILOT_PREFIX, or d>. Stock.params_dir() without
+  jetlink. Per call, so it follows a prefix as Params does; the environment
+  only, so it never raises."""
   prefix = os.environ.get('OPENPILOT_PREFIX', '')
   root = os.environ.get('PARAMS_ROOT')
   if root is None:
@@ -87,19 +81,6 @@ def link_on() -> bool:
     return 0 < int((_params_dir() / KEYS.link).read_bytes()) < len(MODES)
   except (OSError, ValueError):
     return False
-
-
-# kept name for Highland callers/tests that still say _link_on
-_link_on = link_on
-
-
-def link_mode_file() -> int:
-  """The setting off the params file alone (no Params, no imports)."""
-  try:
-    value = int((_params_dir() / KEYS.link).read_bytes())
-  except (OSError, ValueError):
-    return 0
-  return value if 0 <= value < len(MODES) else 0
 
 
 def chestnut_cable(connected: bool | None = None) -> bool:
@@ -118,45 +99,25 @@ def _adapter_class():
   from jetlink.openpilot.stock import Stock
 
   class Adapter(Stock):
-    """jetlink.openpilot.interface.Openpilot over Highland: stock openpilot
+    """jetlink.openpilot.interface.Openpilot over this fork: stock openpilot
     but for what follows."""
     KEYS = Keys(**KEYS._asdict())
-
-    def get(self, key: str):
-      # UnknownKeyName (a params library older than the key) must not take down
-      # hardwared or the UI
-      try:
-        return self._params().get(key)
-      except Exception:
-        return file_get(key)
-
-    def put(self, key: str, value, *, block: bool = False) -> None:
-      try:
-        self._params().put(key, value, block=block)
-      except Exception:
-        file_put(key, value)
-
-    def remove(self, key: str) -> None:
-      try:
-        self._params().remove(key)
-      except Exception:
-        file_remove(key)
+    # Highland: Stock's IN_CONTROL_SERVICES / engaged / model_constants /
+    # action_function (no MADS, no modeld_v2). zoompilot overrides those three.
 
     def chestnut_present(self) -> bool:
+      # modeld's own test, the one it runs the big model on: a chestnut whose
+      # firmware names itself. The owner's port walk is wider (CHESTNUT_IDS,
+      # running or in its ROM), so it never holds a chestnut as a host
       from openpilot.selfdrive.modeld.helpers import chestnut_present
       return chestnut_present()
-
-    @classmethod
-    def main(cls) -> None:
-      # AGNOS's ADB gadget holds the USB controller while AdbEnabled is set
-      release_adb(link_on=True)
-      super().main()
 
   return Adapter
 
 
 def adapter():
-  """The adapter, for jetlink's entry points that run as their own process."""
+  """The adapter, for jetlink's entry points that run as their own process:
+  the provisioning run."""
   return _adapter_class()()
 
 
@@ -176,126 +137,11 @@ def __getattr__(name: str):
   raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-# -- params without the params library ---------------------------------------
-
-def file_get(key: str):
-  try:
-    raw = (_params_dir() / key).read_bytes()
-  except OSError:
-    return None
-  try:
-    if key in JSON_KEYS:
-      import json
-      return json.loads(raw)
-    if key in INT_KEYS:
-      return int(raw)
-    if key in BOOL_KEYS:
-      return raw.strip() in (b'1', b'true', b'True')
-    if key in STRING_KEYS:
-      return raw.decode()
-    return raw
-  except Exception:
-    return None
-
-
-def file_put(key: str, value) -> None:
-  if key in JSON_KEYS:
-    import json
-    raw = json.dumps(value).encode()
-  elif key in BOOL_KEYS:
-    raw = b'1' if value else b'0'
-  elif key in INT_KEYS:
-    raw = str(int(value)).encode()
-  else:
-    raw = value if isinstance(value, bytes) else str(value).encode()
-  where = _params_dir()
-  where.mkdir(parents=True, exist_ok=True)
-  tmp = where / f'.tmp_{key}_{os.getpid()}'
-  with open(tmp, 'wb') as f:
-    f.write(raw)
-    f.flush()
-    os.fsync(f.fileno())
-  os.replace(tmp, where / key)
-
-
-def file_remove(key: str) -> None:
-  try:
-    (_params_dir() / key).unlink()
-  except OSError:
-    pass
-
-
-def link_mode() -> int:
-  """The Jetlink setting as an index into MODES; 0 when unset or unreadable."""
-  try:
-    from openpilot.common.params import Params
-    value = Params().get(KEYS.link)
-  except Exception:
-    value = file_get(KEYS.link)
-  try:
-    value = int(value)
-  except (TypeError, ValueError):
-    return 0
-  return value if 0 <= value < len(MODES) else 0
-
-
-def set_link_mode(index: int) -> None:
-  """Write the Jetlink setting; the raw file when Params rejects the key."""
-  index = int(index) if 0 <= int(index) < len(MODES) else 0
-  try:
-    from openpilot.common.params import Params
-    Params().put(KEYS.link, index, block=True)
-  except Exception:
-    file_put(KEYS.link, index)
-  if index != 0:
-    release_adb(link_on=True)
-
-
-# -- ADB and the USB port -------------------------------------------------------
-ADB_KEY = 'AdbEnabled'
-_adb_blocked_cache: list = [-1e9, False]
-
-
-def adb_blocked(max_age: float = 0.0) -> bool:
-  """The link is on, so ADB must stay off. File read only; never raises."""
-  try:
-    import time
-    now = time.monotonic()
-    if max_age > 0 and now - _adb_blocked_cache[0] < max_age:
-      return _adb_blocked_cache[1]
-    _adb_blocked_cache[:] = [now, link_mode_file() != 0]
-    return _adb_blocked_cache[1]
-  except Exception:
-    return False
-
-
-def release_adb(link_on: bool = False) -> bool:
-  """With the link on, turn ADB off if it is on. True when it changed AdbEnabled."""
-  try:
-    if not link_on and not adb_blocked():
-      return False
-    try:
-      from openpilot.common.params import Params
-      params = Params()
-      if not params.get_bool(ADB_KEY):
-        return False
-      params.put_bool(ADB_KEY, False, block=True)
-    except Exception:
-      if (_params_dir() / ADB_KEY).read_bytes().strip() not in (b'1', b'true', b'True'):
-        return False
-      file_put(ADB_KEY, b'0')
-    try:
-      from openpilot.common.swaglog import cloudlog
-      cloudlog.warning("jetlink: turned ADB off, Jetlink holds the USB port")
-    except Exception:
-      pass
-    return True
-  except Exception:
-    return False
-
-
 # -- the hooks ----------------------------------------------------------------
 
+# this process's hooks, made on first use and kept, the link off included:
+# Python does not cache a failed import. One per process, so that prepare()
+# and attach() reach the same jetlink
 _hooks = None
 _making = threading.Lock()
 
@@ -310,14 +156,15 @@ def hooks():
 
 
 def _guard():
+  # inside a function, so a jetlink that fails to import lands here too
   try:
     import jetlink
     if getattr(jetlink, '__file__', None) is None:
-      return _Off()
+      return _Off()   # an empty jetlink_repo, which Python takes for a namespace package
     from jetlink.openpilot.hooks import Hooks
   except ModuleNotFoundError as e:
     if e.name == 'jetlink':
-      return _Off()
+      return _Off()   # no checkout: the link does not exist on this device
     if (e.name or '').startswith('jetlink.'):
       return _unusable("jetlink package too old for this build", e)
     return _unusable(f"jetlink failed to load: {e}", e)
@@ -326,7 +173,7 @@ def _guard():
   try:
     return Hooks(API, adapter, link_on=link_on, log=_cloudlog)
   except Exception as e:
-    return _unusable(str(e), e)
+    return _unusable(str(e), e)   # another API, which it names
 
 
 def _cloudlog():
@@ -345,7 +192,11 @@ def _unusable(why: str, error: Exception) -> _Off:
 class _Off:
   """Every hook with the link off; reason() says why, to someone who turned
   the link on. The fork's own: jetlink's Off cannot answer for a jetlink that
-  is missing or too old to have it."""
+  is missing or too old to have it, and one answer for every case keeps them
+  alike."""
+  # by hook; a callable is handed the hook's arguments. A wanted power-off goes
+  # ahead: no jetlink must keep a comma on to drain the car's battery
+  # Highland adds runtime: no modelDataV2SP cereal field for the joining state
   ANSWERS = {'should_run': False, 'status': None, 'prepare': False, 'attach': lambda model, *_: model,
              'handed_over': False, 'state': 'none', 'shutdown_step': lambda wanted, reason='': wanted,
              'model_state': None, 'lists_big_models': False, 'big_catalog': None, 'listed_ref': None,
@@ -371,71 +222,18 @@ def _hook(name: str):
   return call
 
 
-# Catalog / model-list hooks bind with the link off (BINDS_WITH_LINK_OFF).
-# Always-running processes (manager, modeld, hardwared, selfdrived, the UI)
-# keep an early gate below so a link that is off never imports jetlink.
+# the hooks by the names the hook lines call, each this process's hooks() at
+# the call: jetlink.openpilot.hooks says what each does and answers
 HOOK_NAMES = (*_Off.ANSWERS, 'reason')
-(model_state, lists_big_models, big_catalog, listed_ref) = map(
-  _hook, ('model_state', 'lists_big_models', 'big_catalog', 'listed_ref'))
-
-
-def should_run(started: bool, params, CP) -> bool:
-  return link_mode_file() != 0 and hooks().should_run(started, params, CP)
-
-
-def status():
-  """One snapshot for the UI, or None with the link off (no jetlink import)."""
-  return hooks().status() if link_mode_file() != 0 else None
-
-
-def reason() -> str | None:
-  return hooks().reason() if link_mode_file() != 0 else None
-
-
-def runtime():
-  return hooks().runtime() if link_mode_file() != 0 else None
-
-
-def prepare(chestnut: bool) -> bool:
-  return not chestnut and link_mode_file() != 0 and hooks().prepare(chestnut)
-
-
-def attach(model, small, cam_w: int, cam_h: int):
-  if _hooks is None or small is None:
-    return model
-  return hooks().attach(model, small, cam_w, cam_h)
-
-
-def handed_over(model) -> bool:
-  """Did the joining model change which model drives? Reads the model alone."""
-  return bool(hooks().handed_over(model)) if _hooks is not None else False
-
-
-def state(model) -> str:
-  try:
-    return str(getattr(model, 'big_model_state', 'none'))
-  except Exception:
-    return 'none'
-
-
-def shutdown_step(wanted: bool, reason: str = '') -> bool:
-  if link_mode_file() == 0 and _hooks is None and not SHUTDOWN_REQUEST.exists():
-    return wanted
-  return hooks().shutdown_step(wanted, reason)
-
-
-def swap_events(tick_s: float):
-  return hooks().swap_events(tick_s) if link_mode_file() != 0 else None
-
-
-def jetlink_available() -> bool:
-  """Is a jetlink this build can use checked out here?"""
-  return not isinstance(hooks(), _Off)
+(should_run, status, prepare, attach, handed_over, state, shutdown_step, model_state, lists_big_models,
+ big_catalog, listed_ref, swap_events, runtime, reason) = map(_hook, HOOK_NAMES)
 
 
 def default_big_model(chestnut: bool, jetlink) -> str:
   """What an empty big-model slot runs, by name: jetlink's default with no
-  chestnut fitted. `jetlink` is a status() snapshot or None."""
+  chestnut fitted, else the chestnut's model in the tree. `jetlink` is a
+  status() snapshot or None; the UI passes its own."""
+  # Highland: no sunnypilot.models.model_name
   try:
     from jetlink.registry.catalog import DEFAULT_BIG_MODEL_NAME
     default = str(DEFAULT_BIG_MODEL_NAME)
@@ -444,19 +242,3 @@ def default_big_model(chestnut: bool, jetlink) -> str:
   if not chestnut and jetlink is not None and getattr(jetlink, 'default_model', None):
     return jetlink.default_model
   return default
-
-
-def charge_phone() -> bool:
-  try:
-    from openpilot.common.params import Params
-    return bool(Params().get_bool(KEYS.charge_phone))
-  except Exception:
-    return file_get(KEYS.charge_phone) is True
-
-
-def set_charge_phone(on: bool) -> None:
-  try:
-    from openpilot.common.params import Params
-    Params().put_bool(KEYS.charge_phone, bool(on), block=True)
-  except Exception:
-    file_put(KEYS.charge_phone, bool(on))

@@ -1,11 +1,12 @@
-"""The models panel's Jetlink widgets, from zoompilot develop 632b0b0
+"""The models panel's Jetlink widgets, from zoompilot develop
 (selfdrive/ui/sunnypilot/mici/layouts/models.py): CurrentModelInfo, the
 "active model" / "big model" block at the top of the panel, and the jetlink
 link toggle (off / usb / iOS pills), on Highland's widgets. The toggle writes
-through jetlink_adapter.set_link_mode, which falls back to the raw params file
-for a stale params library and turns ADB off with the link on."""
+KEYS.link through Params, as zoompilot's BigMultiParamToggleSP does.
+"""
 import raylib_nb as rl
 
+from openpilot.common.params import Params
 from openpilot.selfdrive import jetlink_adapter
 from openpilot.selfdrive.ui.accelerator_link import LINK_MODE_LABELS, link_mode
 from openpilot.selfdrive.ui.mici.widgets.button import BigMultiToggle
@@ -62,7 +63,9 @@ class JetlinkLinkToggle(BigMultiToggle):
 
   def _select(self, value: str) -> None:
     try:
-      jetlink_adapter.set_link_mode(self._options.index(value))
+      # zoompilot: BigMultiParamToggleSP writes KEYS.link through Params
+      mode = next(m for m, label in LINK_MODE_LABELS.items() if label == value)
+      Params().put(jetlink_adapter.KEYS.link, jetlink_adapter.MODES.index(mode), block=True)
     except Exception:
       pass
     self.refresh()

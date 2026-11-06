@@ -155,17 +155,16 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ChestnutLoading", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION | CLEAR_ON_IGNITION_ON, BOOL}},
     // Jetlink (zoompilot/jetlink): an iPhone / Jetson / Mac runs the large model.
     // See openpilot/selfdrive/jetlink_adapter/. JetlinkLink: 0 off, 1 usb, 2 ios.
-    // All readers tolerate these keys missing from a stale params_pyx.so.
+    // JetlinkChargePhone: kept for jetlink KEYS (default off); no UI toggle (zoompilot).
     {"AcceleratorProgress", {CLEAR_ON_MANAGER_START, JSON}},
     {"JetlinkLink", {PERSISTENT, INT, "0"}},
     {"JetlinkSpec", {PERSISTENT, JSON}},
-    {"JetlinkModelPointers", {PERSISTENT, JSON}},
     {"JetlinkChargePhone", {PERSISTENT, BOOL, "0"}},
     // an enabled link that cannot run says why (hardwared, jetlink_adapter.reason()); zoompilot's name
     {"Offroad_AcceleratorUnavailable", {CLEAR_ON_MANAGER_START, JSON}},
     // Model manager (openpilot/selfdrive/modelmanager, from sunnypilot's): the
     // big-model catalog and pick, read by jetlink as keys.catalog / keys.big_model.
-    // Readers tolerate these missing from a stale params_pyx.so (raw-file fallback).
+    // Model manager params; jetlink keys.big_model / keys.catalog / keys.select.
     {"ModelManager_ActiveBundleChestnut", {PERSISTENT, JSON}},
     {"ModelManager_ModelsCache_Chestnut", {PERSISTENT, JSON}},
     {"ModelManager_LastSyncTime_Chestnut", {CLEAR_ON_MANAGER_START, INT, "0"}},

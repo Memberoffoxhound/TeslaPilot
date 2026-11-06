@@ -105,7 +105,7 @@ To take a screenshot on the comma itself, hold your finger on the screen for 3 s
 
 ### Jetlink big model (optional)
 
-Credit: [zoompilot/jetlink](https://github.com/zoompilot/jetlink), wired as in [zoompilot](https://github.com/zoompilot/zoompilot). The model picker is a cut-down port of [sunnypilot](https://github.com/sunnypilot/sunnypilot)'s model manager.
+Credit: [Zeph Leggett / zoompilot](https://github.com/zoompilot) — [zoompilot/jetlink](https://github.com/zoompilot/jetlink) (MIT) and the wiring in [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot). Highland's adapter and model picker follow that layout so future Jetlink changes merge cleanly.
 
 Runs openpilot's big driving model on a phone or computer plugged into the comma's USB-C port. Set it up in **Settings → models**. While it's off, nothing changes.
 
@@ -136,8 +136,8 @@ TeslaPilot is built on the work of these people and projects. Thank you.
 | Tesla coop steering in sunnypilot | AmyJeanes | [sunnypilot/opendbc#287](https://github.com/sunnypilot/opendbc/pull/287) |
 | Newer-firmware steering fix | AmyJeanes | [commaai/opendbc#3389](https://github.com/commaai/opendbc/pull/3389) |
 | Auto lane change | rav4kumar, with Jason Wen (sunnyhaibin), sunnypilot | [sunnypilot/sunnypilot#653](https://github.com/sunnypilot/sunnypilot/pull/653) |
-| Jetlink big model | zoompilot | [zoompilot/jetlink](https://github.com/zoompilot/jetlink) |
-| Model picker | sunnypilot model manager, as wired by zoompilot | [sunnypilot/sunnypilot](https://github.com/sunnypilot/sunnypilot) |
+| Jetlink big model | Zeph Leggett / zoompilot (MIT) | [zoompilot/jetlink](https://github.com/zoompilot/jetlink), [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot) |
+| Model picker | zoompilot's wiring of sunnypilot's model manager | [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot) |
 | TESLA font (wordmark) | KAYOver, based on TeslaNikolaCaps by Shane Milburn | [dafont](https://www.dafont.com/tesla.font) |
 | Inter font | Rasmus Andersson | [rsms/inter](https://github.com/rsms/inter) |
 | Time zone table (`tzgrid.bin`) | timezone-boundary-builder by Evan Siroky, from OpenStreetMap data | [evansiroky/timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder) |
@@ -146,6 +146,8 @@ TeslaPilot is built on the work of these people and projects. Thank you.
 ## License
 
 openpilot and TeslaPilot are released under the [MIT license](LICENSE). Some parts use other licenses:
+
+- **Jetlink** ([zoompilot/jetlink](https://github.com/zoompilot/jetlink)): MIT, Copyright (c) 2026 Zeph Leggett. See `jetlink_repo/LICENSE`.
 
 - **TESLA font**: [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/), non-commercial use only. See `openpilot/selfdrive/assets/fonts/TESLA-LICENSE.txt`.
 - **Inter font**: [SIL Open Font License 1.1](https://openfontlicense.org).

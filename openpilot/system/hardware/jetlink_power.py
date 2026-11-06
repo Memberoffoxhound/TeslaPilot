@@ -11,7 +11,7 @@ deadline) and DoShutdown waits until jetlink says it may, or
 ACCELERATOR_OFF_WAIT_T has passed. hardware_thread keeps publishing
 deviceState through that wait, and no drive may start under the power-off that
 follows (powering_off is a startup condition). With the Jetlink setting off,
-none of this imports jetlink (jetlink_adapter's setting gate).
+As zoompilot hardwared_ext: always calls the adapter hooks.
 """
 import time
 from collections.abc import Callable
@@ -39,7 +39,7 @@ class JetlinkPower:
     # Highland: never takes hardwared down (a params library older than the key)
     try:
       accelerator_error = jetlink_adapter.reason()
-      set_offroad_alert(jetlink_adapter.OFFROAD_ALERT, accelerator_error is not None, extra_text=accelerator_error)
+      set_offroad_alert("Offroad_AcceleratorUnavailable", accelerator_error is not None, extra_text=accelerator_error)
       self._alert_error = None
     except Exception as e:
       if self.log is not None and self._alert_error != (text := f"{type(e).__name__}: {e}"):

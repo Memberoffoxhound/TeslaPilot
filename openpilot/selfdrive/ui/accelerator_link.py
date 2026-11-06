@@ -2,25 +2,23 @@
 Copyright (c) 2026-, Zeph Leggett.
 
 This file is part of zoompilot and is licensed under the MIT License.
-Ported to Highland from zoompilot develop 632b0b0
-(selfdrive/ui/sunnypilot/accelerator_link.py, and the models panel's
-_model_info / model_info.big_model_state): what the models panel and the
-status icons say of Jetlink. Highland: no sunnypilot model manager message, so
-the names come from Highland's model picker (model_picker.py), and every
-function takes the snapshot it reads (ui_state.jetlink, ui_state.chestnut_state)
-so it is tested without a UI. Nothing here raises.
+Ported to Highland from zoompilot develop
+(selfdrive/ui/sunnypilot/accelerator_link.py). Layout and names match so
+zoompilot Jetlink UI commits merge cleanly; import path is Highland's
+openpilot.selfdrive.jetlink_adapter.
 
-The user's say over the Jetlink setting: Off, USB (a Jetson, a Linux PC or a
-Mac) or iOS (an iPhone), stored as an index into the adapter's MODES. Everything
-else reads ui_state.jetlink, the snapshot the params pass takes
-(jetlink.openpilot.Status), whose running/active fields come from modeld's
-runtime record (/dev/shm/jetlink/modeld.json).
+The user's say over the Jetlink setting, shared by the models panel:
+Off, USB (a Jetson, a Linux PC or a Mac) or iOS (an iPhone), stored as an
+index into the adapter's MODES. Everything else reads ui_state.jetlink.
 """
 from __future__ import annotations
 
-from openpilot.selfdrive import jetlink_adapter
+from openpilot.selfdrive import jetlink_adapter  # noqa: F401
+from openpilot.selfdrive.jetlink_adapter import KEYS, MODES
+from openpilot.selfdrive.ui.ui_state import ui_state
 
 LINK_MODE_LABELS = {"off": "off", "usb": "usb", "ios": "iOS"}
+LINK_MODE_TITLES = {"off": "Off", "usb": "USB", "ios": "iOS"}
 
 # ChestnutState values (ui_state.ChestnutState), as plain strings
 _FAILED = ('uncompiled', 'failed')
@@ -29,30 +27,37 @@ _FAILED = ('uncompiled', 'failed')
 def link_mode() -> str:
   """The setting as stored, one of MODES: the panel shows it even when
   jetlink cannot run, so a link that will not start can be turned off."""
-  index = jetlink_adapter.link_mode()
-  return jetlink_adapter.MODES[index] if 0 <= index < len(jetlink_adapter.MODES) else "off"
+  try:
+    index = ui_state.params.get(KEYS.link, return_default=True)
+  except Exception:
+    index = None
+  return MODES[index] if isinstance(index, int) and 0 <= index < len(MODES) else "off"
 
 
-def link_toggle_meaningful(chestnut_present: bool) -> bool:
-  """Offered wherever there is no chestnut, which runs the big model itself;
-  and while the setting is on, whatever else. Presence cannot be the gate:
-  with the link off there is no gadget for a Jetson to enumerate."""
-  return not chestnut_present or link_mode() != "off"
+def link_toggle_meaningful() -> bool:
+  """Offered wherever jetlink is checked out, as zoompilot: except beside a
+  chestnut; and while the setting is on, whatever else. Presence cannot be
+  the gate: with the link off there is no gadget for a Jetson to enumerate.
+  status() returning a Status (shown=False) with the link off is required
+  so the toggle that turns it on is offered."""
+  if link_mode() != "off":
+    return True
+  return not ui_state.chestnut_present and ui_state.jetlink is not None
 
 
-def link_status(jetlink) -> str:
-  """One line: what is on the comma's USB-C port right now. jetlink knows a
-  Jetson, or a phone, and the transport says which. Below that only the CC pin
-  speaks. Empty where the kernel does not expose it."""
+def link_status(jetlink=None) -> str:
+  """One line: what is on the comma's USB-C port right now."""
+  if jetlink is None:
+    jetlink = ui_state.jetlink
   port = getattr(jetlink, 'port_state', None) if jetlink is not None else None
   if port == "connected":
     return f"Jetlink connected: {jetlink.transport}."
   return {"empty": "Nothing on the USB port.", "device": "A device is on the USB port."}.get(port, "")
 
 
-def big_model_progress(jetlink) -> tuple[str, float, str] | None:
-  """(stage, 0..1, message) while jetlink is working, else None. The message
-  names the cable (or the app, on iOS) once jetlink counts enough link drops."""
+def big_model_progress(jetlink=None) -> tuple[str, float, str] | None:
+  if jetlink is None:
+    jetlink = ui_state.jetlink
   progress = getattr(jetlink, 'progress', None) if jetlink is not None else None
   if not isinstance(progress, dict) or not progress:
     return None
@@ -70,23 +75,28 @@ def big_model_progress(jetlink) -> tuple[str, float, str] | None:
   return stage, frac, msg
 
 
-def standin_model(jetlink, chestnut_present: bool) -> str | None:
-  """The big model jetlink drives while the pick is still being downloaded or
-  built: the last one the Jetson built."""
+def standin_model(jetlink=None, chestnut_present: bool | None = None) -> str | None:
+  if jetlink is None:
+    jetlink = ui_state.jetlink
+  if chestnut_present is None:
+    chestnut_present = ui_state.chestnut_present
   return None if chestnut_present else getattr(jetlink, 'standin', None)
 
 
 def big_model_state(chestnut_state: str) -> str | None:
-  """'failed' | 'loading' | 'ready' | None, from the state the icons render."""
   return {'uncompiled': 'failed', 'failed': 'failed', 'loading': 'loading', 'waiting': 'ready'}.get(chestnut_state)
 
 
-def model_info(jetlink, chestnut_state: str, chestnut_present: bool, small_name: str, big_name: str) -> tuple[str, str, str]:
-  """(active model, info header, info text) for the models panel, as
-  zoompilot's _model_info: the active line names what actually drives (the
-  link's big model while it is active, else the small model), and a notable
-  big-model state takes the info pair."""
+def model_info(jetlink=None, chestnut_state: str | None = None, chestnut_present: bool | None = None,
+               small_name: str = "built-in", big_name: str = "default") -> tuple[str, str, str]:
+  """(active model, info header, info text) for the models panel."""
   try:
+    if jetlink is None:
+      jetlink = ui_state.jetlink
+    if chestnut_state is None:
+      chestnut_state = ui_state.chestnut_state.value
+    if chestnut_present is None:
+      chestnut_present = ui_state.chestnut_present
     carry = None
     if not chestnut_present and chestnut_state == 'active' and jetlink is not None:
       carry = jetlink.active_model

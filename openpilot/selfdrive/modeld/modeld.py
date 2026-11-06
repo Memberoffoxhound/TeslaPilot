@@ -246,7 +246,7 @@ def main(demo=False):
   cloudlog.warning("modeld init")
 
   # a cable is a chestnut on its way, unless a USB host is on it or Jetlink owns the port
-  HOOKS = jetlink_adapter.hooks()
+  # zoompilot: chestnut_cable() alone; Highland also excludes a USB host (stock USB gadget)
   CHESTNUT = chestnut_compiled() and (chestnut_present() or (jetlink_adapter.chestnut_cable() and not usb_host_connected()))
   if CHESTNUT:
     from tinygrad.runtime.ops_amd import AMDDevice
@@ -254,8 +254,7 @@ def main(demo=False):
   params = Params()
   params.put_bool("ChestnutLoading", CHESTNUT)
   params.remove("ChestnutActive")
-  # before going realtime: the GPU thread it starts would inherit SCHED_FIFO 54 on core 7
-  prepared = HOOKS.prepare(CHESTNUT)
+  jetlink_adapter.prepare(CHESTNUT)  # before going realtime
 
   gc.disable()
 
@@ -314,9 +313,8 @@ def main(demo=False):
   if model is None:
     model = small_model
   # Jetlink: the joining model (small drives until the phone's large model joins)
-  # when prepare() said yes; `model` unchanged otherwise
-  if prepared:
-    model = HOOKS.attach(model, small_model, vipc_client_main.width, vipc_client_main.height)
+  # when prepare() said yes; `model` unchanged otherwise (zoompilot modeld_v2)
+  model = jetlink_adapter.attach(model, small_model, vipc_client_main.width, vipc_client_main.height)
   assert model is not None
   params.put_bool("ChestnutLoading", False)
   cloudlog.warning(f"models loaded in {time.monotonic() - st:.1f}s, modeld starting")
@@ -458,7 +456,7 @@ def main(demo=False):
       model_output = None
     mt2 = time.perf_counter()
     model_execution_time = mt2 - mt1
-    if HOOKS.handed_over(model):
+    if jetlink_adapter.handed_over(model):
       run_count, frame_drop_ratio = 0, 0.
 
     if model_output is not None:

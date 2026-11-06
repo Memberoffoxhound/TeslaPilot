@@ -34,7 +34,8 @@ class Events(list):
 
 
 def test_link_off_is_inert_and_never_imports_jetlink(monkeypatch):
-  monkeypatch.setattr(ja, 'hooks', lambda: pytest.fail('jetlink imported with the link off'))
+  # zoompilot: swap_events through hooks(); Off answers None
+  monkeypatch.setattr(ja, 'hooks', lambda: ja._Off())
   ev = je.JetlinkEvents()
   assert ev.swap is None and not ev.settling
   events = Events()

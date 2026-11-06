@@ -109,10 +109,10 @@ class UIState:
     self.usb_unknown: bool = False
     self.chestnut_state = ChestnutState.DISCONNECTED
     # Jetlink, as zoompilot's ui_state_zp: jetlink's snapshot (jetlink.openpilot.Status)
-    # from the params pass, None with a chestnut fitted or the link off; the
-    # joining model's state off modeld's runtime record (zoompilot reads it off
-    # modelDataV2SP, which Highland lacks); Jetlink holding the USB port, so ADB
-    # is off and its toggle greyed out
+    # from the params pass, None with a chestnut fitted or no jetlink on this
+    # device (Status with shown=False when the link is off); joining state from
+    # modeld's runtime record (zoompilot uses modelDataV2SP); Jetlink holding
+    # the USB port, so ADB is off and its toggle greyed out
     self.jetlink = None
     self.adb_blocked: bool = False
     self._accelerator_state_name: str = 'none'
@@ -252,9 +252,11 @@ class UIState:
 
   def _update_jetlink(self) -> None:
     """On the params pass, not per frame in a layout; a fitted chestnut owns
-    chestnut_state. With the link off status() is None (Highland early-gate) without importing jetlink."""
+    chestnut_state. As zoompilot ui_state_zp: status() returns a Status with
+    shown=False when the link is off (not None), so the Models toggle is offered."""
     try:
       self.jetlink = None if self.sm['deviceState'].chestnutPresent else jetlink_adapter.status()
+      # Highland: no modelDataV2SP; joining state from jetlink's runtime record
       runtime = jetlink_adapter.runtime() if self.jetlink is not None else None
       self._accelerator_state_name = (getattr(runtime, 'state', None) or 'none') if runtime is not None else 'none'
     except Exception:
@@ -262,12 +264,12 @@ class UIState:
     self._enforce_usb_port()
 
   def _enforce_usb_port(self) -> None:
-    """ADB and Jetlink both need the comma's USB port: the link on turns ADB
-    off, and the developer panel greys its toggle out (zoompilot
-    ui_state_zp._enforce_usb_port). jetlinkd also turns it off at its start."""
-    self.adb_blocked = self.jetlink is not None and bool(self.jetlink.holds_port)
-    if self.adb_blocked:
-      jetlink_adapter.release_adb(link_on=True)
+    """ADB and Jetlink both need the comma's USB port: the link
+    on turns ADB off, and the developer panels grey its toggle out. As
+    zoompilot ui_state_zp._enforce_usb_port (Params, not adapter.release_adb)."""
+    self.adb_blocked = self.jetlink is not None and self.jetlink.holds_port
+    if self.adb_blocked and self.params.get_bool("AdbEnabled"):
+      self.params.put_bool("AdbEnabled", False, block=True)
 
   def _update_chestnut_state(self) -> None:
     if (view := self.jetlink_view) is not None:

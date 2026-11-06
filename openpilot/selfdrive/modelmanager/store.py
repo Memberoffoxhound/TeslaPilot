@@ -2,7 +2,7 @@
 
 Params first; when the params library rejects the key (a params_pyx.so built
 before params_keys.h gained it, or no library at all) the param's own file in
-the params directory, in params.cc's byte format, as jetlink_adapter does.
+the params directory, in params.cc's byte format, matching params.cc.
 Never raises out of get().
 """
 from __future__ import annotations
@@ -87,4 +87,7 @@ def remove(key: str) -> None:
   try:
     _params().remove(key)
   except Exception:
-    ja.file_remove(key)
+    try:
+      (ja._params_dir() / key).unlink()
+    except OSError:
+      pass

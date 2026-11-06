@@ -207,7 +207,9 @@ def test_attach_swaps_onto_the_large_model(joining, monkeypatch):
                          handed_over=_hand, state=lambda m: getattr(m, 'big_model_state', 'none'))
   monkeypatch.setattr(ja, '_hooks', fake)
   monkeypatch.setattr(ja, 'hooks', lambda: fake)
-  ja.file_put('JetlinkLink', 2)
+  params = __import__('pathlib').Path(__import__('os').environ['PARAMS_ROOT']) / 'd'
+  params.mkdir(parents=True, exist_ok=True)
+  (params / 'JetlinkLink').write_bytes(b'2')
 
   state = ja.attach(small, small, 1344, 760)
   assert isinstance(state, joining.JoiningModelState)

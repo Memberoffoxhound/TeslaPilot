@@ -83,7 +83,7 @@ def test_jetlink_keys_are_the_model_managers():
   assert ja.KEYS.big_model == 'ModelManager_ActiveBundleChestnut' == mm.ACTIVE_BIG
   assert ja.KEYS.catalog == 'ModelManager_ModelsCache_Chestnut' == mm.CACHE_BIG
   assert ja.KEYS.select == mm.DOWNLOAD_REF
-  assert {mm.ACTIVE_BIG, mm.CACHE_BIG} <= ja.JSON_KEYS
+  assert ja.KEYS.big_model == mm.ACTIVE_BIG and ja.KEYS.catalog == mm.CACHE_BIG
   assert mm.REQUIRED_JSON_VERSION == 20
 
 
@@ -112,14 +112,6 @@ def test_store_uses_params_when_it_knows_the_key(monkeypatch):
   assert store.get(mm.ACTIVE_BIG) == {'ref': REF_A}
   store.put(mm.ACTIVE_BIG, {'ref': REF_B})
   fake.put.assert_called_once_with(mm.ACTIVE_BIG, {'ref': REF_B}, block=True)
-
-
-def test_adapter_reads_the_pick_from_the_file(params_root):
-  a = ja.Adapter.__new__(ja.Adapter)
-  a._stores = {}
-  store.put(mm.ACTIVE_BIG, {'ref': REF_A, 'displayName': 'Alpha'})
-  with mock.patch.object(ja.Adapter, '_params', side_effect=ImportError):
-    assert a.get(ja.KEYS.big_model) == {'ref': REF_A, 'displayName': 'Alpha'}
 
 
 def test_adapter_catalog_defaults_until_fetched():
@@ -347,17 +339,15 @@ def _jetlink_op():
 def test_jetlink_runs_the_pick(params_root):
   op = _jetlink_op()
   from jetlink.openpilot.models import Models
-  with mock.patch.object(ja.Adapter, '_params', side_effect=ImportError):
-    m = manager()
-    m.step()
-    models = Models(op)
-    # v0.9.0: catalog() became the index; selected_slot / selected_model still drive
-    mp.select(REF_A)
-    m.step()
-    models = Models(op)
-    slot = models.selected_slot()
-    assert slot is not None and slot.get('ref') == REF_A
-    assert models.selected_model()['ref'] == REF_A
+  m = manager()
+  m.step()
+  # v0.9.0: catalog() became the index; selected_slot / selected_model still drive
+  mp.select(REF_A)
+  m.step()
+  models = Models(op)
+  slot = models.selected_slot()
+  assert slot is not None and slot.get('ref') == REF_A
+  assert models.selected_model()['ref'] == REF_A
 
 
 def test_jetlink_default_with_no_pick():
@@ -520,4 +510,4 @@ def test_models_page_locked_onroad(page):
   p = mod.ModelsLayoutMici()
   mod.ui_state.started = True
   assert not p._big.enabled() and not p._refresh.enabled() and not p._reset.enabled()
-  assert not p._link.enabled() and not p._charge.enabled()
+  assert not p._link.enabled()

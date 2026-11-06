@@ -16,7 +16,12 @@ ROOT = Path(__file__).resolve().parents[4]
 def params_root(tmp_path, monkeypatch):
   monkeypatch.setenv('PARAMS_ROOT', str(tmp_path))
   monkeypatch.delenv('OPENPILOT_PREFIX', raising=False)
-  monkeypatch.setattr(ja, 'SHUTDOWN_REQUEST', tmp_path / 'no-request')
+  # zoompilot: SHUTDOWN_REQUEST lives in jetlink.comma.gadget, not the adapter
+  try:
+    import jetlink.comma.gadget as gadget
+    monkeypatch.setattr(gadget, 'SHUTDOWN_REQUEST', tmp_path / 'no-request')
+  except Exception:
+    pass
   return tmp_path / 'd'
 
 
@@ -29,18 +34,20 @@ class Clock:
 
 
 def test_link_off_shuts_down_at_once_without_jetlink(monkeypatch):
+  # zoompilot: shutdown_step goes through hooks(); Off answers wanted itself
   monkeypatch.setattr(ja, '_hooks', None)
-  monkeypatch.setattr(ja, 'hooks', lambda: pytest.fail('jetlink imported with the link off'))
+  monkeypatch.setattr(ja, 'hooks', lambda: ja._Off())
   power = jp.JetlinkPower(now=Clock())
   assert power.shutdown_ready(False, None) is False and not power.powering_off
   assert power.shutdown_ready(True, 1.0) is True and power.powering_off
   alerts = []
   power.alerts(lambda *a, **k: alerts.append((a, k)))
-  assert alerts == [((ja.OFFROAD_ALERT, False), {'extra_text': None})]
+  assert alerts == [(("Offroad_AcceleratorUnavailable", False), {'extra_text': None})]
 
 
 def test_link_on_waits_for_jetlink_then_the_cap(monkeypatch):
-  ja.file_put('JetlinkLink', 1)
+  (__import__('pathlib').Path(__import__('os').environ['PARAMS_ROOT']) / 'd').mkdir(parents=True, exist_ok=True)
+  (__import__('pathlib').Path(__import__('os').environ['PARAMS_ROOT']) / 'd' / 'JetlinkLink').write_bytes(b'1')
   steps = []
   answer = [False]
 
@@ -69,12 +76,13 @@ def test_link_on_waits_for_jetlink_then_the_cap(monkeypatch):
 
 
 def test_alert_says_why_and_never_raises(monkeypatch):
-  ja.file_put('JetlinkLink', 2)
+  (__import__('pathlib').Path(__import__('os').environ['PARAMS_ROOT']) / 'd').mkdir(parents=True, exist_ok=True)
+  (__import__('pathlib').Path(__import__('os').environ['PARAMS_ROOT']) / 'd' / 'JetlinkLink').write_bytes(b'2')
   monkeypatch.setattr(ja, 'reason', lambda: 'no warp built for this camera')
   alerts = []
   power = jp.JetlinkPower(now=Clock())
   power.alerts(lambda *a, **k: alerts.append((a, k)))
-  assert alerts == [((ja.OFFROAD_ALERT, True), {'extra_text': 'no warp built for this camera'})]
+  assert alerts == [(("Offroad_AcceleratorUnavailable", True), {'extra_text': 'no warp built for this camera'})]
 
   def broken(*a, **k):
     raise RuntimeError('UnknownKeyName')
@@ -92,4 +100,4 @@ def test_the_alert_is_declared():
   header = (ROOT / 'openpilot/common/params_keys.h').read_text()
   assert '{"Offroad_AcceleratorUnavailable", {CLEAR_ON_MANAGER_START, JSON}}' in header
   alerts = json.loads((ROOT / 'openpilot/selfdrive/selfdrived/alerts_offroad.json').read_text())
-  assert alerts[ja.OFFROAD_ALERT]['text'] == 'Jetlink unavailable: %1'
+  assert alerts["Offroad_AcceleratorUnavailable"]['text'] == 'Jetlink unavailable: %1'

@@ -64,11 +64,24 @@ def test_home_uses_chestnut_icons_only():
   assert not list((UI.parent / 'assets/icons_mici').glob('jetlink_metal*'))
 
 
-def test_link_mode_and_toggle():
+def test_link_mode_and_toggle(monkeypatch):
+  # zoompilot: link_mode reads Params; toggle meaningful needs jetlink status non-None
+  class P:
+    def __init__(self):
+      self._d = {'JetlinkLink': 0}
+    def get(self, key, return_default=False):
+      return self._d.get(key, 0 if return_default else None)
+    def put(self, key, value, block=False):
+      self._d[key] = value
+  fake_ui = SimpleNamespace(params=P(), chestnut_present=False, jetlink=SimpleNamespace(shown=False, holds_port=False))
+  monkeypatch.setattr(al, 'ui_state', fake_ui)
   assert al.link_mode() == 'off'
-  assert al.link_toggle_meaningful(False) and not al.link_toggle_meaningful(True)
-  ja.set_link_mode(ja.MODES.index('ios'))
-  assert al.link_mode() == 'ios' and al.link_toggle_meaningful(True)
+  assert al.link_toggle_meaningful()
+  fake_ui.chestnut_present = True
+  assert not al.link_toggle_meaningful()
+  fake_ui.chestnut_present = False
+  fake_ui.params.put('JetlinkLink', ja.MODES.index('ios'))
+  assert al.link_mode() == 'ios' and al.link_toggle_meaningful()
   assert [al.LINK_MODE_LABELS[m] for m in ja.MODES] == ['off', 'usb', 'iOS']
 
 
