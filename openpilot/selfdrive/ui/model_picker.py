@@ -46,11 +46,16 @@ def picked() -> dict | None:
 
 
 def default_name() -> str:
+  """zoompilot's default_big_model: jetlink's default when no chestnut is fitted."""
   try:
-    from jetlink.registry.catalog import DEFAULT_BIG_MODEL_NAME
-    return str(DEFAULT_BIG_MODEL_NAME)
+    from openpilot.selfdrive.ui.ui_state import ui_state
+    return ja.default_big_model(getattr(ui_state, 'chestnut_present', False), getattr(ui_state, 'jetlink', None))
   except Exception:
-    return DEFAULT_LABEL
+    try:
+      from jetlink.registry.catalog import DEFAULT_BIG_MODEL_NAME
+      return str(DEFAULT_BIG_MODEL_NAME)
+    except Exception:
+      return DEFAULT_LABEL
 
 
 def big_model_label() -> str:

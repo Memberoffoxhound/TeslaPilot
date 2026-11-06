@@ -35,8 +35,9 @@ def no_hooks(monkeypatch):
 
 
 def test_off_by_default_never_imports_jetlink(params_root, no_hooks, monkeypatch, tmp_path):
+  # Highland: always-running hooks early-gate so the link off never imports jetlink
   monkeypatch.setattr(ja, 'SHUTDOWN_REQUEST', tmp_path / 'no-request')
-  assert ja.link_mode_file() == 0
+  assert ja.link_mode_file() == 0 and not ja.link_on()
   assert ja.should_run(False, None, None) is False
   assert ja.should_run(True, None, None) is False
   assert ja.prepare(False) is False
@@ -138,7 +139,7 @@ def test_jetlinks_adapter_check():
 
 def test_the_fallback_answers_as_the_link_off(params_root):
   testing = pytest.importorskip('jetlink.openpilot.testing')
-  assert testing.check_fallback(ja._Off("jetlink package API 9, this build expects 3"), ja.HOOK_NAMES, link_on=ja._link_on) == []
+  assert testing.check_fallback(ja._Off("jetlink package API 9, this build expects 4"), ja.HOOK_NAMES, link_on=ja.link_on) == []
   ja.file_put('JetlinkLink', 1)
   assert ja._Off("why").reason() == "why"
   ja.file_put('JetlinkLink', 0)
@@ -149,9 +150,9 @@ def test_the_module_hooks_answer_as_the_link_off_with_it_off(params_root, monkey
   testing = pytest.importorskip('jetlink.openpilot.testing')
   monkeypatch.setattr(ja, 'SHUTDOWN_REQUEST', tmp_path / 'no-request')
   monkeypatch.setattr(ja, '_hooks', None)
-  # model_state and the catalog are the model manager's and bind with the link off, as jetlink's own
-  names = [n for n in ja.HOOK_NAMES if n not in ('model_state', 'should_extend_catalog', 'extend_catalog')]
-  assert testing.check_fallback(ja, names, link_on=ja._link_on) == []
+  # model_state and the catalog bind with the link off (BINDS_WITH_LINK_OFF)
+  names = [n for n in ja.HOOK_NAMES if n not in ('model_state', 'lists_big_models', 'big_catalog', 'listed_ref')]
+  assert testing.check_fallback(ja, names, link_on=ja.link_on) == []
   assert ja._hooks is None
 
 
@@ -251,7 +252,7 @@ def test_launch_draws_nothing_from_the_port_from_boot():
 def test_the_cable_counts_only_with_the_link_off(monkeypatch, cable, link, counted):
   from openpilot.common.hardware import usb
   monkeypatch.setattr(usb, 'cable_connected', lambda: cable)
-  monkeypatch.setattr(ja, '_link_on', lambda: link)
+  monkeypatch.setattr(ja, 'link_on', lambda: link)
   assert ja.chestnut_cable() is counted
 
 
@@ -260,6 +261,9 @@ def test_modeld_asks_the_adapter_about_the_cable():
   source = (Path(BASEDIR) / 'openpilot/selfdrive/modeld/modeld.py').read_text()
   assert 'jetlink_adapter.chestnut_cable()' in source
   assert 'cable_connected' not in source
+  # porting.md: HOOKS.prepare then attach only when prepare said yes
+  assert 'HOOKS = jetlink_adapter.hooks()' in source
+  assert 'HOOKS.prepare(' in source and 'HOOKS.attach(' in source
 
 
 def test_select_is_the_model_managers_queue(params_root):

@@ -252,7 +252,7 @@ class UIState:
 
   def _update_jetlink(self) -> None:
     """On the params pass, not per frame in a layout; a fitted chestnut owns
-    chestnut_state. With the link off status() is None without importing jetlink."""
+    chestnut_state. With the link off status() is None (Highland early-gate) without importing jetlink."""
     try:
       self.jetlink = None if self.sm['deviceState'].chestnutPresent else jetlink_adapter.status()
       runtime = jetlink_adapter.runtime() if self.jetlink is not None else None

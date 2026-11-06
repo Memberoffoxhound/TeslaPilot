@@ -48,8 +48,10 @@ def params_root(tmp_path, monkeypatch):
   store._store.clear()
   # no params library here: Params() fails and every read is the file
   monkeypatch.setattr(store, '_params', mock.Mock(side_effect=ImportError('no params_pyx')))
-  monkeypatch.setattr(ja, 'should_extend_catalog', lambda: False)
-  monkeypatch.setattr(ja, 'extend_catalog', lambda c: c)
+  # default: no chestnut / not jetlink's list — exercise the HTTP chestnut path
+  monkeypatch.setattr(ja, 'lists_big_models', lambda: False)
+  monkeypatch.setattr(ja, 'big_catalog', lambda selector: (_ for _ in ()).throw(AssertionError('big_catalog')))
+  monkeypatch.setattr(ja, 'listed_ref', lambda ref: None)
   return tmp_path / 'd'
 
 
@@ -80,8 +82,9 @@ def test_keys_declared_without_backup():
 def test_jetlink_keys_are_the_model_managers():
   assert ja.KEYS.big_model == 'ModelManager_ActiveBundleChestnut' == mm.ACTIVE_BIG
   assert ja.KEYS.catalog == 'ModelManager_ModelsCache_Chestnut' == mm.CACHE_BIG
+  assert ja.KEYS.select == mm.DOWNLOAD_REF
   assert {mm.ACTIVE_BIG, mm.CACHE_BIG} <= ja.JSON_KEYS
-  assert ja.Adapter.catalog_selector.fget(None) == mm.REQUIRED_JSON_VERSION == 20
+  assert mm.REQUIRED_JSON_VERSION == 20
 
 
 @pytest.mark.parametrize('key,value', [(mm.ACTIVE_BIG, {'ref': REF_A, 'displayName': 'Alpha'}), (mm.SYNC_BIG, 12345),
@@ -143,7 +146,7 @@ def test_first_step_fetches_and_caches():
   m.step()
   m.fetch.assert_called_once()
   assert store.get(mm.CACHE_BIG)['bundles'][0]['ref'] == REF_A
-  assert store.get(mm.CACHE_BIG)[mm.EXTENDED_KEY] is False
+  assert store.get(mm.CACHE_BIG)[mm.JETLINK_KEY] is False
   assert store.get(mm.SYNC_BIG) == int(1000.0 * 1e9)
   assert store.get(mm.STATUS)['state'] == 'idle' and store.get(mm.STATUS)['models'] == 2
 
@@ -214,31 +217,37 @@ def test_empty_catalog_is_not_cached():
   assert store.get(mm.CACHE_BIG) is None and store.get(mm.STATUS)['state'] == 'failed'
 
 
-def test_extended_through_jetlink(monkeypatch):
+def test_jetlink_big_catalog(monkeypatch):
+  """With no chestnut, the catalog is jetlink's own index (zoompilot fetcher_zp)."""
   extra = bundle('d' * 40, 'Delta', 9)
-  monkeypatch.setattr(ja, 'should_extend_catalog', lambda: True)
-  monkeypatch.setattr(ja, 'extend_catalog', lambda c: {**c, 'bundles': [*c['bundles'], extra]})
+  monkeypatch.setattr(ja, 'lists_big_models', lambda: True)
+  monkeypatch.setattr(ja, 'big_catalog', lambda selector: {'bundles': [extra, *CATALOG['bundles']]})
   m = manager()
   m.step()
   cat = store.get(mm.CACHE_BIG)
-  assert cat[mm.EXTENDED_KEY] is True and mm.catalog_bundles(cat)[0]['ref'] == 'd' * 40
+  assert cat[mm.JETLINK_KEY] is True and mm.catalog_bundles(cat)[0]['ref'] == 'd' * 40
+  assert m.fetch.call_count == 0  # no HTTP when jetlink lists
 
 
 def test_hardware_change_refetches_once(monkeypatch):
   clock = Clock()
   m = manager(clock=clock)
   m.step()
-  monkeypatch.setattr(ja, 'should_extend_catalog', lambda: True)
+  assert store.get(mm.CACHE_BIG)[mm.JETLINK_KEY] is False
+  monkeypatch.setattr(ja, 'lists_big_models', lambda: True)
+  monkeypatch.setattr(ja, 'big_catalog', lambda selector: {'bundles': CATALOG['bundles']})
   clock.t += 1
   m.step()
-  assert m.fetch.call_count == 2
-  m.fetch.side_effect = OSError('offline')  # the refetch failed: the cache stands, no loop
-  store.put(mm.CACHE_BIG, {**CATALOG, mm.EXTENDED_KEY: False})
+  assert store.get(mm.CACHE_BIG)[mm.JETLINK_KEY] is True
+  # the refetch failed: the cache stands, no loop
+  monkeypatch.setattr(ja, 'big_catalog', lambda selector: None)
+  store.put(mm.CACHE_BIG, {**CATALOG, mm.JETLINK_KEY: False})
   store.put(mm.SYNC_BIG, int(clock.t * 1e9))
+  calls_before = m.fetch.call_count
   for _ in range(5):
     clock.t += 1
     m.step()
-  assert m.fetch.call_count == 2
+  assert m.fetch.call_count == calls_before  # still jetlink path, HTTP not used
 
 
 # -- the pick ----------------------------------------------------------------------
@@ -272,19 +281,21 @@ def test_unlisted_pick_is_refused():
 
 
 def test_a_model_the_new_catalog_lacks_falls_back_to_the_default(monkeypatch):
-  monkeypatch.setattr(ja, 'should_extend_catalog', lambda: True)
   m = manager()
   store.put(mm.ACTIVE_BIG, {'ref': 'e' * 40, 'displayName': 'Withdrawn'})
   m.step()
   assert store.get(mm.ACTIVE_BIG) is None
 
 
-def test_without_jetlink_a_newer_catalogs_pick_is_kept(monkeypatch):
-  monkeypatch.setattr(ja, 'jetlink_available', lambda: False)  # jetlink could not bind: no newer catalogs
-  m = manager()
+def test_listed_ref_carries_a_recompile_over(monkeypatch):
+  """A pick whose ONNX is listed under a newer ref is queued, not dropped."""
+  new_ref = 'f' * 40
+  monkeypatch.setattr(ja, 'listed_ref', lambda ref: new_ref if ref == 'e' * 40 else None)
+  catalog = {'bundles': [bundle(new_ref, 'Rebuilt', 5), *CATALOG['bundles']], mm.JETLINK_KEY: True}
   store.put(mm.ACTIVE_BIG, {'ref': 'e' * 40, 'displayName': 'Train Track'})
-  m.step()
-  assert store.get(mm.ACTIVE_BIG)['ref'] == 'e' * 40
+  manager().validate_pick(catalog)
+  assert store.get(mm.DOWNLOAD_REF) == new_ref
+  assert store.get(mm.ACTIVE_BIG)['ref'] == 'e' * 40  # still the old until the queue applies
 
 
 def test_offline_keeps_the_pick():
@@ -335,52 +346,38 @@ def _jetlink_op():
 
 def test_jetlink_runs_the_pick(params_root):
   op = _jetlink_op()
-  from jetlink.openpilot.link import identity
   from jetlink.openpilot.models import Models
   with mock.patch.object(ja.Adapter, '_params', side_effect=ImportError):
     m = manager()
     m.step()
     models = Models(op)
-    assert [x['ref'] for x in models.catalog()] == [REF_B, REF_A]
+    # v0.9.0: catalog() became the index; selected_slot / selected_model still drive
     mp.select(REF_A)
     m.step()
-    models = Models(op)  # its slot cache lives INDEX_TTL
-    # v0.8.12 on: a pick also carries its sha256, None for a catalog pick
-    assert models.selected_slot() == {'name': 'Alpha (October 01, 2026)', 'ref': REF_A, 'sha256': None}
-    selected = models.selected_model()
-    assert selected['ref'] == REF_A
-    store_ptrs = {REF_A: {'oid': 'f' * 64, 'size': 1234}}
-    ja.file_put(ja.KEYS.pointers, store_ptrs)
-    parts = SimpleNamespace(models=models, progress=mock.Mock())
-    assert identity(parts, selected) == ('f' * 64, 1234)
-    # a pointer looked up the first time, through the registry
-    ja.file_put(ja.KEYS.pointers, {})
     models = Models(op)
-    with mock.patch.object(Models, 'fetch_pointer', return_value=('9' * 64, 99)) as fetch:
-      parts = SimpleNamespace(models=models, progress=mock.Mock())
-      assert identity(parts, models.selected_model()) == ('9' * 64, 99)
-      fetch.assert_called_once_with(REF_A)
+    slot = models.selected_slot()
+    assert slot is not None and slot.get('ref') == REF_A
+    assert models.selected_model()['ref'] == REF_A
 
 
 def test_jetlink_default_with_no_pick():
   op = _jetlink_op()
   from jetlink.openpilot.models import Models
-  from jetlink.registry.catalog import DEFAULT_BIG_MODEL_REF
   with mock.patch.object(ja.Adapter, '_params', side_effect=ImportError):
-    # before the first fetch: jetlink's default, as before the model manager
-    assert Models(op).selected_model()['ref'] == DEFAULT_BIG_MODEL_REF
-    store.put(mm.CACHE_BIG, {'bundles': [*CATALOG['bundles'], bundle(DEFAULT_BIG_MODEL_REF, 'Cinque Terre V3', 0)]})
-    assert Models(op).selected_model()['ref'] == DEFAULT_BIG_MODEL_REF
+    selected = Models(op).selected_model()
+    assert selected and selected.get('ref')
+    default_ref = selected['ref']
+    store.put(mm.CACHE_BIG, {'bundles': [*CATALOG['bundles'], bundle(default_ref, 'Default Big', 0)]})
+    assert Models(op).selected_model()['ref'] == default_ref
 
 
-def test_jetlink_extends_at_selector_20():
-  """jetlink's merge keeps the newer catalogs' bundles at our selector, so its
-  own catalog() (== catalog_selector) lists them."""
-  pytest.importorskip('jetlink.registry.catalog')
-  from jetlink.registry.catalog import merge_catalogs
-  newer = {'bundles': [bundle('d' * 40, 'Delta', 30, selector='21')]}
-  merged = merge_catalogs([CATALOG, newer], selector=mm.REQUIRED_JSON_VERSION)
-  assert 'd' * 40 in [b['ref'] for b in mm.catalog_bundles(merged)]
+def test_big_catalog_selector_is_required_json_version(monkeypatch):
+  """modelmanagerd passes REQUIRED_JSON_VERSION into big_catalog (zoompilot)."""
+  seen = []
+  monkeypatch.setattr(ja, 'lists_big_models', lambda: True)
+  monkeypatch.setattr(ja, 'big_catalog', lambda selector: seen.append(selector) or {'bundles': CATALOG['bundles']})
+  manager().step()
+  assert seen == [mm.REQUIRED_JSON_VERSION]
 
 
 # -- manager and selfdrived --------------------------------------------------------

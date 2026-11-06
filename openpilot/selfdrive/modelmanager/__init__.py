@@ -1,11 +1,13 @@
 """Highland's model manager: the big-model catalog and pick, for Jetlink.
 
-Ported from sunnypilot's model manager as zoompilot wires it on develop
+Ported from zoompilot develop's wiring of sunnypilot's model manager
 (sunnypilot/models/{fetcher,fetcher_zp,helpers,manager}.py), cut down to what
-Highland can use:
+Highland can use, on jetlink v0.9.0's model index:
 
-  - the big-model (chestnut) catalog, driving_models_chestnut_v27.json, which
-    jetlink extends with the big models newer catalogs list (fetcher_zp)
+  - with no chestnut fitted, the catalog is jetlink's own index
+    (jetlink_adapter.big_catalog), every big model a Jetson can run
+  - with a chestnut fitted, the chestnut catalog is still fetched over HTTP
+    (driving_models_chestnut_v27.json) for the board's own big model list
   - the big-model pick, ModelManager_ActiveBundleChestnut, stored without
     files: jetlink fetches and verifies the pick's ONNX itself, by its ref
   - refresh, reset to default and the picker's status
@@ -15,6 +17,9 @@ ONNX for the model interface comma retired in commaai/openpilot#38916
 (img/big_img/desire_pulse/features_buffer, float16); Highland's modeld runs
 the interface that replaced it (new_img and history queues inside the ONNX),
 so none of them can load here. The small model stays the one in the tree.
+
+No sunnylink / cloud-saves: picks and the catalog live in params only.
+No Git LFS on the device for models: jetlink downloads ONNX itself.
 
 Bundles are plain dicts (the JSON the catalog lists, and in the params the
 camelCase form sunnypilot's capnp to_dict() writes), never capnp: Highland's
@@ -27,9 +32,10 @@ from __future__ import annotations
 import re
 
 # sunnypilot's helpers.REQUIRED_JSON_VERSION on zoompilot develop: the catalog
-# entries this build lists, and jetlink's catalog_selector
+# entries this build lists, and the selector passed to big_catalog()
 REQUIRED_JSON_VERSION = 20
 
+# chestnut-board catalog only (used when a chestnut is fitted / lists_big_models is false)
 CATALOG_URL = ("https://raw.githubusercontent.com/sunnypilot/sunnypilot-models/refs/heads/gh-pages/docs/" +
                "driving_models_chestnut_v27.json")
 CACHE_TIMEOUT = 3600.0  # seconds, sunnypilot's ModelCache default
@@ -43,7 +49,11 @@ STATUS = "ModelManager_Status"                     # what the manager is doing, 
 
 KEY_TYPES = {ACTIVE_BIG: "json", CACHE_BIG: "json", SYNC_BIG: "int", DOWNLOAD_REF: "str", STATUS: "json"}
 
-EXTENDED_KEY = "extended"  # fetcher_zp: stamped on the catalog, whether jetlink extended it
+# stamped on the big-model catalog: it is jetlink's list, not the chestnut HTTP one
+JETLINK_KEY = "jetlink"
+# kept for readers of older caches; new writes use JETLINK_KEY
+EXTENDED_KEY = "extended"
+
 _REF = re.compile(r"[0-9a-f]{40}")
 _TRAILING_DATE = re.compile(r"\s*\([A-Za-z]+ \d{1,2}, \d{4}\)\s*$")
 
@@ -106,3 +116,7 @@ def to_slot(bundle: dict) -> dict:
 
 def find_bundle(catalog, ref: str) -> dict | None:
   return next((b for b in catalog_bundles(catalog) if b.get("ref") == ref), None)
+
+
+def is_jetlinks(catalog) -> bool:
+  return isinstance(catalog, dict) and catalog.get(JETLINK_KEY) is True

@@ -201,7 +201,10 @@ def test_attach_swaps_onto_the_large_model(joining, monkeypatch):
   small = HighlandModel('small')
   big = BigModel()
   log = Log()
-  fake = SimpleNamespace(attach=lambda m, s, w, h: _joining_state(joining, s, big, log))
+  def _hand(model):
+    return bool(getattr(model, 'chestnut', False) and getattr(model, 'handovers', 0))
+  fake = SimpleNamespace(attach=lambda m, s, w, h: _joining_state(joining, s, big, log),
+                         handed_over=_hand, state=lambda m: getattr(m, 'big_model_state', 'none'))
   monkeypatch.setattr(ja, '_hooks', fake)
   monkeypatch.setattr(ja, 'hooks', lambda: fake)
   ja.file_put('JetlinkLink', 2)
