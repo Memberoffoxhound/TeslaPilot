@@ -310,8 +310,9 @@ class UIState:
         self.has_longitudinal_control = self.CP.openpilotLongitudinalControl
 
     self.recording_audio = self.params.get_bool("RecordAudio") and self.started
-    self.tesla_stepped_aside = self.started and tesla_step_aside.stepped_aside(self.params)
-    self._park_state = park_offroad.get_state(self.params) if park_offroad.enabled(self.params) else park_offroad.NONE
+    tesla = park_offroad.get_bool(self.params, "TeslaSession", False)
+    self.tesla_stepped_aside = tesla and self.started and tesla_step_aside.stepped_aside(self.params)
+    self._park_state = park_offroad.get_state(self.params) if tesla and park_offroad.enabled(self.params) else park_offroad.NONE
     self.is_metric = self.params.get_bool("IsMetric")
     self.initial_cruise_speed = self.params.get("InitialCruiseSpeedKph", return_default=True)
     self.always_on_dm = self.params.get_bool("AlwaysOnDM")

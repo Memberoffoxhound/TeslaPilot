@@ -1,5 +1,3 @@
-from unittest.mock import patch
-
 from openpilot.common.test import OpenpilotTestCase
 import openpilot.cereal.messaging as messaging
 
@@ -27,9 +25,7 @@ class TestLeads(OpenpilotTestCase):
       return msgs
 
     msgs = [m for _ in range(3) for m in single_iter_pkg()]
-    # Replay forks card; override Highland's pin only for this Toyota fixture.
-    with patch("opendbc.car.car_helpers.HIGHLAND_FORCE_FINGERPRINT", TOYOTA.TOYOTA_COROLLA_TSS2):
-      out = replay_process_with_name("card", msgs, fingerprint=TOYOTA.TOYOTA_COROLLA_TSS2)
+    out = replay_process_with_name("card", msgs, fingerprint=TOYOTA.TOYOTA_COROLLA_TSS2)
     car_params = [m.carParams for m in out if m.which() == "carParams"]
     assert car_params and all(cp.carFingerprint == TOYOTA.TOYOTA_COROLLA_TSS2 for cp in car_params)
     states = [m for m in out if m.which() == "radarTracks"]

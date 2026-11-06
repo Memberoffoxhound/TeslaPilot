@@ -20,7 +20,8 @@ from opendbc.car.car_helpers import get_car, interfaces
 from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.cruise import VCruiseHelper
-from openpilot.selfdrive.car import tesla_step_aside
+from openpilot.selfdrive.car import tesla_step_aside, park_offroad
+from openpilot.common.params_compat import put_bool
 
 REPLAY = "REPLAY" in os.environ
 
@@ -94,14 +95,10 @@ class Car:
       alpha_long_allowed = self.params.get_bool("AlphaLongitudinalEnabled")
 
       cached_params = None
-      for key in ("CarParamsCache", "CarParamsPrevRoute", "CarParamsPersistent"):
-        cached_params_raw = self.params.get(key)
-        if cached_params_raw is None:
-          continue
-        with car.CarParams.from_bytes(cached_params_raw) as _cached_params:
-          if _cached_params.brand != "mock" and len(_cached_params.carFw) > 0:
-            cached_params = _cached_params
-            break
+      cached_params_raw = self.params.get("CarParamsCache")
+      if cached_params_raw is not None:
+        with car.CarParams.from_bytes(cached_params_raw) as cp:
+          cached_params = cp
 
       self.CI = get_car(*self.can_callbacks, obd_callback(self.params), alpha_long_allowed, is_release, cached_params)
       self.RI = interfaces[self.CI.CP.carFingerprint].RadarInterface(self.CI.CP)
@@ -113,6 +110,9 @@ class Car:
       self.CI, self.CP = CI, CI.CP
       self.RI = RI
 
+    if self.CP.brand != "tesla" or not park_offroad.get_bool(self.params, "TeslaSession", False):
+      park_offroad.put_state(self.params, park_offroad.NONE, block=True)
+    put_bool(self.params, "TeslaSession", self.CP.brand == "tesla", block=True)
     self.CP.alternativeExperience = 0
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
     controller_available = self.CI.CC is not None and openpilot_enabled_toggle and not self.CP.dashcamOnly
@@ -129,7 +129,7 @@ class Car:
         cloudlog.warning("Tesla step-aside: stock Autosteer/FSD selected or active, openpilot passive")
         controller_available = False
       self.tesla_step_aside.start(time.monotonic())
-    elif self.CP.brand == "tesla":
+    else:
       tesla_step_aside.put_bool(self.params, tesla_step_aside.PARAM_STEPPED, False)
     self.controls_ready_sent = False
 

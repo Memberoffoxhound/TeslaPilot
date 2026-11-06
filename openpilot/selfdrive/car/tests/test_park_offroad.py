@@ -264,7 +264,7 @@ def test_autopark_hold_bridges_10hz_di_state():
 
 def test_step_aside_flag_is_independent(tmp_path):
   """Stepped aside (FSD) or not, park-offroad only reads gear: both leave the relay open."""
-  params = FakeParams(tmp_path, {"ParkOffroad": True, "ParkOffroadState": po.PARKED, "TeslaSteppedAside": True})
+  params = FakeParams(tmp_path, {"ParkOffroad": True, "ParkOffroadState": po.PARKED, "TeslaSteppedAside": True, "TeslaSession": True})
   assert po.not_parked(params) is False
   params.d["TeslaSteppedAside"] = False
   assert po.not_parked(params) is False
@@ -396,13 +396,19 @@ def test_not_parked_hook(tmp_path):
   assert po.not_parked(p)
   p.d.update(ParkOffroadState=po.PARKED)
   assert po.not_parked(p)              # toggle off: no effect even if a stale state remains
-  p.d.update(ParkOffroad=True)
+  p.d.update(ParkOffroad=True, TeslaSession=True)
   assert not po.not_parked(p)
   p.d.update(ParkOffroadState=po.PARKING)
   assert po.not_parked(p)              # parking is still onroad
   p.d.update(ParkOffroadState=None)
   assert po.not_parked(p) and po.get_state(p) == po.NONE   # key absent: stock
-  assert po.should_run(False, p, None) and po.should_run(True, p, None)
+  from types import SimpleNamespace
+  assert not po.should_run(False, p, None)
+  assert po.should_run(False, p, SimpleNamespace(brand="tesla"))
+  assert not po.should_run(True, p, SimpleNamespace(brand="toyota"))
+  p.d["TeslaSession"] = False
+  p.d["ParkOffroadState"] = po.PARKED
+  assert po.not_parked(p)
 
 
 def test_stale_params_library_reads_raw_file(tmp_path):
@@ -418,6 +424,7 @@ def test_stale_params_library_reads_raw_file(tmp_path):
   p = Stale(tmp_path, {})
   assert po.not_parked(p)
   po.put_bool(p, "ParkOffroad", True)
+  po.put_bool(p, "TeslaSession", True)
   po.put_state(p, po.PARKED)
   assert (tmp_path / "ParkOffroad").read_bytes() == b"1"
   assert (tmp_path / "ParkOffroadState").read_bytes() == b"2"
@@ -458,18 +465,14 @@ def test_params_keys():
   assert "BACKUP" not in keys
 
 
-def test_brand_gate_reads_car_params_persistent(tmp_path):
+def test_brand_gate_ignores_previous_car(tmp_path):
   from opendbc.car.structs import car
-  cp = car.CarParams.new_message()
-  cp.brand = "tesla"
+  cp = car.CarParams.new_message(brand="tesla")
   p = FakeParams(tmp_path, {"CarParamsPersistent": cp.to_bytes()})
+  assert po._brand(p) == ""
+  p.d["TeslaSession"] = True
   assert po._brand(p) == "tesla"
-  cp = car.CarParams.new_message()
-  cp.brand = "toyota"
-  p.d["CarParamsPersistent"] = cp.to_bytes()
-  assert "toyota" not in po.PARK_SOURCES and po.PARK_SOURCES["tesla"].sample is po.sample
-  assert po._brand(p) == "toyota"
-  p.d["CarParamsPersistent"] = None
+  p.d["TeslaSession"] = False
   assert po._brand(p) == ""
 
 
@@ -491,7 +494,7 @@ def test_parkd_main_loop_smoke(monkeypatch, tmp_path):
   clock = SimpleNamespace(t=1000.0)
   cp = car.CarParams.new_message()
   cp.brand = "tesla"
-  params = FakeParams(tmp_path, {"ParkOffroad": True, "CarParamsPersistent": cp.to_bytes()})
+  params = FakeParams(tmp_path, {"ParkOffroad": True, "TeslaSession": True, "CarParamsPersistent": cp.to_bytes()})
 
   # scenario: (start s, gear or None for no frames, ignition)
   script = [(0, po.GEAR_P, True), (2, po.GEAR_D, True), (10, po.GEAR_P, True),
@@ -603,3 +606,15 @@ def test_toggles_set_both_params():
     src = path.read_text()
     assert "park_offroad.PARAM_ENABLED, on" in src and "tripstats.set_enabled(" in src
     assert "ParkOffroadConfirmPage" in src or "ConfirmDialog(content" in src
+
+
+def test_session_survives_park_but_not_ignition(tmp_path):
+  from openpilot.common.params import Params, ParamKeyFlag
+  p = Params(str(tmp_path))
+  p.put_bool("TeslaSession", True, block=True)
+  p.put_bool("ParkOffroad", True, block=True)
+  p.put("ParkOffroadState", po.PARKED, block=True)
+  p.clear_all(ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION)
+  assert not po.not_parked(p)
+  p.clear_all(ParamKeyFlag.CLEAR_ON_IGNITION_ON)
+  assert po.not_parked(p)

@@ -201,7 +201,7 @@ def enabled(params) -> bool:
 
 def not_parked(params) -> bool:
   """hardwared onroad condition. True (no effect) unless the toggle is on and parkd says parked."""
-  return not (enabled(params) and get_state(params) == PARKED)
+  return not (get_bool(params, "TeslaSession", False) and enabled(params) and get_state(params) == PARKED)
 
 
 class OffroadTimer:
@@ -223,19 +223,11 @@ class OffroadTimer:
 
 def should_run(started: bool, params, CP) -> bool:
   """process_config: parkd runs onroad and offroad while the toggle is on."""
-  return enabled(params)
+  return CP is not None and CP.brand == "tesla" and get_bool(params, "TeslaSession", False) and enabled(params)
 
 
 def _brand(params) -> str:
-  try:
-    from opendbc.car.structs import car
-    raw = params.get("CarParamsPersistent")
-    if not raw:
-      return ""
-    with car.CarParams.from_bytes(raw) as cp:
-      return str(cp.brand)
-  except Exception:
-    return ""
+  return "tesla" if get_bool(params, "TeslaSession", False) else ""
 
 
 def main() -> None:

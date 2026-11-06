@@ -310,7 +310,7 @@ def test_last_trip_card_at_start_holds_until_onroad(dsc, monkeypatch):
 def test_hooks():
   ui = (UI / "ui_state.py").read_text()
   assert "self.park.update(time.monotonic(), self.started, self.ignition, self._park_state)" in ui
-  assert "park_offroad.get_state(self.params) if park_offroad.enabled(self.params)" in ui
+  assert "park_offroad.get_state(self.params) if tesla and park_offroad.enabled(self.params)" in ui
   assert "ui_state.park.brightness(time.monotonic(), ui_state.started, ui_state.light_sensor >= 0)" in ui
   assert "self._brightness_filter = FirstOrderFilter(BACKLIGHT_OFFROAD, 10.00" in ui          # stock filter kept
   main = (UI / "mici/layouts/main.py").read_text()
