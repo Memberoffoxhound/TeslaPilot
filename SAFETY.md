@@ -18,7 +18,7 @@ comma will **ban the dongle from comma.ai servers** if a fork breaks the rules i
 | --- | --- | --- |
 | `openpilot/selfdrive/monitoring` | **No** | Stock comma driver monitoring. Always-On DM toggle is stock. |
 | `openpilot/selfdrive/selfdrived/helpers.py` | **No** | Stock excessive-actuation / longitudinal & lateral limits. |
-| `opendbc/safety/` (panda safety) | **No** | opendbc Highland only edits `opendbc/car/tesla/` (coop steering, stalkless cancel, BSM wiring). `opendbc/safety/modes/tesla.h` blob matches commaai/opendbc. |
+| `opendbc/safety/` (panda safety) | **No** | Car changes are in `opendbc/car/tesla/` and `opendbc/car/car_helpers.py` (forced Tesla fingerprint). The safety tree is unchanged; `opendbc/safety/modes/tesla.h` matches commaai/opendbc. |
 | `panda` submodule | **No** | Still `commaai/panda`. |
 | Desire / lane change | Yes, Python | `desire_helper.py` + `auto_lane_change.py`. Planner desire, not panda limits. Off = stock nudge. On = blinker + BSM, engaged, 25 mph. |
 | Toggles UI | Yes | `AutoLaneChangeEnabled` bool, default off. Enable requires the warning slider. |
@@ -28,8 +28,8 @@ Cooperative steering lives in Tesla car interface Python (`opendbc/car/tesla/`).
 
 ## CI that enforces this
 
-- `.github/workflows/fork-safety.yaml` — fails if Highland diverges from the comma merge-base on monitoring, `helpers.py`, or `opendbc/safety`.
-- opendbc `.github/workflows/tests.yml` — stock `safety_tests` job runs `./opendbc/safety/tests/test.sh` (the suite comma requires). Highland pushes are included so the suite actually runs on this branch.
+- `.github/workflows/fork-safety.yaml` — runs on pull requests, manual dispatch and pushes to `master`, `Highland` and `Highland-Dev`. Fails if monitoring, `helpers.py` or `opendbc/safety` differs from its comma merge-base; also checks the panda URL.
+- The opendbc repository's `.github/workflows/tests.yml` runs `safety_tests` (`./opendbc/safety/tests/test.sh`) on pull requests and pushes to `master` or `Highland`. This is separate from the openpilot path-comparison gate.
 
 ## What this does **not** claim
 
