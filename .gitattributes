@@ -14,21 +14,9 @@ openpilot/selfdrive/modeld/models/big_*_tinygrad.pkl filter=lfs diff=lfs merge=l
 openpilot/selfdrive/car/tests/test_models_segs.txt filter=lfs diff=lfs merge=lfs -text
 openpilot/common/hardware/comma/updater filter=lfs diff=lfs merge=lfs -text
 
-# TeslaPilot Highland boot mark and media. Must be normal blobs: .lfsconfig
-# points at comma GitLab, and these OIDs are not there.
-openpilot/selfdrive/assets/images/spinner_comma.png -filter=lfs -diff=lfs -merge=lfs -text
-openpilot/selfdrive/assets/fonts/TESLA.ttf -filter=lfs -diff=lfs -merge=lfs -text
-openpilot/selfdrive/assets/sounds/shutter.wav -filter=lfs -diff=lfs -merge=lfs -text
-openpilot/selfdrive/assets/icons_mici/tesla_t.png -filter=lfs -diff=lfs -merge=lfs -text
-openpilot/selfdrive/assets/icons_mici/settings/theme.png -filter=lfs -diff=lfs -merge=lfs -text
-
-# TeslaPilot: installable branches carry no Git LFS objects. A device install must
-# work with no LFS fetch at all (the comma HF store has comma's OIDs only, and a
-# failed smudge breaks the installer clone/updater). Every runtime asset below is a
-# normal blob; only the chestnut-only big model stays a pointer, kept out of
-# install fetches by .lfsconfig fetchexclude and refused by chestnut_compiled().
-# After a comma merge, re-run scripts/teslapilot_lfs.py --fix to replace any new
-# pointer with its real file. scripts/teslapilot_lfs.py --check fails CI on one.
+# Runtime assets are normal blobs. Only the chestnut big model stays in LFS;
+# .lfsconfig excludes it from installs and chestnut_compiled() rejects its pointer.
+# After an upstream merge, run scripts/teslapilot_lfs.py --fix, then --check.
 *.onnx -filter -diff -merge -text
 *.svg -filter -diff -merge -text
 *.png -filter -diff -merge -text
