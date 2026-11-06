@@ -1,18 +1,16 @@
 # TeslaPilot
 
-TeslaPilot is a hobby fork of [comma.ai openpilot](https://github.com/commaai/openpilot) for **stalkless Tesla Model 3 Highland** cars. It adds Tesla-friendly controls, a Tesla-style theme, on-device drive stats, and a local web page for your comma.
+TeslaPilot is a hobby fork of [comma.ai openpilot](https://github.com/commaai/openpilot). It's technically compatible with every car comma supports, but it's built for a great **stalkless Tesla Model 3 Highland** experience. It adds Tesla-friendly controls, a Tesla-style theme, on-device drive stats, and a local web page for your comma.
 
 It is one person's project. There is no support, and you install it at your own risk.
 
 ![TeslaPilot: onroad Tesla theme, trip summary card, Home stats](docs/screenshots/teslapilot-demo.gif)
 
-> **Highland Teslas only.** The car is always identified as a 2025 Tesla Model 3 (`TESLA_MODEL_3`). Don't install it on pre-Highland Teslas or other makes.
-
 ## What you need
 
 - A **comma 4**. TeslaPilot is built and tested only on a comma 4.
 - **The OS required by your branch.** `Highland-Dev` uses **AGNOS 20.3** and flashes it on the first boot if needed. Check `launch_env.sh` before switching branches.
-- A **Tesla Model 3 Highland** with the Tesla B harness. It's driven daily on a 2026 Model 3 Highland.
+- Built and tested on a **2026 Model 3 Highland** with the Tesla B harness. Until the fingerprint fallback ships, an unrecognized car is identified as a 2025 Model 3.
 
 The fork reports version **0.11.23**. `Highland-Dev` is synced through comma openpilot **0.11.3** (`89e7e0a4c`).
 
@@ -30,19 +28,19 @@ The branch name is case-sensitive. To go back to stock openpilot, use `openpilot
 
 ## What's different from openpilot
 
-### Engage with the scroll wheel
+### Engage with the scroll wheel (Tesla only)
 
 Credit: stalkless cancel by [dkiiv](https://github.com/dkiiv) ([commaai/opendbc#3203](https://github.com/commaai/opendbc/pull/3203)), ported through [dzid26](https://github.com/dzid26)'s Tesla fork.
 
 Stalkless Teslas have no cruise stalk. Press the **right scroll wheel** to engage or disengage.
 
-### Cooperative steering
+### Cooperative steering (Tesla only)
 
 Credit: [dzid26](https://github.com/dzid26)'s cooperative steering ([dzid26/sunnypilot](https://github.com/dzid26/sunnypilot), `vtb-sla`), and [AmyJeanes](https://github.com/AmyJeanes)' Tesla coop steering in sunnypilot ([sunnypilot/opendbc#287](https://github.com/sunnypilot/opendbc/pull/287)).
 
 You can nudge the wheel while engaged and openpilot steers with you instead of fighting you. A firm hand on the wheel still disengages.
 
-### Newer Tesla firmware fix
+### Newer Tesla firmware fix (Tesla only)
 
 Credit: [AmyJeanes](https://github.com/AmyJeanes) ([commaai/opendbc#3389](https://github.com/commaai/opendbc/pull/3389)).
 
@@ -54,7 +52,7 @@ Credit: [rav4kumar](https://github.com/rav4kumar)'s automatic lane change in sun
 
 Off by default (**Settings → toggles → auto lane change**). When it's on, the blinker starts a lane change without a wheel nudge, above 25 mph and once Tesla's blind-spot monitor says the lane is clear.
 
-### Step aside for Tesla FSD
+### Step aside for Tesla FSD (Tesla only)
 
 On by default. If Tesla Autosteer, FSD, or Summon is selected or active, TeslaPilot stays out of the way and sends nothing to the car. It comes back once you're on TACC again.
 
@@ -88,7 +86,7 @@ Your drive stats stay on the comma. Nothing is uploaded. To turn them on, use **
 
 **What counts as today.** Day resets at midnight and Week resets at the start of the local week, in the local time where the car is. Weeks start on Sunday in the US, Canada and Japan, and on Monday in most of Europe and Australia, based on where GPS puts the car. The comma finds its time zone from GPS, using a built-in map, so it works offline. Until it has a GPS fix, it uses its own clock's time zone. A drive counts on the day it ends, and driving into a new time zone never moves old drives.
 
-**Ending a drive on a Tesla.** A Tesla has no ignition to turn off, so openpilot would stay onroad in Park. With **go offroad in park** on, when you shift into Park, the card comes up and the comma goes offroad. Shifting to R or D starts a new drive.
+**Ending a drive on a Tesla (Tesla only).** A Tesla has no ignition to turn off, so openpilot would stay onroad in Park. With **go offroad in park** on, when you shift into Park, the card comes up and the comma goes offroad. Shifting to R or D starts a new drive.
 
 The badge in Home's footer shows which system controls gas and brake:
 
@@ -108,6 +106,16 @@ To take a screenshot on the comma itself, hold your finger on the screen for 3 s
 Credit: [Zeph Leggett / zoompilot](https://github.com/zoompilot) — [zoompilot/jetlink](https://github.com/zoompilot/jetlink) (MIT) and the wiring in [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot). Highland's adapter and model picker follow that layout so future Jetlink changes merge cleanly.
 
 Runs openpilot's big driving model on a phone or computer plugged into the comma's USB-C port. Set it up in **Settings → models**. While it's off, nothing changes.
+
+### Tesla fingerprint fallback (Tesla only, coming soon)
+
+Stock fingerprinting always runs first. If it fails, the device asks **Are you on a Tesla?**
+
+**No** — it apologizes and shows comma's usual unrecognized-car alert. Non-Teslas keep stock ignition on/offroad; only Tesla-only features (step aside, go offroad in park) stay off.
+
+**Yes** — pick year (newest first, including 2026) then Model 3 or Model Y, and confirm twice. The car's firmware is saved as a local fingerprint. Restart when offered and stay in Park until it comes back onroad; normal fingerprinting should recognize the car after that.
+
+Optional: the device web page's **Submit fingerprint** opens a prefilled GitHub submission for review (no login on the comma). Accepted fingerprints land on `Highland-Dev` with credit to the submitter.
 
 ## Safety
 
