@@ -4,6 +4,8 @@ TeslaPilot is a hobby fork of [comma.ai openpilot](https://github.com/commaai/op
 
 It is one person's project. There is no support, and you install it at your own risk.
 
+Note! Until I merge Dev, do not attempt to install Highland on anything other than Highland!
+
 ![TeslaPilot: onroad Tesla theme, trip summary card, Home stats](docs/screenshots/teslapilot-demo.gif)
 
 ## What you need
