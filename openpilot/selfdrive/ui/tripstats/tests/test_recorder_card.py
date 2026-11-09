@@ -189,7 +189,7 @@ def test_best_stretch_resets_on_every_engagement_and_record_keeps_best():
 
 def test_card_columns():
   cols = tc.card_columns(summary(m=6.78 * MI, best_m=1.21 * MI) | {"e": 0.81 * 6.78 * MI}, 4, metric=False)
-  assert cols == [("6.8", "mi", "driven"), ("81", "%", "engaged"), ("4", "", "day streak"), ("1.2", "mi", "best stretch")]
+  assert cols == [("6.8", "mi", "driven"), ("81", "%", "engaged"), ("1.2", "mi", "streak"), ("4", "", "day streak")]
   assert tc.card_columns(summary(m=52 * MI), 0, metric=False)[0] == ("52", "mi", "driven")
   assert tc.card_columns(summary(m=5000), 0, metric=True)[0] == ("5.0", "km", "driven")
 
@@ -233,7 +233,7 @@ def test_accent_uses_theme_else_comma_green(monkeypatch):
 
 
 def test_card_columns_even_and_centered():
-  cols = [("6.8", "mi", "driven"), ("81", "%", "engaged"), ("4", "", "day streak"), ("1.2", "mi", "best stretch")]
+  cols = [("6.8", "mi", "driven"), ("81", "%", "engaged"), ("1.2", "mi", "streak"), ("4", "", "day streak")]
   def vw(v, u):
     return 20.0 * len(v + u)
 
@@ -243,11 +243,11 @@ def test_card_columns_even_and_centered():
   assert [c for c, _, _ in slots] == [62.5, 187.5, 312.5, 437.5]          # evenly spaced slot centers
   assert all(c - max(v, label) / 2 >= i * 125 - 1e-9 and c + max(v, label) / 2 <= (i + 1) * 125 + 1e-9
              for i, (c, v, label) in enumerate(slots))                      # each column stays in its slot
-  # too wide for 4: best stretch drops, the other 3 re-space evenly; never below 3
-  # the real card: best stretch (~120 px) next to day streak (~100 px) fits a 125 px slot with a 10 px gap
-  real = tc.column_slots(cols, 500, lambda v, u: 80.0, lambda lbl: {"best stretch": 120.0, "day streak": 100.0}.get(lbl, 80.0))
+  # too wide for 4: day streak drops, the other 3 re-space evenly; never below 3
+  # the real card: day streak (~100 px wide here) next to streak (~120 px) fits a 125 px slot with a 10 px gap
+  real = tc.column_slots(cols, 500, lambda v, u: 80.0, lambda lbl: {"streak": 120.0, "day streak": 100.0}.get(lbl, 80.0))
   assert len(real) == 4
-  wide = tc.column_slots(cols, 500, vw, lambda lbl: 13.0 * len(lbl))
+  wide = tc.column_slots(cols, 500, vw, lambda lbl: 16.0 * len(lbl))
   assert len(wide) == 3 and [round(c, 1) for c, _, _ in wide] == [83.3, 250.0, 416.7]
   assert len(tc.column_slots(cols, 100, vw, lw)) == 3
 

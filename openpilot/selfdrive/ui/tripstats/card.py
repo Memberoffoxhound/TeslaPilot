@@ -21,12 +21,12 @@ def fmt_dist(meters: float, metric: bool) -> tuple[str, str]:
 
 
 def card_columns(drive: dict, streak_days: int, metric: bool) -> list[tuple[str, str, str]]:
-  """(value, unit, label) columns; the last (best stretch) is dropped by the card if it doesn't fit."""
+  """(value, unit, label) columns; the last (day streak) is dropped by the card if it doesn't fit."""
   m, e, best = float(drive.get("m") or 0), float(drive.get("e") or 0), float(drive.get("best_m") or 0)
   dv, du = fmt_dist(m, metric)
   bv, bu = fmt_dist(best, metric)
   return [(dv, du, "driven"), (str(engaged_pct(e, m)), "%", "engaged"),
-          (str(int(streak_days)), "", "day streak"), (bv, bu, "best stretch")]
+          (bv, bu, "streak"), (str(int(streak_days)), "", "day streak")]
 
 
 def column_slots(cols, avail: float, value_w, label_w, gap: float = COL_GAP) -> list[tuple[float, float, float]]:

@@ -36,7 +36,7 @@ Branch names are case-sensitive. To go back to stock openpilot, enter `openpilot
 
 Credit: stalkless cancel by [dkiiv](https://github.com/dkiiv) ([commaai/opendbc#3203](https://github.com/commaai/opendbc/pull/3203)), ported through [dzid26](https://github.com/dzid26)'s Tesla fork.
 
-Stalkless Teslas don't have a cruise stalk, so press the **right scroll wheel** to disengage.
+Stalkless Teslas don't have a cruise stalk. Press the **right scroll wheel** to disengage. Engage the usual way with TACC.
 
 ### Cooperative steering (Tesla only)
 
@@ -66,6 +66,12 @@ The driving model doesn't know your set speed, so it often drives slower than yo
 
 Off by default. Turn it on in **Settings → toggles → set speed assist**. It needs openpilot longitudinal control (**Settings → developer → alpha longitudinal**) and does nothing without it. When it's on, the icon above shows on Home. Tap it to get back to the toggle.
 
+### Jetlink big model (optional)
+
+Credit: [Zeph Leggett / zoompilot](https://github.com/zoompilot): [zoompilot/jetlink](https://github.com/zoompilot/jetlink) (MIT) and the wiring in [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot). TeslaPilot's adapter and model picker follow the same layout, so future Jetlink updates are easy to bring over.
+
+Runs openpilot's big driving model on a phone or computer plugged into the comma's USB-C port. Set it up in **Settings → models**. If you leave it off, nothing changes.
+
 ### Step aside for Tesla FSD (Tesla only)
 
 On by default. If Tesla Autosteer, FSD, or Summon is selected or active, TeslaPilot gets out of the way and sends nothing to the car. It comes back when you're on TACC again.
@@ -84,7 +90,7 @@ On by default. If Tesla Autosteer, FSD, or Summon is selected or active, TeslaPi
 
 Your drive stats stay on the comma and nothing gets uploaded. Turn them on with **Settings → toggles → go offroad in park** (there's a note below on why a Tesla needs this).
 
-**Trip summary card.** When a drive ends, you get a card with the distance, percent engaged, day streak, best engaged stretch, and a timeline of the drive in comma connect's colors. It stays up for 20 seconds or until you tap it, then goes to Home. Swipe back to see it again any time before your next drive.
+**Trip summary card.** When a drive ends, you get a card with the distance, percent engaged, streak, day streak, and a timeline of the drive in comma connect's colors. It stays up for 20 seconds or until you tap it, then goes to Home. Swipe back to see it again any time before your next drive.
 
 ![Trip summary card](docs/screenshots/trip-card.png)
 
@@ -117,12 +123,6 @@ Open `http://<comma-ip>:8089` on a phone or computer connected to the **same Wi-
 
 To take a screenshot on the comma, hold your finger on the screen for 3 seconds. Screenshots go to `/data/media/0/screenshots`.
 
-### Jetlink big model (optional)
-
-Credit: [Zeph Leggett / zoompilot](https://github.com/zoompilot): [zoompilot/jetlink](https://github.com/zoompilot/jetlink) (MIT) and the wiring in [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot). TeslaPilot's adapter and model picker follow the same layout, so future Jetlink updates are easy to bring over.
-
-Runs openpilot's big driving model on a phone or computer plugged into the comma's USB-C port. Set it up in **Settings → models**. If you leave it off, nothing changes.
-
 ### Tesla fingerprint fallback
 
 openpilot has to recognize your car before it can drive. TeslaPilot always tries comma's normal check first. If your car isn't recognized, the comma stays in dashcam mode and asks **Are you on a Tesla?**
@@ -153,8 +153,7 @@ TeslaPilot is built on the work of these people and projects. Thank you!
 
 | Feature | Source | Link |
 |---|---|---|
-| Everything else | comma.ai openpilot, opendbc, panda | [commaai/openpilot](https://github.com/commaai/openpilot) |
-| Scroll-wheel engage/cancel | dkiiv, via dzid26's Tesla fork | [commaai/opendbc#3203](https://github.com/commaai/opendbc/pull/3203) |
+| Scroll-wheel cancel | dkiiv, via dzid26's Tesla fork | [commaai/opendbc#3203](https://github.com/commaai/opendbc/pull/3203) |
 | Cooperative steering | dzid26 (`vtb` / `vtb-sla`) | [dzid26/sunnypilot](https://github.com/dzid26/sunnypilot) |
 | Tesla coop steering in sunnypilot | AmyJeanes | [sunnypilot/opendbc#287](https://github.com/sunnypilot/opendbc/pull/287) |
 | Newer-firmware steering fix | AmyJeanes | [commaai/opendbc#3389](https://github.com/commaai/opendbc/pull/3389) |
@@ -162,10 +161,12 @@ TeslaPilot is built on the work of these people and projects. Thank you!
 | Set Speed Assist | Zeph Leggett / zoompilot | [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot), [sunnypilot/sunnypilot#2083](https://github.com/sunnypilot/sunnypilot/pull/2083) |
 | Jetlink big model | Zeph Leggett / zoompilot (MIT) | [zoompilot/jetlink](https://github.com/zoompilot/jetlink), [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot) |
 | Model picker | zoompilot's wiring of sunnypilot's model manager | [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot) |
+| Step aside, fingerprint fallback, Tesla theme, drive stats, web page | Memberoffoxhound | [TeslaPilot](https://github.com/Memberoffoxhound/TeslaPilot) |
 | TESLA font (wordmark) | KAYOver, based on TeslaNikolaCaps by Shane Milburn | [dafont](https://www.dafont.com/tesla.font) |
 | Inter font | Rasmus Andersson | [rsms/inter](https://github.com/rsms/inter) |
 | Time zone table (`tzgrid.bin`) | timezone-boundary-builder by Evan Siroky, from OpenStreetMap data | [evansiroky/timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder) |
 | First day of the week (`weekstart.json`) | Unicode CLDR | [cldr.unicode.org](https://cldr.unicode.org/) |
+| Everything else | comma.ai openpilot, opendbc, panda | [commaai/openpilot](https://github.com/commaai/openpilot) |
 
 ## License
 
