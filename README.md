@@ -62,7 +62,7 @@ Off by default. Turn it on in **Settings → toggles → auto lane change**. The
 
 Credit: Zeph Leggett, ported from [zoompilot](https://github.com/zoompilot/zoompilot) ([sunnypilot/sunnypilot#2083](https://github.com/sunnypilot/sunnypilot/pull/2083)).
 
-The driving model doesn't know your set speed, so it often drives slower than you asked for, or hangs back farther from the car ahead than your following distance. Set Speed Assist adds just enough gas to get you up to your set speed, or in to your normal following distance. It only ever adds gas, never takes any away, and the model still decides when to slow down.
+The driving model doesn't know your set speed, so it often drives slower than you asked for, or hangs back farther from the car ahead than your following distance. Set Speed Assist adds just enough gas to get you up to your set speed, or close up to your normal following distance. It only ever adds gas, never takes any away, and the model still decides when to slow down.
 
 Off by default. Turn it on in **Settings → toggles → set speed assist**. It needs openpilot longitudinal control (**Settings → developer → alpha longitudinal**) and does nothing without it. When it's on, the icon above shows on Home. Tap it to get back to the toggle.
 
