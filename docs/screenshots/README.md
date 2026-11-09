@@ -13,6 +13,7 @@ The GIF and the `onroad-tesla`, `trip-card` and `home-stats` stills were rendere
 | `home-stats.png` | Home with Day and Week stats |
 | `icon-tacc.png` | TACC badge |
 | `icon-long.png` | LONG badge |
+| `icon-ssa.png` | Set Speed Assist icon (`icons_mici/set_speed_assist.png` on black, so it shows on GitHub's light theme) |
 | `stats-ring.jpg` | Statistics: engaged ring |
 | `stats-weekly.jpg` | Statistics: weekly engaged |
 | `stats-monthly.jpg` | Statistics: monthly engaged |
