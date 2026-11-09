@@ -28,7 +28,7 @@ Cooperative steering lives in Tesla car interface Python (`opendbc/car/tesla/`).
 
 ## CI that enforces this
 
-- `.github/workflows/fork-safety.yaml` — runs on pull requests, manual dispatch and pushes to `master`, `Highland` and `Highland-Dev`. Fails if monitoring, `helpers.py` or `opendbc/safety` differs from its comma merge-base; also checks the panda URL.
+- `.github/workflows/fork-safety.yaml` — runs on pull requests, manual dispatch and pushes to `master`, `release`, `Highland` and `Highland-Dev`. Fails if monitoring, `helpers.py` or `opendbc/safety` differs from its comma merge-base; also checks the panda URL.
 - The opendbc repository's `.github/workflows/tests.yml` runs `safety_tests` (`./opendbc/safety/tests/test.sh`) on pull requests and pushes to `master` or `Highland`. This is separate from the openpilot path-comparison gate.
 
 ## What this does **not** claim
