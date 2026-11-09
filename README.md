@@ -36,7 +36,7 @@ Branch names are case-sensitive. To go back to stock openpilot, enter `openpilot
 
 Credit: stalkless cancel by [dkiiv](https://github.com/dkiiv) ([commaai/opendbc#3203](https://github.com/commaai/opendbc/pull/3203)), ported through [dzid26](https://github.com/dzid26)'s Tesla fork.
 
-Stalkless Teslas don't have a cruise stalk, so press the **right scroll wheel** to engage or disengage.
+Stalkless Teslas don't have a cruise stalk, so press the **right scroll wheel** to disengage.
 
 ### Cooperative steering (Tesla only)
 
