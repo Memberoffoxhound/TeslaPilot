@@ -310,7 +310,7 @@ class UIState:
         self.has_longitudinal_control = self.CP.openpilotLongitudinalControl
 
     self.recording_audio = self.params.get_bool("RecordAudio") and self.started
-    tesla = park_offroad.get_bool(self.params, "TeslaSession", False)
+    tesla = self.CP is not None and self.CP.brand == "tesla"
     self.tesla_stepped_aside = tesla and self.started and tesla_step_aside.stepped_aside(self.params)
     self._park_state = park_offroad.get_state(self.params) if tesla and park_offroad.enabled(self.params) else park_offroad.NONE
     self.is_metric = self.params.get_bool("IsMetric")

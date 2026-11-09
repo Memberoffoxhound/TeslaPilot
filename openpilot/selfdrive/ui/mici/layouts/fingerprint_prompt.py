@@ -1,11 +1,12 @@
 """Learn a Tesla EPS reply from an unrecognized, passive drive."""
-from opendbc.car.tesla.fingerprint_overlay import catalog, save
+from opendbc.car.tesla.fingerprint_overlay import catalog
+from openpilot.selfdrive.car.local_fingerprints import save
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets import DialogResult
 from openpilot.system.ui.widgets.confirm_dialog import ConfirmDialog, alert_dialog
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, GreyBigButton
-from openpilot.selfdrive.ui.mici.layouts.settings.toggles import _wire_confirm
+from openpilot.selfdrive.ui.mici.widgets.dialog import wire_confirm
 from openpilot.selfdrive.ui.ui_state import ui_state
 
 
@@ -57,9 +58,9 @@ class FingerprintPrompt:
 
   def _confirm(self, platform, model):
     page = NavScroller()
-    _wire_confirm(page, "confirm vehicle", ["Verify the year, model and Autopilot computer on your car's screen.",
-                                          "A wrong fingerprint can configure the wrong controls.",
-                                          "Save the captured EPS firmware locally, then restart to apply."],
+    wire_confirm(page, "confirm vehicle", ["Verify the year, model and Autopilot computer on your car's screen.",
+                                         "A wrong fingerprint can configure the wrong controls.",
+                                         "Save the captured EPS firmware locally, then restart to apply."],
                   lambda: self._save(platform, model), label="slide to\nsave")
     gui_app.push_widget(page)
 

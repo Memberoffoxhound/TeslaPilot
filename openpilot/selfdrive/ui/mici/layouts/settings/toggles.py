@@ -2,8 +2,8 @@ from collections.abc import Callable
 
 from openpilot.cereal import log
 from openpilot.common.params import Params
-from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigToggle, GreyBigButton, BigButton
-from openpilot.selfdrive.ui.mici.widgets.dialog import BigConfirmationCircleButton
+from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigToggle, BigButton
+from openpilot.selfdrive.ui.mici.widgets.dialog import wire_confirm
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.system.ui.lib.application import gui_app, MousePos
 from openpilot.selfdrive.ui.layouts.settings.common import (
@@ -19,22 +19,10 @@ from openpilot.selfdrive.ui.mici.layouts.settings.initial_cruise_speed import In
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
 
 
-def _wire_confirm(page: NavScroller, title: str, bodies: list[str], on_confirm: Callable[[], None], label="slide to\nenable") -> None:
-  warn = gui_app.texture("icons_mici/setup/warning.png", 64, 64)
-  check = gui_app.texture("icons_mici/setup/driver_monitoring/dm_check.png", 64, 64)
-  accept = BigConfirmationCircleButton(label, check,
-                                       lambda: page.dismiss(on_confirm))
-  page._scroller.add_widgets([
-    GreyBigButton(title, "scroll to continue", warn),
-    *[GreyBigButton("", body) for body in bodies],
-    accept,
-  ])
-
-
 class AutoLaneChangeConfirmPage(NavScroller):
   def __init__(self, on_confirm: Callable[[], None]):
     super().__init__()
-    _wire_confirm(self, "enabling\nauto lane change", [
+    wire_confirm(self, "enabling\nauto lane change", [
       "Auto Lane Change uses Tesla's stock blind spot monitoring",
       "to check for a vehicle in the adjacent lane prior to merging.",
       "You are still responsible for ensuring the lane of travel is clear",
@@ -45,7 +33,7 @@ class AutoLaneChangeConfirmPage(NavScroller):
 class ParkOffroadConfirmPage(NavScroller):
   def __init__(self, on_confirm: Callable[[], None]):
     super().__init__()
-    _wire_confirm(self, "enabling\ngo offroad in park", [
+    wire_confirm(self, "enabling\ngo offroad in park", [
       "Tesla: TeslaPilot goes offroad after Park is held 3 s.",
       "Only D or R brings it back onroad, as a new route. The car staying on does not.",
       "Ignition starts TeslaPilot as before. Turning the car off and on resets it.",

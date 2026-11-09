@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from openpilot.selfdrive.car.vehicle_profile import MAKES, make, stock_make
+from openpilot.selfdrive.ui.mici.widgets.vehicle_profile import MAKES, make, stock_make
 
 
 def CP(brand, fingerprint=""):

@@ -438,7 +438,7 @@ def hardware_thread(end_event, hw_queue) -> None:
         off_ts = time.monotonic()
 
     # Park-offroad: the shutdown timer starts at ignition off, as without it
-    if not park_offroad.get_bool(params, "TeslaSession", False):
+    if park_offroad.brand(params) != "tesla":
       park_timer = park_offroad.OffroadTimer()
     off_ts = park_timer.update(onroad_conditions["not_parked"], started_ts is not None, onroad_conditions["ignition"],
                                off_ts, time.monotonic())

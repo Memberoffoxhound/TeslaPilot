@@ -199,9 +199,22 @@ def enabled(params) -> bool:
 
 # -- hooks ---------------------------------------------------------------------
 
+def brand(params, key: str = "CarParams") -> str:
+  """brand from a CarParams param, '' when unset or unreadable."""
+  try:
+    raw = get(params, key)
+    if not raw:
+      return ""
+    from opendbc.car.structs import car
+    with car.CarParams.from_bytes(raw) as cp:
+      return str(cp.brand)
+  except Exception:
+    return ""
+
+
 def not_parked(params) -> bool:
-  """hardwared onroad condition. True (no effect) unless the toggle is on and parkd says parked."""
-  return not (get_bool(params, "TeslaSession", False) and enabled(params) and get_state(params) == PARKED)
+  """hardwared onroad condition. True (no effect) unless on a Tesla, the toggle is on and parkd says parked."""
+  return not (enabled(params) and get_state(params) == PARKED and brand(params) == "tesla")
 
 
 class OffroadTimer:
@@ -223,11 +236,7 @@ class OffroadTimer:
 
 def should_run(started: bool, params, CP) -> bool:
   """process_config: parkd runs onroad and offroad while the toggle is on."""
-  return CP is not None and CP.brand == "tesla" and get_bool(params, "TeslaSession", False) and enabled(params)
-
-
-def _brand(params) -> str:
-  return "tesla" if get_bool(params, "TeslaSession", False) else ""
+  return CP is not None and CP.brand == "tesla" and enabled(params)
 
 
 def main() -> None:
@@ -240,10 +249,10 @@ def main() -> None:
   params = Params()
   put_state(params, NONE, block=True)    # valid from the first loop, whatever a previous run left
   # gear frames mean something else on other brands: idle unless the last car has a park source
-  source = PARK_SOURCES.get(_brand(params))
+  source = PARK_SOURCES.get(brand(params))
   while source is None:
     time.sleep(5.0)
-    source = PARK_SOURCES.get(_brand(params))
+    source = PARK_SOURCES.get(brand(params))
 
   can_sock = messaging.sub_sock("can", conflate=True, timeout=0)
   sm = messaging.SubMaster(["pandaStates", "selfdriveState"])

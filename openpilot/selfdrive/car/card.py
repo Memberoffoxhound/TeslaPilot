@@ -20,8 +20,7 @@ from opendbc.car.car_helpers import get_car, interfaces
 from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.cruise import VCruiseHelper
-from openpilot.selfdrive.car import tesla_step_aside, park_offroad
-from openpilot.common.params_compat import put_bool
+from openpilot.selfdrive.car import local_fingerprints, tesla_step_aside, park_offroad
 
 REPLAY = "REPLAY" in os.environ
 
@@ -100,7 +99,8 @@ class Car:
         with car.CarParams.from_bytes(cached_params_raw) as cp:
           cached_params = cp
 
-      self.CI = get_car(*self.can_callbacks, obd_callback(self.params), alpha_long_allowed, is_release, cached_params)
+      self.CI = get_car(*self.can_callbacks, obd_callback(self.params), alpha_long_allowed, is_release, cached_params,
+                        local_fingerprints.load())
       self.RI = interfaces[self.CI.CP.carFingerprint].RadarInterface(self.CI.CP)
       self.CP = self.CI.CP
 
@@ -110,9 +110,9 @@ class Car:
       self.CI, self.CP = CI, CI.CP
       self.RI = RI
 
-    if self.CP.brand != "tesla" or not park_offroad.get_bool(self.params, "TeslaSession", False):
+    # keep parkd's state only when the previous route (CarParamsPersistent, not yet overwritten) was also a Tesla
+    if self.CP.brand != "tesla" or park_offroad.brand(self.params, "CarParamsPersistent") != "tesla":
       park_offroad.put_state(self.params, park_offroad.NONE, block=True)
-    put_bool(self.params, "TeslaSession", self.CP.brand == "tesla", block=True)
     self.CP.alternativeExperience = 0
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
     controller_available = self.CI.CC is not None and openpilot_enabled_toggle and not self.CP.dashcamOnly

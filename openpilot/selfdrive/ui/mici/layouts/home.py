@@ -17,7 +17,7 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.ui_state import ui_state, ChestnutState
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.widgets.trip_row import GREY, WHITE, draw_trip_row, fmt_trip
-from openpilot.selfdrive.car.vehicle_profile import MAKES, make as car_make
+from openpilot.selfdrive.ui.mici.widgets.vehicle_profile import MAKES, make as car_make
 from openpilot.common.version import RELEASE_BRANCHES
 
 HOME_PADDING = 8

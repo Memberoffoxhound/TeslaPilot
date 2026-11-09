@@ -10,7 +10,6 @@ from openpilot.selfdrive.ui.onroad.augmented_road_view import AugmentedRoadView
 from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.selfdrive.ui.layouts.onboarding import OnboardingWindow
 from openpilot.selfdrive.ui.body.layouts.onroad import BodyLayout
-from openpilot.selfdrive.ui.fingerprint_prompt import FingerprintPrompt
 
 
 class MainState(IntEnum):
@@ -27,7 +26,6 @@ class MainLayout(Widget):
 
     self._sidebar = Sidebar()
     self._current_mode = MainState.HOME
-    self._fingerprint = FingerprintPrompt(self)
     self._prev_onroad = False
 
     # Initialize layouts
@@ -51,12 +49,6 @@ class MainLayout(Widget):
     self._onboarding_window = OnboardingWindow()
     if not self._onboarding_window.completed:
       gui_app.push_widget(self._onboarding_window)
-
-    gui_app.add_nav_stack_tick(self._fingerprint_tick)
-
-  def _fingerprint_tick(self):
-    if not gui_app.widget_in_stack(self._onboarding_window):
-      self._fingerprint.tick()
 
   def _render(self, _):
     self._handle_onroad_transition()

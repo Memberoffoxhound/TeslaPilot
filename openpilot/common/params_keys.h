@@ -144,7 +144,6 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"UptimeOffroad", {PERSISTENT, FLOAT, "0.0"}},
     {"UptimeOnroad", {PERSISTENT, FLOAT, "0.0"}},
     {"TeslaStepAside", {PERSISTENT, BOOL, "1"}},  // step aside (noOutput, relay open) while Tesla Autosteer/FSD is selected or active
-    {"TeslaSession", {CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_ON, BOOL}},
     {"TeslaSteppedAside", {CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_ON, BOOL}},  // card: this drive is stepped aside
     // ParkOffroad also sets DriveSummary; see PORTING.md.
     {"ParkOffroad", {PERSISTENT, BOOL, "0"}},  // go offroad after Park is held 3 s; back onroad on R/D

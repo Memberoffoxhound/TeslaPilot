@@ -256,3 +256,15 @@ class BigConfirmationCircleButton(BigCircleButton):
                                                 exit_on_confirm=exit_on_confirm, red=red))
 
     self.set_click_callback(show_confirm_dialog)
+
+
+def wire_confirm(page: NavScroller, title: str, bodies: list[str], on_confirm: Callable[[], None], label="slide to\nenable") -> None:
+  """Warning title, body rows and a slide-to-confirm button on a NavScroller page."""
+  warn = gui_app.texture("icons_mici/setup/warning.png", 64, 64)
+  check = gui_app.texture("icons_mici/setup/driver_monitoring/dm_check.png", 64, 64)
+  accept = BigConfirmationCircleButton(label, check, lambda: page.dismiss(on_confirm))
+  page._scroller.add_widgets([
+    GreyBigButton(title, "scroll to continue", warn),
+    *[GreyBigButton("", body) for body in bodies],
+    accept,
+  ])

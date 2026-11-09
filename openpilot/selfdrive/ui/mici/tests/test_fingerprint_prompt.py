@@ -2,7 +2,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 from opendbc.car.structs import car
-from openpilot.selfdrive.ui import fingerprint_prompt as fp
+from openpilot.selfdrive.ui.mici.layouts import fingerprint_prompt as fp
 
 
 class SM(dict):
