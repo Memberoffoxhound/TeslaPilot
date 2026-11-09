@@ -1,6 +1,6 @@
 # TeslaPilot
 
-TeslaPilot is a hobby fork of [comma.ai openpilot](https://github.com/commaai/openpilot). It should work on any car comma supports, but it's built to give you a great experience on a **stalkless Tesla Model 3 Highland**. You get Tesla-friendly controls, a Tesla-style theme, drive stats that stay on your device, and a small web page on your comma.
+TeslaPilot is a hobby fork of [comma.ai openpilot](https://github.com/commaai/openpilot). It should work on any car comma supports, but it's built to give you a great experience on Tesla. You get Tesla-friendly controls, a Tesla-style theme, drive stats that stay on your device, and a small web page hosted on your comma.
 
 This is a one-person project. There's no support, and you install it at your own risk.
 
@@ -32,7 +32,7 @@ Branch names are case-sensitive. To go back to stock openpilot, enter `openpilot
 
 ## What's different from openpilot
 
-### Engage with the scroll wheel (Tesla only)
+### Disengage with the scroll wheel (Tesla only)
 
 Credit: stalkless cancel by [dkiiv](https://github.com/dkiiv) ([commaai/opendbc#3203](https://github.com/commaai/opendbc/pull/3203)), ported through [dzid26](https://github.com/dzid26)'s Tesla fork.
 
