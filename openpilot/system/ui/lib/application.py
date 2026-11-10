@@ -235,6 +235,7 @@ class GuiApplication:
     self._scaled_height += self._scaled_height % 2
 
     self._render_texture: rl.RenderTexture | None = None
+    self._capture_texture: rl.RenderTexture | None = None
     self._burn_in_shader: rl.Shader | None = None
     self._ffmpeg_proc: subprocess.Popen | None = None
     self._ffmpeg_queue: queue.Queue | None = None
@@ -549,12 +550,26 @@ class GuiApplication:
     rl.unload_image(image)
     return texture
 
+  def _update_capture_texture(self):
+    # offscreen target only while a screenshot needs pixels
+    want = self._render_texture is None and self._shotter.pending
+    if want and self._capture_texture is None:
+      try:
+        self._capture_texture = rl.load_render_texture(self._scaled_width, self._scaled_height)
+      except Exception:
+        cloudlog.exception("capture texture")
+    elif not want and self._capture_texture is not None:
+      rl.unload_render_texture(self._capture_texture)
+      self._capture_texture = None
+
   def _record_frame(self):
-    # same source as ScreenShotter.capture; texture readback is upside down, screen readback is not
+    # texture readback is upside down
     try:
-      tex = self._render_texture.texture if self._render_texture else None
-      image = rl.load_image_from_texture(tex) if tex else rl.load_image_from_screen()
-      self._rec.push(image.to_bytes(image.width * image.height * 4), image.width, image.height, flip=tex is not None)
+      tex = self._render_texture or self._capture_texture
+      if tex is None:
+        raise RuntimeError("no capture texture")
+      image = rl.load_image_from_texture(tex.texture)
+      self._rec.push(image.to_bytes(image.width * image.height * 4), image.width, image.height, flip=True)
       rl.unload_image(image)
     except Exception:
       cloudlog.exception("screenrec frame")
@@ -594,6 +609,9 @@ class GuiApplication:
     if self._render_texture is not None:
       rl.unload_render_texture(self._render_texture)
       self._render_texture = None
+    if self._capture_texture is not None:
+      rl.unload_render_texture(self._capture_texture)
+      self._capture_texture = None
 
     if self._burn_in_shader:
       rl.unload_shader(self._burn_in_shader)
@@ -647,8 +665,10 @@ class GuiApplication:
           yield False, 0.0, 0.0
           continue
 
-        if self._render_texture:
-          rl.begin_texture_mode(self._render_texture)
+        self._update_capture_texture()
+        target = self._render_texture or self._capture_texture
+        if target:
+          rl.begin_texture_mode(target)
           rl.clear_background(rl.BLACK)
         else:
           rl.begin_drawing()
@@ -673,13 +693,13 @@ class GuiApplication:
         if self._scale != 1.0:
           rl.rl_pop_matrix()
 
-        if self._render_texture:
+        if target:
           rl.end_texture_mode()
           rl.begin_drawing()
           rl.clear_background(rl.BLACK)
           src_rect = rl.Rectangle(0, 0, float(self._scaled_width), -float(self._scaled_height))
           dst_rect = rl.Rectangle(0, 0, float(self._scaled_width), float(self._scaled_height))
-          texture = self._render_texture.texture
+          texture = target.texture
           if texture:
             if BURN_IN_MODE and self._burn_in_shader:
               rl.begin_shader_mode(self._burn_in_shader)
@@ -698,7 +718,7 @@ class GuiApplication:
           self._draw_grid()
 
         if self._shotter.pending:
-          self._shotter.capture(self._render_texture)
+          self._shotter.capture(target)
         if self._rec.want_frame():
           self._record_frame()
         self._shotter.draw_flash(self._scaled_width, self._scaled_height, frame_time)

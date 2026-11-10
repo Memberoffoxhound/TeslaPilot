@@ -1,8 +1,13 @@
 """3s display hold → PNG in /data/media/0/screenshots. Web UI sets SHOT_REQ."""
 import os
+import struct
 import time
+import zlib
 
+import numpy as np
 import raylib_nb as rl
+
+from openpilot.common.swaglog import cloudlog
 
 SHOT_DIR = "/data/media/0/screenshots"
 SHOT_PLAY = "/data/screenshot_play"
@@ -53,22 +58,23 @@ class ScreenShotter:
     return False
 
   def capture(self, render_texture=None) -> str | None:
+    self.pending = False
     try:
+      if render_texture is None:
+        raise RuntimeError("no capture texture")
+      img = rl.load_image_from_texture(render_texture.texture)
+      try:
+        w, h = img.width, img.height
+        rgba = np.frombuffer(img.to_bytes(w * h * 4), dtype=np.uint8).reshape(h, w, 4)
+      finally:
+        rl.unload_image(img)
       os.makedirs(SHOT_DIR, exist_ok=True)
-      if render_texture is not None:
-        img = rl.load_image_from_texture(render_texture.texture)
-        rl.image_flip_vertical(img)
-      else:
-        img = rl.load_image_from_screen()
-      name = time.strftime("%Y-%m-%d--%H-%M-%S.png")
-      path = os.path.join(SHOT_DIR, name)
-      rl.export_image(img, path)
-      rl.unload_image(img)
+      path = os.path.join(SHOT_DIR, time.strftime("%Y-%m-%d--%H-%M-%S.png"))
+      write_png(path, rgba[::-1])  # texture readback is upside down
       self.flash = 1.0
-      self.pending = False
       return path
     except Exception:
-      self.pending = False
+      cloudlog.exception("screenshot failed")
       return None
 
   def draw_flash(self, width: int, height: int, dt: float) -> None:
@@ -77,3 +83,23 @@ class ScreenShotter:
     a = int(255 * self.flash)
     rl.draw_rectangle(0, 0, width, height, rl.Color(255, 255, 255, a))
     self.flash = max(0.0, self.flash - dt / 0.22)
+
+
+def png_bytes(rgba: np.ndarray) -> bytes:
+  """Encode an HxWx4 uint8 array as RGBA PNG."""
+  h, w = rgba.shape[:2]
+  raw = np.zeros((h, w * 4 + 1), dtype=np.uint8)  # filter byte 0 per row
+  raw[:, 1:] = np.ascontiguousarray(rgba, dtype=np.uint8).reshape(h, w * 4)
+
+  def chunk(tag: bytes, data: bytes) -> bytes:
+    return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
+
+  ihdr = struct.pack(">IIBBBBB", w, h, 8, 6, 0, 0, 0)
+  return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw.tobytes(), 6)) + chunk(b"IEND", b"")
+
+
+def write_png(path: str, rgba: np.ndarray) -> None:
+  tmp = path + ".tmp"
+  with open(tmp, "wb") as f:
+    f.write(png_bytes(rgba))
+  os.replace(tmp, path)
