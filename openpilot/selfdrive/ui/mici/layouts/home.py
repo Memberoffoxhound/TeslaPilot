@@ -279,9 +279,7 @@ class MiciHomeLayout(Widget):
     t = tripstats.view(ui_state.params)
     self._day_txt = ("Day", fmt_trip(t["today_m"], t["today_e"], ui_state.is_metric))
     self._week_txt = ("Week", fmt_trip(t["week_m"], t["week_e"], ui_state.is_metric))
-    # SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
-    # self._ssa_on = ui_state.params.get_bool("SetSpeedAssist")
-    self._ssa_on = False
+    self._ssa_on = ui_state.params.get_bool("SetSpeedAssist")
 
   def set_callbacks(self, on_settings: Callable | None = None, on_alerts: Callable | None = None,
                     on_stats: Callable | None = None,

@@ -8,8 +8,7 @@ from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib.accel_boost import AccelBoost
-# SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
-# from openpilot.selfdrive.controls.lib.set_speed_assist import SetSpeedAssist, approach_accel
+from openpilot.selfdrive.controls.lib.set_speed_assist import SetSpeedAssist, approach_accel
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc, LongitudinalPlanSource
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
@@ -39,8 +38,7 @@ class LongitudinalPlanner:
     self.fcw = False
     self.dt = dt
     self.accel_boost = AccelBoost()
-    # SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
-    # self.set_speed_assist = SetSpeedAssist(CP)
+    self.set_speed_assist = SetSpeedAssist(CP)
 
     self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
     self.a_cruise = init_a
@@ -106,9 +104,8 @@ class LongitudinalPlanner:
     self.a_cruise = get_cruise_accel(v_cruise, v_ego, self.a_cruise, self.output_a_target, self.dt)
     cruise_should_stop = should_stop(v_ego, self.a_cruise)
 
-    # SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
-    # a_floor = min(output_a_target_mpc, self.a_cruise, approach_accel(v_ego, v_cruise))
-    # output_a_target_e2e = self.set_speed_assist.update(sm, output_a_target_e2e, a_floor, reset_state)
+    a_floor = min(output_a_target_mpc, self.a_cruise, approach_accel(v_ego, v_cruise))
+    output_a_target_e2e = self.set_speed_assist.update(sm, output_a_target_e2e, a_floor, reset_state)
     output_a_target_e2e = self.accel_boost.update(sm, output_a_target_e2e, output_a_target_mpc, self.a_cruise)
 
     candidates = [(output_a_target_mpc, self.mpc.source, output_should_stop_mpc),
@@ -141,9 +138,7 @@ class LongitudinalPlanner:
 
     longitudinalPlan.aTarget = float(self.output_a_target)
     longitudinalPlan.accelBoost = float(self.accel_boost.total_boost)
-    # SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
-    # longitudinalPlan.setSpeedAssist = float(self.set_speed_assist.lift)
-    longitudinalPlan.setSpeedAssist = 0.
+    longitudinalPlan.setSpeedAssist = float(self.set_speed_assist.lift)
     longitudinalPlan.shouldStop = bool(self.output_should_stop)
     longitudinalPlan.allowBrake = True
 

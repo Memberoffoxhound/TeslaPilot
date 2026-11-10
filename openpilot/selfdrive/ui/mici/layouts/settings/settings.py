@@ -76,10 +76,9 @@ class SettingsLayout(NavScroller):
   def stats_layout(self):
     return self._stats_layout
 
-  # SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
-  # def show_set_speed_assist(self):
-  #   gui_app.push_widget(self._toggles_panel)
-  #   self._toggles_panel.set_shown_callback(self._toggles_panel.scroll_to_set_speed_assist)
+  def show_set_speed_assist(self):
+    gui_app.push_widget(self._toggles_panel)
+    self._toggles_panel.set_shown_callback(self._toggles_panel.scroll_to_set_speed_assist)
 
   def show_pairing(self):
     gui_app.push_widget(self)
