@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TeslaPilot device web GUI: stats, screenshots, UI screen recording. Stdlib only.
+"""TeslaPilot device web GUI: stats and screenshots. Stdlib only.
 
 Plain HTTP, no auth: anyone on the same network can use it. Defaults to 0.0.0.0:8089
 (WEBGUI_HOST/WEBGUI_PORT). Reads car state; requests UI captures through files, not params.
@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,10 +18,6 @@ STATIC = Path(__file__).parent / "static" / "index.html"
 FONT_DIR = Path(__file__).parents[2] / "selfdrive/assets/fonts"
 FONTS = ("TESLA.ttf", "Inter-SemiBold.ttf")  # wordmark fonts
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
-MIN_FREE = 2 * 1024**3
-MAX_REC_S = 300
-STALE_S = 5.0
-GRACE_S = 10.0
 CSP = ("default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; "
        + "media-src 'self'; connect-src 'self'; frame-ancestors 'none'")
 
@@ -44,71 +39,10 @@ def list_files(d: Path, ext: str) -> list[dict]:
   return [{"name": f.name, "size": f.stat().st_size, "mtime": int(f.stat().st_mtime)} for f in sorted(fs, key=lambda f: f.name, reverse=True)][:500]
 
 
-class Recorder:
-  """Server half of screen recording: guards + state. The UI half (screenrec.py) owns ffmpeg."""
-  def __init__(self, data: Path, wall=time.monotonic, free=None):
-    self.data, self.dir, self.wall = data, data / "media/0/screenrecords", wall
-    self.free = free or (lambda p: shutil.disk_usage(p).free)
-    self.req, self.stop_f, self.state_f = data / "screenrec_request", data / "screenrec_stop", data / "screenrec_state"
-
-  @staticmethod
-  def _json(f: Path) -> dict:
-    try:
-      return json.loads(f.read_text())
-    except (OSError, ValueError):
-      return {}
-
-  def status(self) -> dict:
-    st, now = self._json(self.state_f), self.wall()
-    rec = bool(st.get("recording")) and now - float(st.get("updated") or 0) < STALE_S
-    elapsed = max(0.0, now - float(st.get("started") or now)) if rec else 0.0
-    if rec and elapsed > float(st.get("max_s") or MAX_REC_S) + GRACE_S:
-      self.stop_f.write_text("watchdog")  # UI should have stopped itself; nudge it
-    pending, err = self.req.exists(), st.get("error") or ""
-    if pending and now - float(self._json(self.req).get("t") or 0) > STALE_S:
-      self.req.unlink(missing_ok=True)
-      pending, err = False, "UI did not pick up the request (is the ui process running?)"
-    f = self.dir / (st.get("name") or "-")
-    try:
-      size = f.stat().st_size if rec else 0
-    except OSError:
-      size = 0
-    try:
-      free = self.free(str(self.data))
-    except OSError:
-      free = 0
-    return {"recording": rec, "pending": pending, "name": st.get("name") if rec else None, "elapsed": round(elapsed, 1),
-            "max_s": st.get("max_s"), "size": size, "free": free, "min_free": MIN_FREE, "error": err,
-            "stale": bool(st.get("recording")) and not rec}
-
-  def start(self, max_s, fps=10) -> tuple[int, dict]:
-    s = self.status()
-    if s["recording"] or s["pending"]:
-      return 409, {"error": "already recording"}
-    if s["free"] < MIN_FREE:
-      return 507, {"error": f"need {MIN_FREE // 1024**3} GB free"}
-    try:
-      max_s, fps = max(5, min(MAX_REC_S, int(max_s))), max(1, min(30, int(fps)))
-    except (TypeError, ValueError):
-      return 400, {"error": "bad max_s/fps"}
-    name = time.strftime("%Y-%m-%d--%H-%M-%S.mp4")
-    self.stop_f.unlink(missing_ok=True)
-    tmp = self.req.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"name": name, "max_s": max_s, "fps": fps, "t": self.wall()}))
-    os.replace(tmp, self.req)
-    return 200, {"ok": True, "name": name, "max_s": max_s}
-
-  def stop(self) -> dict:
-    self.req.unlink(missing_ok=True)
-    self.stop_f.write_text("1")
-    return {"ok": True}
-
-
 class App:
-  def __init__(self, data: Path, mock: bool = False, wall=time.monotonic, free=None):
-    self.data, self.mock, self.wall = data, mock, wall
+  def __init__(self, data: Path, mock: bool = False):
+    self.data, self.mock = data, mock
     self.shots, self.shot_req = data / "media/0/screenshots", data / "screenshot_request"
-    self.rec = Recorder(data, wall, free)
 
   def stats(self) -> dict:
     from openpilot.system.webgui import stats
@@ -126,13 +60,10 @@ class App:
       time.sleep(0.15)
     return {"ok": True, "pending": True}  # screen may be off; UI takes it on next rendered frame
 
-  def delete(self, kind: str, name: str) -> tuple[int, dict]:
-    d, ext = (self.shots, ".png") if kind == "shots" else (self.rec.dir, ".mp4")
-    f = safe_file(d, name, ext)
+  def delete(self, name: str) -> tuple[int, dict]:
+    f = safe_file(self.shots, name, ".png")
     if f is None:
       return 404, {"error": "not found"}
-    if kind == "recs" and self.rec.status()["name"] == name:
-      return 409, {"error": "recording in progress"}
     f.unlink()
     return 200, {"ok": True}
 
@@ -158,15 +89,6 @@ class Handler(BaseHTTPRequestHandler):
   def _json(self, code: int, obj, extra=None):
     self._send(code, json.dumps(obj).encode(), "application/json", extra)
 
-  def _body(self) -> dict:
-    n = int(self.headers.get("Content-Length") or 0)
-    if not 0 < n <= 4096:
-      return {}
-    try:
-      return json.loads(self.rfile.read(n))
-    except ValueError:
-      return {}
-
   def _route(self) -> tuple[str, list[str]]:
     path = unquote(urlparse(self.path).path)
     return path, [p for p in path.split("/") if p]
@@ -182,12 +104,9 @@ class Handler(BaseHTTPRequestHandler):
       return self._json(200, a.stats())
     if path == "/api/shots":
       return self._json(200, {"items": list_files(a.shots, ".png")})
-    if path == "/api/rec":
-      return self._json(200, {**a.rec.status(), "items": list_files(a.rec.dir, ".mp4")})
-    if len(parts) == 3 and parts[0] == "media" and parts[1] in ("shots", "recs"):
-      d, ext, ctype = (a.shots, ".png", "image/png") if parts[1] == "shots" else (a.rec.dir, ".mp4", "video/mp4")
-      f = safe_file(d, parts[2], ext)
-      return self._file(f, ctype) if f else self._json(404, {"error": "not found"})
+    if len(parts) == 3 and parts[0] == "media" and parts[1] == "shots":
+      f = safe_file(a.shots, parts[2], ".png")
+      return self._file(f, "image/png") if f else self._json(404, {"error": "not found"})
     self._json(404, {"error": "not found"})
 
   do_HEAD = do_GET
@@ -221,19 +140,17 @@ class Handler(BaseHTTPRequestHandler):
     path, _ = self._route()
     if not (self.headers.get("Content-Type") or "").startswith("application/json"):
       return self._json(415, {"error": "json only"})  # not auth: forces a CORS preflight, so other sites can't POST here
-    a, body = self.app, self._body()
+    n = int(self.headers.get("Content-Length") or 0)
+    if 0 < n <= 4096:
+      self.rfile.read(n)
     if path == "/api/shots":
-      return self._json(200, a.capture())
-    if path == "/api/rec/start":
-      return self._json(*a.rec.start(body.get("max_s", 60), body.get("fps", 10)))
-    if path == "/api/rec/stop":
-      return self._json(200, a.rec.stop())
+      return self._json(200, self.app.capture())
     self._json(404, {"error": "not found"})
 
   def do_DELETE(self):
     path, parts = self._route()
-    if len(parts) == 3 and parts[:2] in (["api", "shots"], ["api", "recs"]):
-      return self._json(*self.app.delete(parts[1], parts[2]))
+    if len(parts) == 3 and parts[:2] == ["api", "shots"]:
+      return self._json(*self.app.delete(parts[2]))
     self._json(404, {"error": "not found"})
 
 
@@ -257,11 +174,10 @@ def main():
   data = Path(os.getenv("WEBGUI_DATA", "/data"))
   host, port = os.getenv("WEBGUI_HOST", "0.0.0.0"), int(os.getenv("WEBGUI_PORT", "8089"))
   app = App(data, mock=os.getenv("WEBGUI_MOCK") == "1")
-  for d in (app.shots, app.rec.dir):
-    try:
-      d.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-      print(f"webgui: can't create {d} ({e})", flush=True)
+  try:
+    app.shots.mkdir(parents=True, exist_ok=True)
+  except OSError as e:
+    print(f"webgui: can't create {app.shots} ({e})", flush=True)
   srv = serve(app, host, port)
   print(f"webgui on http://{host}:{port}  (no auth, LAN-visible, plain HTTP)", flush=True)
   srv.serve_forever()

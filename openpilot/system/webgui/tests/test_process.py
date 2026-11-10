@@ -56,9 +56,9 @@ def test_standalone_start_creates_dirs_and_serves(tmp_path):
       except OSError:
         time.sleep(0.1)
     assert b"TESLA" in page
-    assert urllib.request.urlopen(f"http://127.0.0.1:{port}/api/rec", timeout=2).status == 200
+    assert urllib.request.urlopen(f"http://127.0.0.1:{port}/api/shots", timeout=2).status == 200
     assert urllib.request.urlopen(f"http://127.0.0.1:{port}/font/TESLA.ttf", timeout=2).status == 200
-    assert (tmp_path / "media/0/screenshots").is_dir() and (tmp_path / "media/0/screenrecords").is_dir()
+    assert (tmp_path / "media/0/screenshots").is_dir()
   finally:
     proc.kill()
     proc.wait()

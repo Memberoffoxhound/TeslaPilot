@@ -20,7 +20,6 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.common.hardware import HARDWARE, PC
 from openpilot.system.ui.lib.multilang import FONT_FALLBACK_LANGUAGES, TRANSLATIONS_DIR, multilang
 from openpilot.system.ui.lib.screenshot import ScreenShotter
-from openpilot.system.ui.lib.screenrec import ScreenRecorder
 from openpilot.common.realtime import Ratekeeper
 
 _DEFAULT_FPS = int(os.getenv("FPS", {'tizi': 20}.get(HARDWARE.get_device_type(), 60)))
@@ -254,7 +253,6 @@ class GuiApplication:
     self._mouse_events: list[MouseEvent] = []
     self._last_mouse_event: MouseEvent = MouseEvent(MousePos(0, 0), 0, False, False, False, 0.0)
     self._shotter = ScreenShotter()
-    self._rec = ScreenRecorder()
 
     self._should_render = True
 
@@ -562,19 +560,6 @@ class GuiApplication:
       rl.unload_render_texture(self._capture_texture)
       self._capture_texture = None
 
-  def _record_frame(self):
-    # texture readback is upside down
-    try:
-      tex = self._render_texture or self._capture_texture
-      if tex is None:
-        raise RuntimeError("no capture texture")
-      image = rl.load_image_from_texture(tex.texture)
-      self._rec.push(image.to_bytes(image.width * image.height * 4), image.width, image.height, flip=True)
-      rl.unload_image(image)
-    except Exception:
-      cloudlog.exception("screenrec frame")
-      self._rec.stop("capture failed")
-
   def close_ffmpeg(self):
     if self._ffmpeg_thread is not None:
       # Signal thread to stop, send sentinel, then wait for it to drain
@@ -620,7 +605,6 @@ class GuiApplication:
     if not PC:
       self._mouse.stop()
 
-    self._rec.stop("exit")
     self.close_ffmpeg()
 
     rl.close_window()
@@ -655,7 +639,6 @@ class GuiApplication:
           if mouse_event.slot == 0:
             self._last_mouse_event = mouse_event
         self._shotter.held(self._mouse_events)
-        self._rec.tick()
 
         # Skip rendering when screen is off
         if not self._should_render:
@@ -719,8 +702,6 @@ class GuiApplication:
 
         if self._shotter.pending:
           self._shotter.capture(target)
-        if self._rec.want_frame():
-          self._record_frame()
         self._shotter.draw_flash(self._scaled_width, self._scaled_height, frame_time)
 
         rl.end_drawing()

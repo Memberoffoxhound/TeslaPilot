@@ -119,7 +119,7 @@ On other cars it shows **SCC** for a Kia and **STOCK / ACC** for everything else
 
 ### Web page on your comma
 
-Open `http://<comma-ip>:8089` on a phone or computer connected to the **same Wi-Fi or hotspot**. You'll see drive stats, device health, and screenshots, and you can record the screen. It's always running, onroad and offroad. **There's no login**, so anyone on that network can open it.
+Open `http://<comma-ip>:8089` on a phone or computer connected to the **same Wi-Fi or hotspot**. You'll see drive stats, device health, and screenshots. It's always running, onroad and offroad. **There's no login**, so anyone on that network can open it.
 
 To take a screenshot on the comma, hold your finger on the screen for 3 seconds. Screenshots go to `/data/media/0/screenshots`.
 
