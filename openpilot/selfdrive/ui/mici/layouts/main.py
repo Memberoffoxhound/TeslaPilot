@@ -84,7 +84,8 @@ class MiciMainLayout(Scroller):
       on_settings=lambda: gui_app.push_widget(self._settings_layout),
       on_alerts=lambda: self._scroll_to(self._alerts_layout),
       on_stats=lambda: gui_app.push_widget(self._settings_layout.stats_layout),
-      on_set_speed_assist=self._settings_layout.show_set_speed_assist,
+      # SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
+      # on_set_speed_assist=self._settings_layout.show_set_speed_assist,
       alert_count_callback=self._alerts_layout.active_alerts,
       alert_icon_callback=self._alerts_layout.highest_severity_icon,
     )

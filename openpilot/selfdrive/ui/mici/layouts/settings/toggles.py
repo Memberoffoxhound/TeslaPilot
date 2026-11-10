@@ -93,11 +93,12 @@ class TogglesLayoutMici(NavScroller):
     self._alc_btn = BigToggle("auto lane change", initial_state=ui_state.params.get_bool("AutoLaneChangeEnabled"),
                              toggle_callback=self._on_alc)
     # Set Speed Assist, from sunnypilot (zephleggett). Only with openpilot longitudinal.
-    self._ssa_toggle = BigParamControl("set speed assist", "SetSpeedAssist",
-                                       description="Accelerate up to the set speed, or the following distance behind a lead,\n" +
-                                                   "when the driving model would drive slower. The model still decides when to slow down.\n" +
-                                                   "Needs openpilot longitudinal control.")
-    self._ssa_toggle.set_enabled(lambda: ui_state.has_longitudinal_control)
+    # SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
+    # self._ssa_toggle = BigParamControl("set speed assist", "SetSpeedAssist",
+    #                                    description="Accelerate up to the set speed, or the following distance behind a lead,\n" +
+    #                                                "when the driving model would drive slower. The model still decides when to slow down.\n" +
+    #                                                "Needs openpilot longitudinal control.")
+    # self._ssa_toggle.set_enabled(lambda: ui_state.has_longitudinal_control)
     self._initial_cruise_speed = InitialCruiseSpeedButton()
     self._initial_cruise_speed.set_visible(lambda: ui_state.CP is not None and ui_state.has_longitudinal_control and not ui_state.CP.pcmCruise)
     is_metric_toggle = BigToggle("use metric units", initial_state=ui_state.params.get_bool("IsMetric"), toggle_callback=self._on_metric_toggle)
@@ -133,7 +134,8 @@ class TogglesLayoutMici(NavScroller):
     self._scroller.add_widgets([
       self._alc_btn,
       self._personality_toggle,
-      self._ssa_toggle,
+      # SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
+      # self._ssa_toggle,
       self._initial_cruise_speed,
       is_metric_toggle,
       ldw_toggle,
@@ -148,7 +150,8 @@ class TogglesLayoutMici(NavScroller):
     # Toggle lists
     self._refresh_toggles = (
       ("AutoLaneChangeEnabled", self._alc_btn),
-      ("SetSpeedAssist", self._ssa_toggle),
+      # SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
+      # ("SetSpeedAssist", self._ssa_toggle),
       ("IsMetric", is_metric_toggle),
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
@@ -181,10 +184,11 @@ class TogglesLayoutMici(NavScroller):
     super().show_event()
     self._update_toggles()
 
-  def scroll_to_set_speed_assist(self):
-    self._scroller._layout()
-    w = self._ssa_toggle
-    self._scroller.scroll_to((w.rect.x + w.rect.width / 2) - (self._rect.x + self._rect.width / 2), smooth=True)
+  # SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
+  # def scroll_to_set_speed_assist(self):
+  #   self._scroller._layout()
+  #   w = self._ssa_toggle
+  #   self._scroller.scroll_to((w.rect.x + w.rect.width / 2) - (self._rect.x + self._rect.width / 2), smooth=True)
 
   def _on_metric_toggle(self, state: bool):
     ui_state.params.put_bool("IsMetric", state, block=True)
@@ -196,7 +200,8 @@ class TogglesLayoutMici(NavScroller):
 
     if ui_state.CP is not None:
       self._personality_toggle.set_visible(ui_state.has_longitudinal_control)
-    self._ssa_toggle.set_value("" if ui_state.has_longitudinal_control else "needs op long")
+    # SSA muted while testing #39266 cruise filter. Uncomment to re-enable.
+    # self._ssa_toggle.set_value("" if ui_state.has_longitudinal_control else "needs op long")
 
     # Refresh toggles from params to mirror external changes
     for key, item in self._refresh_toggles:
