@@ -18,7 +18,7 @@ MIN_SPEED = 5.  # m/s. No assist below this, so stop-and-go stays with the model
 FULL_SPEED = 8.  # m/s. Full assist from this speed up.
 GAIN_BP = [-0.3, -0.1]  # Model accel over which the assist fades out as the model slows down.
 FADE_LAT_ACC_BP = [0.6, 1.0]  # Lat acc of the sharpest bend ahead over which the assist fades out.
-LIFT_FALL = 2.4  # m/s^3. Fast, so the assist never holds off the model's braking.
+LIFT_FALL = 2.4  # m/s^3. Slowest the lift eases off, e.g. on a lane change or a bend.
 # Approach pace: CX-5 MRCC no-lead p99 acceleration by speed, scaled by speed shortfall.
 # This avoids the cruise planner's aggressive acceleration for small gaps.
 APPROACH_BP = [0., 4., 9., 14., 18., 25.]  # m/s
@@ -85,5 +85,8 @@ class SetSpeedAssist:
 
     target = self.gain * self.fade * max(0., a_floor - a_model) if self.active else 0.
     rise = np.interp(v_ego, self.rise_bp, self.rise_vals)
-    self.lift = rate_limit(target, self.lift, -LIFT_FALL * DT_MDL, rise * DT_MDL)
+    # When the model starts to brake the gain drops, and the lift may drop with it in one frame,
+    # so at gain 0 the model's braking is not delayed.
+    fall = max(LIFT_FALL * DT_MDL, (1. - self.gain) * self.lift)
+    self.lift = rate_limit(target, self.lift, -fall, rise * DT_MDL)
     return a_model + self.lift
