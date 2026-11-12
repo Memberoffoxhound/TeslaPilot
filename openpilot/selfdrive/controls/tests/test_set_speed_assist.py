@@ -23,6 +23,7 @@ V_CRUISE_MS = V_EGO + 5.
 RISE = float(np.interp(V_EGO, J_CRUISE_BP, J_CRUISE_VALS))
 SETTLE = int(2. / (J_CRUISE_VALS[-1] * DT_MDL)) + 10
 STANDARD = log.LongitudinalPersonality.standard
+FAR = 40.  # m/s under the target: the root is past every ceiling
 
 
 def personality_raw(name):
@@ -142,16 +143,30 @@ class TestSetSpeedAssist(OpenpilotTestCase):
 
 
   def test_approach_closes_small_gaps_gently(self):
-    assert all(np.diff(ssa.APPROACH_GAP_FRACTION) > 0) and ssa.APPROACH_GAP_FRACTION[-1] == 1.
     for v, ceiling in zip(ssa.APPROACH_BP, ssa.APPROACH_V, strict=True):
-      assert np.isclose(ssa.approach_accel(v, v + 10., STANDARD), ceiling)
-      assert np.isclose(ssa.approach_accel(v, v, STANDARD), ssa.APPROACH_GAP_FRACTION[0] * ceiling)
+      assert np.isclose(ssa.approach_accel(v, v + FAR, STANDARD), ceiling)
+    assert ssa.approach_accel(V_EGO, V_EGO + 1., STANDARD) < 0.42  # CX-5 5>4 kickdown at highway speed
+
+  def test_approach_asks_nothing_at_or_over_the_target(self):
+    for personality in (log.LongitudinalPersonality.relaxed, STANDARD, log.LongitudinalPersonality.aggressive):
+      for v in ssa.APPROACH_BP:
+        for over in (0., 0.5, 5.):
+          assert ssa.approach_accel(v + over, v, personality) == 0.
+
+  def test_approach_is_continuous_at_the_target(self):
+    step = 1e-3
+    gaps = np.linspace(-1., 10., 11001)
+    paces = np.array([ssa.approach_accel(15. - g, 15., STANDARD) for g in gaps])
+    assert all(np.diff(paces) >= 0.)
+    assert max(np.diff(paces)) <= np.sqrt(2 * ssa.APPROACH_JERK * step) + 1e-9
+    assert paces[gaps <= 0.].max() == 0.
 
   def test_approach_follows_the_personality(self):
     relaxed_p, standard_p, aggressive_p = (personality_raw(n) for n in ('relaxed', 'standard', 'aggressive'))
     for v in ssa.APPROACH_BP:
-      relaxed, standard, aggressive = (ssa.approach_accel(v, v + 10., p) for p in (relaxed_p, standard_p, aggressive_p))
+      relaxed, standard, aggressive = (ssa.approach_accel(v, v + FAR, p) for p in (relaxed_p, standard_p, aggressive_p))
       assert np.isclose(relaxed, standard - 0.15) and np.isclose(aggressive, standard + 0.15)
+      # closer together near the target, where the jerk root binds
       assert ssa.approach_accel(v, v + 1., aggressive_p) - ssa.approach_accel(v, v + 1., standard_p) < 0.15
 
 

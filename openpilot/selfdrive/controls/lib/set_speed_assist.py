@@ -2,6 +2,8 @@
 Set Speed Assist, from sunnypilot PR #2083 by Zeph Leggett (MIT).
 https://github.com/sunnypilot/sunnypilot/pull/2083
 """
+import math
+
 import numpy as np
 
 from opendbc.car import rate_limit
@@ -20,12 +22,11 @@ FULL_SPEED = 8.  # m/s. Full assist from this speed up.
 GAIN_BP = [-0.3, -0.1]  # Model accel over which the assist fades out as the model slows down.
 FADE_LAT_ACC_BP = [0.6, 1.0]  # Lat acc of the sharpest bend ahead over which the assist fades out.
 LIFT_FALL = 2.4  # m/s^3. Slowest the lift eases off, e.g. on a lane change or a bend.
-# Approach pace: CX-5 MRCC no-lead p99 acceleration by speed, scaled by speed shortfall.
-# This avoids the cruise planner's aggressive acceleration for small gaps.
+# CX-5 MRCC no-lead p99 accel by speed. Under that ceiling, a jerk-limited arrival
+# that reaches the target with none left: sqrt(2 * jerk * gap).
 APPROACH_BP = [0., 4., 9., 14., 18., 25.]  # m/s
 APPROACH_V = [1.5, 1.75, 1.45, 1.05, 0.85, 0.65]  # m/s^2
-APPROACH_GAP_BP = [0., 1., 3., 5., 10.]  # m/s under the target speed
-APPROACH_GAP_FRACTION = [0.38, 0.47, 0.57, 0.72, 1.]
+APPROACH_JERK = 0.065  # m/s^3
 # The table is Standard; Relaxed / Aggressive move the ceiling by AccelBoostSP's step.
 APPROACH_PERSONALITY_OFFSET = {
   Personality.relaxed: -0.15,
@@ -44,7 +45,7 @@ def _personality_offset(personality) -> float:
 
 def approach_accel(v_ego: float, v_target: float, personality) -> float:
   ceiling = np.interp(v_ego, APPROACH_BP, APPROACH_V) + _personality_offset(personality)
-  return float(ceiling * np.interp(v_target - v_ego, APPROACH_GAP_BP, APPROACH_GAP_FRACTION))
+  return min(math.sqrt(2. * APPROACH_JERK * max(v_target - v_ego, 0.)), float(ceiling))
 
 
 class SetSpeedAssist:
