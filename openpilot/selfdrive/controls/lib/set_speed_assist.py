@@ -28,17 +28,14 @@ APPROACH_GAP_FRACTION = [0.38, 0.47, 0.57, 0.72, 1.]
 
 
 def approach_accel(v_ego: float, v_target: float) -> float:
-  """The most the floor asks while closing on v_target."""
   return float(np.interp(v_ego, APPROACH_BP, APPROACH_V) * np.interp(v_target - v_ego, APPROACH_GAP_BP, APPROACH_GAP_FRACTION))
 
 
 class SetSpeedAssist:
-  """
-  The driving model doesn't know the set speed, so it often drives below it, or further back from
-  a lead than the personality's gap. This adds acceleration to the model's, up to what the lead and
-  cruise planners would do, while the model isn't slowing down. It never takes any away.
-  Only with openpilot longitudinal control: the toggle does nothing otherwise.
-  """
+  # The driving model doesn't know the set speed, so it often drives below it, or further back from
+  # a lead than the personality's gap. This adds acceleration to the model's, up to what the lead and
+  # cruise planners would do, while the model isn't slowing down. It never takes any away.
+  # Only with openpilot longitudinal control: the toggle does nothing otherwise.
   def __init__(self, CP):
     # Local import avoids a cycle with longitudinal_planner.
     from openpilot.selfdrive.controls.lib.longitudinal_planner import J_CRUISE_BP, J_CRUISE_VALS
@@ -57,7 +54,6 @@ class SetSpeedAssist:
     return self.allowed and self.params.get_bool(PARAM)
 
   def update(self, sm, a_model: float, a_floor: float, reset_state: bool) -> float:
-    """Return the model's accel plus the assist. a_floor is the lower of the lead and cruise accels and the approach pace."""
     self.frame += 1
     if self.frame % int(PARAMS_UPDATE_PERIOD / DT_MDL) == 0:
       self.enabled = self._read_enabled()
@@ -73,19 +69,17 @@ class SetSpeedAssist:
     v_ego = sm['carState'].vEgo
     vel = np.asarray(md.velocity.x)
     yaw_rate = np.asarray(md.orientationRate.z)
-    gas_press_probs = md.meta.disengagePredictions.gasPressProbs
-    throttle_prob = gas_press_probs[1] if len(gas_press_probs) > 1 else 1.
-    curvatures = [md.action.desiredCurvature, sm['controlsState'].curvature]
+    curvature_now = sm['controlsState'].curvature
     if not (len(vel) == len(yaw_rate) == ModelConstants.IDX_N and
-            np.isfinite(np.concatenate([vel, yaw_rate, [v_ego, a_model, a_floor, throttle_prob, *curvatures]])).all()):
+            np.isfinite(np.concatenate([vel, yaw_rate, [v_ego, a_model, a_floor, curvature_now]])).all()):
       self.lift = 0.
       return a_model
 
     # sharpest bend now or along the model's path, at the current speed
-    curvature = max(*np.abs(curvatures), np.max(np.abs(yaw_rate) / np.maximum(vel, 1.)))
+    curvature = max(abs(curvature_now), np.max(np.abs(yaw_rate) / np.maximum(vel, 1.)))
     lat_acc = curvature * v_ego ** 2
 
-    self.gain = np.interp(a_model, GAIN_BP, [0., 1.]) * throttle_prob * np.interp(v_ego, [MIN_SPEED, FULL_SPEED], [0., 1.])
+    self.gain = np.interp(a_model, GAIN_BP, [0., 1.]) * np.interp(v_ego, [MIN_SPEED, FULL_SPEED], [0., 1.])
     self.fade = np.interp(lat_acc, FADE_LAT_ACC_BP, [1., 0.])
     self.active = self.enabled and md.meta.laneChangeState == LaneChangeState.off
 

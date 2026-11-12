@@ -32,14 +32,13 @@ def car_params(op_long=True):
   return CP
 
 
-def build_sm(v_ego=V_EGO, yaw_rate=0., throttle_prob=1., lane_change=False):
+def build_sm(v_ego=V_EGO, yaw_rate=0., lane_change=False):
   cs = messaging.new_message('carState')
   cs.carState.vEgo = v_ego
   cs.carState.vCruise = V_CRUISE_MS * 3.6
   md = messaging.new_message('modelV2')
   md.modelV2.velocity.x = np.full(len(T_IDXS), v_ego).tolist()
   md.modelV2.orientationRate.z = np.broadcast_to(np.asarray(yaw_rate, dtype=float), T_IDXS.shape).tolist()
-  md.modelV2.meta.disengagePredictions.gasPressProbs = [1., throttle_prob, 1.]
   md.modelV2.meta.laneChangeState = log.LaneChangeState.laneChangeStarting if lane_change else log.LaneChangeState.off
   ctrl = messaging.new_message('controlsState')
   ctrl.controlsState.longControlState = LongCtrlState.pid
@@ -87,10 +86,6 @@ class TestSetSpeedAssist(OpenpilotTestCase):
     run(assist, SETTLE, build_sm(), a_model=ssa.GAIN_BP[0])
     assert assist.lift == 0.
 
-  def test_throttle_probability_scales_the_lift(self, assist):
-    run(assist, SETTLE, build_sm(throttle_prob=0.5))
-    assert np.isclose(assist.lift, 0.5 * A_FLOOR)
-
   def test_stop_and_go_stays_the_models(self, assist):
     assert run(assist, SETTLE, build_sm(v_ego=ssa.MIN_SPEED - 1.), a_model=-0.05) == -0.05
 
@@ -120,7 +115,12 @@ class TestSetSpeedAssist(OpenpilotTestCase):
     run(assist, SETTLE, build_sm())
     assert run(assist, 1, build_sm(), a_model=0.05, reset_state=True) == 0.05
     run(assist, SETTLE, build_sm())
-    assert run(assist, 1, build_sm(throttle_prob=float('nan')), a_model=0.05) == 0.05
+    sm = build_sm()
+    cs = messaging.new_message('carState')
+    cs.carState.vEgo = float('nan')
+    cs.carState.vCruise = V_CRUISE_MS * 3.6
+    sm['carState'] = cs.carState
+    assert run(assist, 1, sm, a_model=0.05) == 0.05
     assert assist.lift == 0.
 
 
