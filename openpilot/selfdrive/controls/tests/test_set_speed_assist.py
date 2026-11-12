@@ -55,6 +55,7 @@ def build_sm(v_ego=V_EGO, yaw_rate=0., lane_change=False):
 def run(ctl, frames, sm, a_model=0., a_floor=A_FLOOR, reset_state=False):
   out = a_model
   for _ in range(frames):
+    ctl.update_params()
     out = ctl.update(sm, a_model, a_floor, reset_state)
   return out
 
@@ -161,17 +162,23 @@ class FakeSubMaster(dict):
     return True
 
 
-def planner_sm(engaged=False):
+def planner_sm(engaged=False, personality=STANDARD, gas_pressed=False):
   sm = FakeSubMaster(build_sm())
-  for service in ('radarState', 'selfdriveState'):
-    sm[service] = getattr(messaging.new_message(service), service)
-  sm['selfdriveState'].enabled = engaged
-  # standard, so comma's Aggressive starting boost stays out of these checks
-  sm['selfdriveState'].personality = log.LongitudinalPersonality.standard
+  sds = messaging.new_message('selfdriveState')
+  sds.selfdriveState.enabled = engaged
+  sds.selfdriveState.personality = personality
+  sm['selfdriveState'] = sds.selfdriveState
+  cs = messaging.new_message('carState')
+  cs.carState.vEgo = V_EGO
+  cs.carState.vCruise = V_CRUISE_MS * 3.6
+  cs.carState.gasPressed = gas_pressed
+  sm['carState'] = cs.carState
+  radar = messaging.new_message('radarState')
+  sm['radarState'] = radar.radarState
   return sm
 
 
-def planner(mocker, enabled, op_long=True):
+def planner(mocker, enabled, op_long=True, engaged=None, personality=STANDARD):
   Params().put_bool("SetSpeedAssist", enabled, block=True)
   p = LongitudinalPlanner(car_params(op_long), init_v=V_EGO)
 
@@ -185,7 +192,9 @@ def planner(mocker, enabled, op_long=True):
   mocker.patch.object(mpc, 'update', side_effect=mpc_update)
 
   # engaged with openpilot long off, so the planner's own reset isn't what keeps the assist out
-  sm = planner_sm(engaged=not op_long)
+  if engaged is None:
+    engaged = not op_long
+  sm = planner_sm(engaged=engaged, personality=personality)
   for _ in range(200):
     p.update(sm)
   return p
@@ -215,3 +224,21 @@ class TestSetSpeedAssistPlanner(OpenpilotTestCase):
     p.publish(planner_sm(), pm)
     plan = pm.send.call_args.args[1].longitudinalPlan
     assert np.isclose(plan.setSpeedAssist, p.set_speed_assist.lift, rtol=1e-6)
+
+  def test_accel_boost_only_without_the_assist(self, mocker):
+    # Aggressive's 0.1 starting boost would stack past the approach pace if both ran.
+    p = planner(mocker, False, engaged=True, personality=log.LongitudinalPersonality.aggressive)
+    assert p.accel_boost.total_boost >= 0.1
+    assert p.output_a_target > 0.
+    p = planner(mocker, True, engaged=True, personality=log.LongitudinalPersonality.aggressive)
+    assert p.accel_boost.total_boost == 0.
+    assert np.isclose(p.output_a_target, ssa.approach_accel(V_EGO, V_CRUISE_MS, log.LongitudinalPersonality.aggressive))
+
+  def test_switching_the_assist_on_drops_the_boost_the_same_frame(self, mocker):
+    p = planner(mocker, False, engaged=True, personality=log.LongitudinalPersonality.aggressive)
+    assert p.accel_boost.total_boost >= 0.1
+    Params().put_bool("SetSpeedAssist", True, block=True)
+    sm = planner_sm(engaged=True, personality=log.LongitudinalPersonality.aggressive)
+    while not p.set_speed_assist.enabled:
+      p.update(sm)
+      assert (p.accel_boost.total_boost > 0.) != p.set_speed_assist.enabled

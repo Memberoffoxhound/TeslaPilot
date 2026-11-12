@@ -104,9 +104,14 @@ class LongitudinalPlanner:
     self.a_cruise = get_cruise_accel(v_cruise, v_ego, self.a_cruise, self.output_a_target, self.dt)
     cruise_should_stop = should_stop(v_ego, self.a_cruise)
 
+    self.set_speed_assist.update_params()
     a_floor = min(output_a_target_mpc, self.a_cruise, approach_accel(v_ego, v_cruise, sm['selfdriveState'].personality))
     output_a_target_e2e = self.set_speed_assist.update(sm, output_a_target_e2e, a_floor, reset_state)
-    output_a_target_e2e = self.accel_boost.update(sm, output_a_target_e2e, output_a_target_mpc, self.a_cruise)
+    # AccelBoost would stack on the assist's lift and push past the approach pace.
+    if self.set_speed_assist.enabled:
+      self.accel_boost.total_boost = 0.0
+    else:
+      output_a_target_e2e = self.accel_boost.update(sm, output_a_target_e2e, output_a_target_mpc, self.a_cruise)
 
     candidates = [(output_a_target_mpc, self.mpc.source, output_should_stop_mpc),
                   (self.a_cruise, LongitudinalPlanSource.cruise, cruise_should_stop),

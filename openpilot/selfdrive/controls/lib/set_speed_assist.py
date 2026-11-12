@@ -69,11 +69,13 @@ class SetSpeedAssist:
   def _read_enabled(self) -> bool:
     return self.allowed and self.params.get_bool(PARAM)
 
-  def update(self, sm, a_model: float, a_floor: float, reset_state: bool) -> float:
+  def update_params(self) -> None:
+    # Called before the planner decides whether AccelBoost may run, so both never run on the same frame.
     self.frame += 1
     if self.frame % int(PARAMS_UPDATE_PERIOD / DT_MDL) == 0:
       self.enabled = self._read_enabled()
 
+  def update(self, sm, a_model: float, a_floor: float, reset_state: bool) -> float:
     self.active = False
     self.gain = self.fade = 0.
     # when switched off, the assist eases out at LIFT_FALL before stopping
