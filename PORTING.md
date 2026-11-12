@@ -7,7 +7,7 @@ Trip stats keeps a record of your driving on the comma. It works on any car. Par
 - **Trip summary card.** When a drive ends, a card shows the distance, how much of it openpilot drove, your day streak, your best engaged stretch and a timeline in comma connect's colors. It stays up for 20 seconds or until you tap it.
 - **Day and Week on Home.** Today's and this week's distance and percent engaged. Tap the row to open Statistics.
 - **Statistics.** Weekly and monthly charts, lifetime totals and your best streak.
-- **Last trip summary.** At every start, the card shows the most recent eligible trip with the headline "last trip summary".
+- **Last trip summary.** If the comma lost power before the card could show, the card comes up once at the next start with the headline "last trip summary".
 
 ## How a drive becomes a stat
 

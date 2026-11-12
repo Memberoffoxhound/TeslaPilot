@@ -7,7 +7,7 @@ Trip stats keeps a record of your driving on the comma itself. It works on any c
 - **Trip summary card.** When a drive ends, a card shows the distance, how much of it openpilot drove, your day streak, your best engaged stretch and a timeline of the drive. It stays up for 20 seconds or until you tap it. You can swipe back to it until your next drive.
 - **Day and Week on Home.** Home shows today's and this week's distance and percent engaged. Tap the row to open Statistics.
 - **Statistics.** Weekly and monthly charts, lifetime totals and your best streak.
-- **Last trip summary.** At every start, the card shows the most recent eligible trip with the headline "last trip summary".
+- **Last trip summary.** Some cars cut power to the comma the moment the car turns off, before the card can show. The next time the comma starts, the same card comes up once with the headline "last trip summary".
 
 Turn it on with the "drive summary" toggle.
 
@@ -68,7 +68,7 @@ Other cars that stay awake without a normal ignition may need their own version 
 | `tz.py` | The time zone: looks up the GPS position in `tzgrid.bin`, else the system zone. |
 | `tzgrid.bin` | The time zone map, 190 KB, built by `build_tzgrid.py`. |
 | `weekstart.json` | Which zones start the week on Sunday, Saturday or Friday instead of Monday, 3 KB, built by `build_weekstart.py`. |
-| `__init__.py` | What the UI calls: `tick`, `view`, `due_summary`, `last_trip`, `mark_shown`, `enabled`, `set_enabled`. |
+| `__init__.py` | What the UI calls: `tick`, `view`, `due_summary`, `missed_trip`, `mark_shown`, `enabled`, `set_enabled`. |
 | `tests/` | `pytest selfdrive/ui/tripstats`. No build needed. |
 
 The time zone map is built from [timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder) data, © OpenStreetMap contributors, under the [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/). Keep this credit if you ship the file. The first day of each country's week comes from the [Unicode CLDR](https://cldr.unicode.org/) (© Unicode, Inc., [Unicode License v3](https://www.unicode.org/license.txt)) and the zone to country list from the public-domain tz database.
@@ -87,7 +87,7 @@ Params in `common/params_keys.h`:
 Hooks:
 1. Every UI frame: `tripstats.tick(ui_state)`.
 2. Numbers: `tripstats.view(ui_state.params)`. Another process, such as a web page, can use `store.view(d, d["open"], tz=tz.zone(p))` with `d = store.load(p)`.
-3. The card: `begin()` when the trip ends, `begin(last=True)` at every start after the first frame for "last trip summary", and `clear()` on the next drive.
+3. The card: `begin()` when the trip ends, `begin(last=True)` once after the first frame for "last trip summary", and `clear()` on the next drive.
 4. The toggle: `tripstats.set_enabled(params, on)`.
 
 The module only needs the Python standard library, `common/params_compat.py`, `common/time_helpers.py`, `common/swaglog.py`, and cereal to read the GPS position.

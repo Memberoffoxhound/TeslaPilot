@@ -292,25 +292,17 @@ def test_toggle_off_short_trip_is_stock(dsc, monkeypatch):
 
 
 def test_last_trip_card_at_start_holds_until_onroad(dsc, monkeypatch):
-  """At start, offroad, the last trip card holds the onroad page until onroad."""
+  """Powered only with ignition: the drive's card never came up. At the next start (key on, not started
+  yet) the last trip summary card holds the onroad page, then goes for the camera; the Tesla Park path never gets here."""
   w = World(dsc, monkeypatch)
   last = {**store.stamp({"id": "r", "m": 5000.0, "e": 4000.0, "best_m": 900.0, "dur": 600.0, "tl": "ee"}, 1.79e9), "shown": False}
   monkeypatch.setattr(ts, "live", ts.DriveRecorder())
   monkeypatch.setattr(ts, "_data", {**store.load(None), "last": last})
   w.ui.started, w.prev_onroad = False, False
   assert w.card.begin(last=True) and w.card.last and w.card._head == dsc.LAST_HEADLINE == "last trip summary"
-  assert ts.last_trip(None) is not None                      # still available after mark_shown
+  assert ts.missed_trip(None) is None                       # shown once (marked in memory; params=None here)
   assert set(w.run(2)) == {"card"}                           # ignition on, not started: holds
   assert w.run(0.1, started=True)[-1] == "camera" and w.card.drive is None
-
-
-def test_last_trip_card_at_start_when_already_shown(dsc, monkeypatch):
-  w = World(dsc, monkeypatch)
-  last = {**store.stamp({"id": "r", "m": 5000.0, "e": 4000.0, "best_m": 900.0, "dur": 600.0, "tl": "ee"}, 1.79e9), "shown": True}
-  monkeypatch.setattr(ts, "live", ts.DriveRecorder())
-  monkeypatch.setattr(ts, "_data", {**store.load(None), "last": last})
-  w.ui.started, w.prev_onroad = False, False
-  assert w.card.begin(last=True) and w.card.last and w.card._head == dsc.LAST_HEADLINE
 
 
 # -- hooks -------------------------------------------------------------------------------------

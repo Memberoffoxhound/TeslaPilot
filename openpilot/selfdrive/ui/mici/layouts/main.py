@@ -132,7 +132,7 @@ class MiciMainLayout(Scroller):
       self._summary.begin()
     self._prev_parked = parked
 
-    # last trip summary: after the UI is up, offroad
+    # last trip summary: once, after the UI is up, offroad, if that trip's card never came up
     if self._last_trip_at is not None and rl.get_time() >= self._last_trip_at:
       self._last_trip_at = None
       if not ui_state.started and self._summary.drive is None and self._summary.begin(last=True):

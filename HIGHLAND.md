@@ -48,7 +48,7 @@ Stock recognition runs first. Unknown cars remain onroad in dashcam mode. The UI
 
 Trip stats live in one param, `DriveSummaryLast`, written by one recorder in the UI (`selfdrive/ui/tripstats`). Home's Day / Week, the card, Statistics and the web page all read the same numbers from it. There are no qlog scans, no `/data` files and no background jobs.
 
-A drive is saved every 30 s while it runs. If power is cut, it closes at its last save. At every start, the most recent eligible trip shows as "last trip summary".
+A drive is saved every 30 s while it runs. If power is cut, it closes at its last save, and its card comes up once at the next start as "last trip summary".
 
 Days follow the device's time zone. GPS gives the position, `tzgrid.bin` turns it into a zone, and the zone goes in `Timezone`. With no GPS fix yet, the system zone is used. Each drive is saved with its end time and the zone offset at that moment, so a later zone change never moves it. A drive that ends on a wrong clock waits until the clock is valid. Weeks start on the local first day of the week for the `Timezone` zone's country (`weekstart.json`, from CLDR), or Sunday with no GPS zone. Details: `selfdrive/ui/tripstats/README.md`.
 

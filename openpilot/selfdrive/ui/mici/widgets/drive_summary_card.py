@@ -25,7 +25,7 @@ PAD = 18
 BADGE_GAP = 14
 UNIT_GAP = 2
 HEADLINE = "trip summary"
-LAST_HEADLINE = "last trip summary"        # at start, the most recent eligible trip
+LAST_HEADLINE = "last trip summary"        # at start, for a trip whose card never came up (power cut at ignition off)
 HEAD_SIZE, HEAD_Y = 62, 2          # alert text1 is 70-82 Inter Bold; 62 leaves room for the stats
 HEAD_MIN = 50                      # smallest a long headline shrinks to
 VAL_SIZE, UNIT_SIZE, LBL_SIZE = 46, 24, 22
@@ -81,10 +81,10 @@ class DriveSummaryCard:
     self._week = ("Week", "")
 
   def begin(self, last: bool = False) -> bool:
-    """The trip just ended (last: the stored last trip): True if the card is up."""
+    """The trip just ended (last: the stored trip whose card never came up): True if the card is up."""
     try:
       params = ui_state.params
-      drive = ts.last_trip(params) if last else ts.due_summary(params)
+      drive = ts.missed_trip(params) if last else ts.due_summary(params)
       if drive is None:
         return False
       self._load_texts(drive, ts.view(params, drive if last else None))
