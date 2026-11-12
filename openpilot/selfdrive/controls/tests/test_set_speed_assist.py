@@ -26,12 +26,6 @@ STANDARD = log.LongitudinalPersonality.standard
 FAR = 40.  # m/s under the target: the root is past every ceiling
 
 
-def personality_raw(name):
-  msg = messaging.new_message('selfdriveState')
-  msg.selfdriveState.personality = name
-  return msg.as_reader().selfdriveState.personality
-
-
 def car_params(op_long=True):
   from opendbc.car.honda.interface import CarInterface
   from opendbc.car.honda.values import CAR
@@ -40,17 +34,41 @@ def car_params(op_long=True):
   return CP
 
 
-def build_sm(v_ego=V_EGO, yaw_rate=0., lane_change=False):
+def plan_ramp(v_ego, drop):
+  return (v_ego - drop * np.minimum(T_IDXS, ssa.HORIZON) / ssa.HORIZON).tolist()
+
+
+def personality_raw(name):
+  msg = messaging.new_message('selfdriveState')
+  msg.selfdriveState.personality = name
+  return msg.as_reader().selfdriveState.personality
+
+
+def build_sm(v_ego=V_EGO, yaw_rate=0., lane_change=False, plan_v=None, lead=None, personality=STANDARD):
   cs = messaging.new_message('carState')
   cs.carState.vEgo = v_ego
   cs.carState.vCruise = V_CRUISE_MS * 3.6
   md = messaging.new_message('modelV2')
-  md.modelV2.velocity.x = np.full(len(T_IDXS), v_ego).tolist()
+  md.modelV2.velocity.x = plan_v if plan_v is not None else np.full(len(T_IDXS), v_ego).tolist()
   md.modelV2.orientationRate.z = np.broadcast_to(np.asarray(yaw_rate, dtype=float), T_IDXS.shape).tolist()
   md.modelV2.meta.laneChangeState = log.LaneChangeState.laneChangeStarting if lane_change else log.LaneChangeState.off
   ctrl = messaging.new_message('controlsState')
   ctrl.controlsState.longControlState = LongCtrlState.pid
-  return {'carState': cs.carState, 'modelV2': md.modelV2, 'controlsState': ctrl.controlsState}
+  radar = messaging.new_message('radarState')
+  if lead is not None:
+    d_rel, v_rel = lead
+    radar.radarState.leadOne.present = True
+    radar.radarState.leadOne.dRel = d_rel
+    radar.radarState.leadOne.vRel = v_rel
+  sds = messaging.new_message('selfdriveState')
+  sds.selfdriveState.personality = personality
+  return {
+    'carState': cs.carState,
+    'modelV2': md.modelV2,
+    'controlsState': ctrl.controlsState,
+    'radarState': radar.radarState,
+    'selfdriveState': sds.selfdriveState,
+  }
 
 
 def run(ctl, frames, sm, a_model=0., a_floor=A_FLOOR, reset_state=False):
@@ -95,16 +113,6 @@ class TestSetSpeedAssist(OpenpilotTestCase):
     run(assist, SETTLE, build_sm(), a_model=ssa.GAIN_BP[0])
     assert assist.lift == 0.
 
-  def test_stop_and_go_stays_the_models(self, assist):
-    assert run(assist, SETTLE, build_sm(v_ego=ssa.MIN_SPEED - 1.), a_model=-0.05) == -0.05
-
-  @parameterized.expand([(0.4, 1.), (0.8, 0.5), (1.2, 0.)], names=["lat_acc", "fade"])
-  def test_a_bend_ahead_fades_the_lift(self, assist, lat_acc, fade):
-    bend = np.where((T_IDXS >= 5.) & (T_IDXS <= 8.), lat_acc / V_EGO, 0.)
-    run(assist, SETTLE, build_sm(yaw_rate=bend))
-    assert np.isclose(assist.fade, fade)
-    assert np.isclose(assist.lift, fade * A_FLOOR)
-
   def test_the_models_braking_passes_straight_through(self, assist):
     run(assist, SETTLE, build_sm())
     # partway into the gain's fade, the lift drops to its new target at once
@@ -114,6 +122,16 @@ class TestSetSpeedAssist(OpenpilotTestCase):
     run(assist, SETTLE, build_sm())
     assert run(assist, 1, build_sm(), a_model=ssa.GAIN_BP[0]) == ssa.GAIN_BP[0]
     assert assist.lift == 0.
+
+  def test_stop_and_go_stays_the_models(self, assist):
+    assert run(assist, SETTLE, build_sm(v_ego=ssa.MIN_SPEED - 1.), a_model=-0.05) == -0.05
+
+  @parameterized.expand([(0.4, 1.), (0.8, 0.5), (1.2, 0.)], names=["lat_acc", "fade"])
+  def test_a_bend_ahead_fades_the_lift(self, assist, lat_acc, fade):
+    bend = np.where((T_IDXS >= 5.) & (T_IDXS <= 8.), lat_acc / V_EGO, 0.)
+    run(assist, SETTLE, build_sm(yaw_rate=bend))
+    assert np.isclose(assist.fade, fade)
+    assert np.isclose(assist.lift, fade * A_FLOOR)
 
   def test_lets_go_fast(self, assist):
     run(assist, SETTLE, build_sm())
@@ -140,7 +158,36 @@ class TestSetSpeedAssist(OpenpilotTestCase):
     assert run(assist, 1, sm, a_model=0.05) == 0.05
     assert assist.lift == 0.
 
+  @parameterized.expand([(0., 1.), (1., 1.), (2., 0.5), (3., 0.), (8., 0.)], names=["drop", "plan_fade"])
+  def test_plan_drop_fades_the_lift(self, assist, drop, plan_fade):
+    a_model = -0.05
+    run(assist, SETTLE, build_sm(plan_v=plan_ramp(V_EGO, drop)), a_model=a_model)
+    assert np.isclose(assist.plan_fade, plan_fade)
+    assert np.isclose(assist.gain, plan_fade)
+    assert np.isclose(assist.lift, plan_fade * (A_FLOOR - a_model))
 
+  def test_far_plan_flicker_does_not_move_the_lift(self, assist):
+    run(assist, SETTLE, build_sm())
+    lifts = []
+    for i in range(100):
+      dip = 0.99 * -ssa.GAIN_BP[1] * ssa.HORIZON if (i // 5) % 2 else 0.
+      lifts.append(run(assist, 1, build_sm(plan_v=plan_ramp(V_EGO, dip))))
+    assert np.ptp(lifts) == 0.
+    assert assist.plan_fade == 1.
+
+  @parameterized.expand([
+    ((60., 0.), 1.),
+    ((60., -0.9), 1.),
+    ((30., -3.), 0.),
+    ((60., -3.), 0.75),
+    ((150., -3.), 1.),
+    ((20., -2.), 0.5),
+    ((60., 2.), 1.),
+  ], names=["lead", "plan_fade"])
+  def test_closing_lead_fades_the_lift(self, assist, lead, plan_fade):
+    run(assist, SETTLE, build_sm(lead=lead))
+    assert np.isclose(assist.plan_fade, plan_fade)
+    assert np.isclose(assist.lift, plan_fade * A_FLOOR)
 
   def test_approach_closes_small_gaps_gently(self):
     for v, ceiling in zip(ssa.APPROACH_BP, ssa.APPROACH_V, strict=True):
@@ -178,7 +225,7 @@ class FakeSubMaster(dict):
 
 
 def planner_sm(engaged=False, personality=STANDARD, gas_pressed=False):
-  sm = FakeSubMaster(build_sm())
+  sm = FakeSubMaster(build_sm(personality=personality))
   sds = messaging.new_message('selfdriveState')
   sds.selfdriveState.enabled = engaged
   sds.selfdriveState.personality = personality
@@ -188,8 +235,6 @@ def planner_sm(engaged=False, personality=STANDARD, gas_pressed=False):
   cs.carState.vCruise = V_CRUISE_MS * 3.6
   cs.carState.gasPressed = gas_pressed
   sm['carState'] = cs.carState
-  radar = messaging.new_message('radarState')
-  sm['radarState'] = radar.radarState
   return sm
 
 

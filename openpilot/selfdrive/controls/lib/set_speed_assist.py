@@ -33,6 +33,10 @@ APPROACH_PERSONALITY_OFFSET = {
   Personality.standard: 0.,
   Personality.aggressive: 0.15,
 }  # m/s^2
+HORIZON = 10.  # s. Plan look-ahead for a slowdown and for the bend check.
+LEAD_TTC_BP = [15., 25.]  # s. A closing lead counts in full under 15 s, not at all past 25 s.
+T_IDXS = np.asarray(ModelConstants.T_IDXS)
+HORIZON_MASK = T_IDXS <= HORIZON
 
 
 def _personality_offset(personality) -> float:
@@ -46,6 +50,15 @@ def _personality_offset(personality) -> float:
 def approach_accel(v_ego: float, v_target: float, personality) -> float:
   ceiling = np.interp(v_ego, APPROACH_BP, APPROACH_V) + _personality_offset(personality)
   return min(math.sqrt(2. * APPROACH_JERK * max(v_target - v_ego, 0.)), float(ceiling))
+
+
+def planned_slowdown(v_ego: float, plan_v: np.ndarray, lead) -> float:
+  # m/s the car is set to shed over the horizon: the plan's lowest speed, or a closing lead.
+  drop = v_ego - float(np.min(plan_v[HORIZON_MASK]))
+  if lead.present and math.isfinite(lead.vRel) and math.isfinite(lead.dRel) and lead.vRel < 0.:
+    ttc = max(lead.dRel, 0.) / -lead.vRel
+    drop = max(drop, -lead.vRel * float(np.interp(ttc, LEAD_TTC_BP, [1., 0.])))
+  return drop
 
 
 class SetSpeedAssist:
@@ -65,6 +78,7 @@ class SetSpeedAssist:
     self.active = False
     self.gain = 0.
     self.fade = 0.
+    self.plan_fade = 0.
     self.lift = 0.
 
   def _read_enabled(self) -> bool:
@@ -78,7 +92,7 @@ class SetSpeedAssist:
 
   def update(self, sm, a_model: float, a_floor: float, reset_state: bool) -> float:
     self.active = False
-    self.gain = self.fade = 0.
+    self.gain = self.fade = self.plan_fade = 0.
     # when switched off, the assist eases out at LIFT_FALL before stopping
     if not self.allowed or reset_state or (not self.enabled and self.lift == 0.):
       self.lift = 0.
@@ -95,17 +109,19 @@ class SetSpeedAssist:
       return a_model
 
     # sharpest bend now or along the model's path, at the current speed
-    curvature = max(abs(curvature_now), np.max(np.abs(yaw_rate) / np.maximum(vel, 1.)))
+    curvature = max(abs(curvature_now), np.max(np.abs(yaw_rate[HORIZON_MASK]) / np.maximum(vel[HORIZON_MASK], 1.)))
     lat_acc = curvature * v_ego ** 2
 
-    self.gain = np.interp(a_model, GAIN_BP, [0., 1.]) * np.interp(v_ego, [MIN_SPEED, FULL_SPEED], [0., 1.])
-    self.fade = np.interp(lat_acc, FADE_LAT_ACC_BP, [1., 0.])
+    self.plan_fade = float(np.interp(-planned_slowdown(v_ego, vel, sm['radarState'].leadOne) / HORIZON, GAIN_BP, [0., 1.]))
+    self.gain = (min(float(np.interp(a_model, GAIN_BP, [0., 1.])), self.plan_fade) *
+                 float(np.interp(v_ego, [MIN_SPEED, FULL_SPEED], [0., 1.])))
+    self.fade = float(np.interp(lat_acc, FADE_LAT_ACC_BP, [1., 0.]))
     self.active = self.enabled and md.meta.laneChangeState == LaneChangeState.off
 
     target = self.gain * self.fade * max(0., a_floor - a_model) if self.active else 0.
     rise = np.interp(v_ego, self.rise_bp, self.rise_vals)
-    # When the model starts to brake the gain drops, and the lift may drop with it in one frame,
-    # so at gain 0 the model's braking is not delayed.
+    # Normally eases off at LIFT_FALL. When the model (or its plan) starts to brake, the gain
+    # drops and the lift may drop with it in one frame, so at gain 0 the model's braking is not delayed.
     fall = max(LIFT_FALL * DT_MDL, (1. - self.gain) * self.lift)
     self.lift = rate_limit(target, self.lift, -fall, rise * DT_MDL)
     return a_model + self.lift
