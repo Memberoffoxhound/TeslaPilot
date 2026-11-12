@@ -11,6 +11,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 
 LaneChangeState = log.LaneChangeState
+Personality = log.LongitudinalPersonality
 
 PARAM = "SetSpeedAssist"
 PARAMS_UPDATE_PERIOD = 3.  # s
@@ -25,10 +26,25 @@ APPROACH_BP = [0., 4., 9., 14., 18., 25.]  # m/s
 APPROACH_V = [1.5, 1.75, 1.45, 1.05, 0.85, 0.65]  # m/s^2
 APPROACH_GAP_BP = [0., 1., 3., 5., 10.]  # m/s under the target speed
 APPROACH_GAP_FRACTION = [0.38, 0.47, 0.57, 0.72, 1.]
+# The table is Standard; Relaxed / Aggressive move the ceiling by AccelBoostSP's step.
+APPROACH_PERSONALITY_OFFSET = {
+  Personality.relaxed: -0.15,
+  Personality.standard: 0.,
+  Personality.aggressive: 0.15,
+}  # m/s^2
 
 
-def approach_accel(v_ego: float, v_target: float) -> float:
-  return float(np.interp(v_ego, APPROACH_BP, APPROACH_V) * np.interp(v_target - v_ego, APPROACH_GAP_BP, APPROACH_GAP_FRACTION))
+def _personality_offset(personality) -> float:
+  if personality == Personality.relaxed:
+    return APPROACH_PERSONALITY_OFFSET[Personality.relaxed]
+  if personality == Personality.aggressive:
+    return APPROACH_PERSONALITY_OFFSET[Personality.aggressive]
+  return APPROACH_PERSONALITY_OFFSET[Personality.standard]
+
+
+def approach_accel(v_ego: float, v_target: float, personality) -> float:
+  ceiling = np.interp(v_ego, APPROACH_BP, APPROACH_V) + _personality_offset(personality)
+  return float(ceiling * np.interp(v_target - v_ego, APPROACH_GAP_BP, APPROACH_GAP_FRACTION))
 
 
 class SetSpeedAssist:

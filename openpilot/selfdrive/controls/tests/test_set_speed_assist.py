@@ -22,6 +22,13 @@ A_FLOOR = 0.5
 V_CRUISE_MS = V_EGO + 5.
 RISE = float(np.interp(V_EGO, J_CRUISE_BP, J_CRUISE_VALS))
 SETTLE = int(2. / (J_CRUISE_VALS[-1] * DT_MDL)) + 10
+STANDARD = log.LongitudinalPersonality.standard
+
+
+def personality_raw(name):
+  msg = messaging.new_message('selfdriveState')
+  msg.selfdriveState.personality = name
+  return msg.as_reader().selfdriveState.personality
 
 
 def car_params(op_long=True):
@@ -132,6 +139,21 @@ class TestSetSpeedAssist(OpenpilotTestCase):
     assert assist.lift == 0.
 
 
+
+  def test_approach_closes_small_gaps_gently(self):
+    assert all(np.diff(ssa.APPROACH_GAP_FRACTION) > 0) and ssa.APPROACH_GAP_FRACTION[-1] == 1.
+    for v, ceiling in zip(ssa.APPROACH_BP, ssa.APPROACH_V, strict=True):
+      assert np.isclose(ssa.approach_accel(v, v + 10., STANDARD), ceiling)
+      assert np.isclose(ssa.approach_accel(v, v, STANDARD), ssa.APPROACH_GAP_FRACTION[0] * ceiling)
+
+  def test_approach_follows_the_personality(self):
+    relaxed_p, standard_p, aggressive_p = (personality_raw(n) for n in ('relaxed', 'standard', 'aggressive'))
+    for v in ssa.APPROACH_BP:
+      relaxed, standard, aggressive = (ssa.approach_accel(v, v + 10., p) for p in (relaxed_p, standard_p, aggressive_p))
+      assert np.isclose(relaxed, standard - 0.15) and np.isclose(aggressive, standard + 0.15)
+      assert ssa.approach_accel(v, v + 1., aggressive_p) - ssa.approach_accel(v, v + 1., standard_p) < 0.15
+
+
 class FakeSubMaster(dict):
   logMonoTime = {'modelV2': 0}
 
@@ -184,7 +206,7 @@ class TestSetSpeedAssistPlanner(OpenpilotTestCase):
   def test_on_drives_to_the_set_speed(self, mocker):
     p = planner(mocker, True)
     # toward the set speed at a production ACC's pace, not the cruise planner's
-    approach = ssa.approach_accel(V_EGO, V_CRUISE_MS)
+    approach = ssa.approach_accel(V_EGO, V_CRUISE_MS, STANDARD)
     assert p.a_cruise > 1. > approach
     assert np.isclose(p.output_a_target, approach)
     assert np.isclose(p.set_speed_assist.lift, approach)
