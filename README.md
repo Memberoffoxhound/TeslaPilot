@@ -102,7 +102,7 @@ Your drive stats stay on the comma and nothing gets uploaded. Turn them on with 
 |:---:|:---:|:---:|
 | ![Engaged](docs/screenshots/stats-ring.jpg) | ![Weekly](docs/screenshots/stats-weekly.jpg) | ![Monthly](docs/screenshots/stats-monthly.jpg) |
 
-**How a drive is counted.** The comma saves the drive every 30 seconds. If it loses power, you keep everything up to the last save, and the card shows up once on the next start as "last trip summary".
+**How a drive is counted.** The comma saves the drive every 30 seconds. If it loses power, you keep everything up to the last save. At every start, the last eligible trip shows as "last trip summary".
 
 **What counts as today.** Day resets at midnight and Week resets at the start of the week, both in local time where the car is. Weeks start on Sunday in the US, Canada and Japan, and on Monday in most of Europe and Australia. The comma works out its time zone from GPS with a built-in map, so it works offline. Until it gets a GPS fix, it uses its own clock's time zone. A drive counts on the day it ends, and crossing into a new time zone never moves old drives.
 

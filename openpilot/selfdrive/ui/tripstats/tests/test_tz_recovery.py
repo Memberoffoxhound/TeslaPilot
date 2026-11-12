@@ -134,7 +134,7 @@ def test_open_stamped_on_a_stale_clock_waits(monkeypatch, tmp_path):
 
 # -- the last trip summary card ---------------------------------------------------------------------
 
-def test_last_trip_once_when_its_card_never_came_up(monkeypatch, tmp_path):
+def test_last_trip_after_power_cut(monkeypatch, tmp_path):
   w = World(monkeypatch, tmp_path)
   w.run(1, started=True)
   w.run(ts.SAVE_S + 1, v=20.0, engaged=True)
@@ -143,18 +143,18 @@ def test_last_trip_once_when_its_card_never_came_up(monkeypatch, tmp_path):
   w.ui.started = False
   w.wall += 3600
   w.run(0.05)
-  last = ts.missed_trip(w.params)
+  last = ts.last_trip(w.params)
   assert last is not None and last["m"] == saved["m"] and last["end"] == saved["end"]
   v = ts.view(w.params, last)
   assert v["today_m"] == pytest.approx(last["m"])               # the card's Day / Week as of that trip
   ts.mark_shown(w.params, last)
-  assert ts.missed_trip(w.params) is None and w.stored()["last"]["shown"]
+  assert ts.last_trip(w.params) is not None and w.stored()["last"]["shown"]
   w.restart(monkeypatch)
   w.run(0.05)
-  assert ts.missed_trip(w.params) is None                      # once, across restarts too
+  assert ts.last_trip(w.params) is not None                     # still, across restarts too
 
 
-def test_no_last_trip_after_a_normal_card_or_with_the_toggle_off(monkeypatch, tmp_path):
+def test_last_trip_after_a_normal_card_or_with_the_toggle_off(monkeypatch, tmp_path):
   w = World(monkeypatch, tmp_path)
   w.run(1, started=True)
   w.run(40, v=20.0)
@@ -164,14 +164,14 @@ def test_no_last_trip_after_a_normal_card_or_with_the_toggle_off(monkeypatch, tm
   ts.mark_shown(w.params)                                      # the card is up (ignition or Park path)
   assert w.stored()["open"][0]["shown"]                        # stored at once: a power cut now won't repeat it
   w.run(rc.MERGE_S + 0.2)
-  assert w.stored()["last"]["shown"] and ts.missed_trip(w.params) is None
+  assert w.stored()["last"]["shown"] and ts.last_trip(w.params) is not None
   w.run(1, started=True)
   w.run(ts.SAVE_S + 1, v=20.0)
   w.restart(monkeypatch)
   w.ui.started = False
   w.params.d["DriveSummary"] = False
   w.run(0.05)
-  assert ts.missed_trip(w.params) is None                      # toggle off: no card
+  assert ts.last_trip(w.params) is None                      # toggle off: no card
 
 
 def test_web_gui_shows_the_zone_but_cannot_set_it(monkeypatch, tmp_path):

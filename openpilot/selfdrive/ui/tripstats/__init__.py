@@ -4,7 +4,7 @@ One recorder in the UI process, one store (store.py). See README.md for the hook
   tick(ui_state)       every UI frame: records the drive, stores it when it ends
   view(params)         every number the UI shows, the drive in progress included
   due_summary(params)  the trip that just ended, if the card is due
-  missed_trip(params)  a trip whose card never came up (power cut at ignition off), for the last trip summary card
+  last_trip(params)    the last eligible trip, for the last trip summary card
 """
 from __future__ import annotations
 
@@ -99,15 +99,12 @@ def due_summary(params, rec: DriveRecorder | None = None) -> dict | None:
   return drive if eligible(drive) else None
 
 
-def missed_trip(params) -> dict | None:
-  """The last trip, if its card never came up and would have (toggle on, long enough)."""
+def last_trip(params) -> dict | None:
   last = _store(params).get("last")
-  return last if last and not last.get("shown") and enabled(params) and eligible(last) else None
+  return last if last and enabled(params) and eligible(last) else None
 
 
 def mark_shown(params, drive: dict | None = None) -> None:
-  """The card is up for drive (the live one, or the stored last trip); stored now, so a power cut doesn't
-  bring it back as a last trip summary."""
   global _data
   try:
     if drive is None:
