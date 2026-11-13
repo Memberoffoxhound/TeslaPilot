@@ -57,20 +57,15 @@ class ScreenShotter:
       return True
     return False
 
-  def capture(self, render_texture=None) -> str | None:
+  def capture(self, screen=None) -> str | None:
     self.pending = False
     try:
-      if render_texture is None:
-        raise RuntimeError("no capture texture")
-      img = rl.load_image_from_texture(render_texture.texture)
-      try:
-        w, h = img.width, img.height
-        rgba = np.frombuffer(img.to_bytes(w * h * 4), dtype=np.uint8).reshape(h, w, 4)
-      finally:
-        rl.unload_image(img)
+      if screen is None:
+        raise RuntimeError("no screen")
+      rgba = np.array(screen[..., :4], dtype=np.uint8)
       os.makedirs(SHOT_DIR, exist_ok=True)
       path = os.path.join(SHOT_DIR, time.strftime("%Y-%m-%d--%H-%M-%S.png"))
-      write_png(path, rgba[::-1])  # texture readback is upside down
+      write_png(path, rgba[::-1])  # the screen's rows are bottom up
       self.flash = 1.0
       return path
     except Exception:

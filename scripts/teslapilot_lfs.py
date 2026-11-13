@@ -3,7 +3,8 @@
 
   --check  (default) exit 1 if any tracked file is a Git LFS pointer, other than
            the chestnut-only big model, which must also be fetchexcluded in
-           .lfsconfig. Checked-out submodules are scanned too.
+           .lfsconfig, and the AGNOS updater, which must stay filter=lfs and
+           fetched. Checked-out submodules are scanned too.
   --fix    replace every disallowed pointer with its real file (git lfs pull from
            the .lfsconfig store) and stage it as a normal blob. Run after each
            comma merge, then commit.
@@ -23,6 +24,10 @@ POINTER = b'version https://git-lfs.github.com/spec/v1'
 # pointer files allowed to stay: loaded only after chestnut_compiled() refuses pointers
 ALLOWED = {
   'openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl',
+}
+# pointers kept like comma: updated's `tools/lfs.sh pull` replaces them before finalizing
+FETCHED = {
+  'openpilot/common/hardware/comma/updater',
 }
 # jetlink's own test fixture for its pointer detection; jetlink has no .gitattributes, so nothing smudges it
 SUBMODULE_ALLOWED = {
@@ -72,14 +77,23 @@ def fetchexcluded(repo: Path = ROOT) -> set[str]:
   return {x.strip() for x in raw.split(',') if x.strip()}
 
 
+def lfs_tracked(repo: Path, path: str) -> bool:
+  out = subprocess.run(['git', 'check-attr', 'filter', '--', path], cwd=repo, capture_output=True, check=True).stdout.decode()
+  return out.strip().endswith(': lfs')
+
+
 def problems(repo: Path = ROOT) -> list[str]:
   errs = []
-  for p in pointers(repo):
-    if p not in ALLOWED:
+  found = pointers(repo)
+  for p in found:
+    if p not in ALLOWED | FETCHED:
       errs.append(f'{p}: Git LFS pointer in an installable branch')
   missing = ALLOWED - fetchexcluded(repo)
   for p in sorted(missing):
     errs.append(f'{p}: allowed pointer but not in .lfsconfig fetchexclude (installs would fetch it)')
+  for p in sorted(FETCHED & set(found)):
+    if p in fetchexcluded(repo) or not lfs_tracked(repo, p):
+      errs.append(f'{p}: pointer must be filter=lfs and not fetchexcluded (updated would leave it a pointer)')
   for sm in SUBMODULES:
     d = repo / sm
     if (d / '.git').exists():
@@ -88,7 +102,7 @@ def problems(repo: Path = ROOT) -> list[str]:
 
 
 def fix(repo: Path = ROOT) -> int:
-  bad = [p for p in pointers(repo) if p not in ALLOWED]
+  bad = [p for p in pointers(repo) if p not in ALLOWED | FETCHED]
   if not bad:
     return 0
   subprocess.run(['git', 'lfs', 'pull', '--include', ','.join(bad), '--exclude', ''], cwd=repo, check=True)
@@ -111,7 +125,7 @@ def main() -> int:
   errs = problems()
   for e in errs:
     print(e)
-  print('LFS check:', 'FAIL' if errs else 'OK', f'({len(pointers(ROOT))} pointer(s) tracked, allowed: {sorted(ALLOWED)})')
+  print('LFS check:', 'FAIL' if errs else 'OK', f'({len(pointers(ROOT))} pointer(s) tracked, allowed: {sorted(ALLOWED | FETCHED)})')
   return 1 if errs else 0
 
 

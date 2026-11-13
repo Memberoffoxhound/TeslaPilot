@@ -19,7 +19,7 @@ def _lfs():
 
 
 def test_no_lfs_pointer_in_the_tree():
-  # the only pointer allowed is the chestnut-only big model, and it is fetchexcluded
+  # allowed: the fetchexcluded chestnut big model and the updater, which updated pulls
   assert _lfs().problems(Path(BASEDIR)) == []
 
 
@@ -34,6 +34,20 @@ def test_the_check_catches_a_pointer(tmp_path):
   assert not any(e.startswith('real.png:') for e in errs)
   # the allowed big model must be fetchexcluded, else installs pull 776 MB
   assert any('fetchexclude' in e for e in errs)
+
+
+def test_the_check_needs_the_updater_fetched(tmp_path):
+  lfs = _lfs()
+  subprocess.run(['git', 'init', '-q'], cwd=tmp_path, check=True)
+  upd = tmp_path / 'openpilot/common/hardware/comma/updater'
+  upd.parent.mkdir(parents=True)
+  upd.write_bytes(POINTER)
+  attrs = tmp_path / '.gitattributes'
+  attrs.write_text('openpilot/common/hardware/comma/updater -filter\n')
+  subprocess.run(['git', 'add', '.'], cwd=tmp_path, check=True)
+  assert any('updated would leave it a pointer' in e for e in lfs.problems(tmp_path))
+  attrs.write_text('openpilot/common/hardware/comma/updater filter=lfs\n')
+  assert not any(e.startswith('openpilot/common/hardware/comma/updater') for e in lfs.problems(tmp_path))
 
 
 @pytest.mark.parametrize('pointer_file', ['big_driving_tinygrad.pkl', 'big_driving_warp_1344x760_tinygrad.pkl',

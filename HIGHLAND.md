@@ -87,7 +87,7 @@ Like sunnypilot, this tree carries no CommaView code, toggle or daemon. CommaVie
 
 ## Git LFS
 
-The branch installs with no LFS fetch. Every file comma keeps in LFS is a normal git blob here (`.gitattributes` exempts it), except `models/big_driving_tinygrad.pkl` (776 MB, over GitHub's 100 MB limit): that stays a pointer, is excluded in `.lfsconfig` (`fetchexclude`), and is pulled from comma's LFS store by the modeld build only when a chestnut is present (`big_model_source.ensure_big_pkl`). `chestnut_compiled()` is false for a pointer, so jetlink / the small model are used instead of a crash.
+Every file comma keeps in LFS is a normal git blob here (`.gitattributes` exempts it), with two exceptions. The AGNOS updater (`common/hardware/comma/updater`) stays in LFS like comma: updated runs `tools/lfs.sh pull` (comma's Hugging Face store `commaai/openpilot-lfs`) before it finalizes an update, so the device gets the real binary. The chestnut-only `models/big_driving_tinygrad.pkl` (776 MB, over GitHub's 100 MB limit) stays a pointer, is excluded in `.lfsconfig` (`fetchexclude`), and is pulled from comma's LFS store by the modeld build only when a chestnut is present (`big_model_source.ensure_big_pkl`). `chestnut_compiled()` is false for a pointer, so jetlink / the small model are used instead of a crash.
 
 `python3 scripts/teslapilot_lfs.py` checks this (`--fix` converts newly added LFS files). `selfdrive/test/test_no_lfs_pointers.py` runs it in the test suite.
 

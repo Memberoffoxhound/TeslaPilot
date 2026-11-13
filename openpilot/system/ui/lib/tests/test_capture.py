@@ -51,3 +51,11 @@ def test_png_round_trip_and_flip():
   assert np.array_equal(_decode_png(png_bytes(img)), img)
   flipped = _decode_png(png_bytes(img[::-1]))
   assert np.array_equal(flipped[0], img[-1])
+
+
+def test_capture_flips_cpu_screen(tmp_path, monkeypatch):
+  from openpilot.system.ui.lib import screenshot
+  monkeypatch.setattr(screenshot, "SHOT_DIR", str(tmp_path))
+  screen = np.random.default_rng(1).integers(0, 256, (4, 6, 4), dtype=np.uint8)
+  path = screenshot.ScreenShotter().capture(screen)
+  assert np.array_equal(_decode_png(Path(path).read_bytes()), screen[::-1])

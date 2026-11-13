@@ -14,8 +14,8 @@ openpilot/selfdrive/modeld/models/big_*_tinygrad.pkl filter=lfs diff=lfs merge=l
 openpilot/selfdrive/car/tests/test_models_segs.txt filter=lfs diff=lfs merge=lfs -text
 openpilot/common/hardware/comma/updater filter=lfs diff=lfs merge=lfs -text
 
-# Runtime assets are normal blobs. Only the chestnut big model stays in LFS;
-# .lfsconfig excludes it from installs and chestnut_compiled() rejects its pointer.
+# Runtime assets are normal blobs. The updater follows comma in LFS (updated pulls it);
+# the chestnut big model stays a fetchexcluded pointer that chestnut_compiled() rejects.
 # After an upstream merge, run scripts/teslapilot_lfs.py --fix, then --check.
 *.onnx -filter -diff -merge -text
 *.svg -filter -diff -merge -text
@@ -24,6 +24,5 @@ openpilot/common/hardware/comma/updater filter=lfs diff=lfs merge=lfs -text
 *.ttf -filter -diff -merge -text
 *.otf -filter -diff -merge -text
 *.wav -filter -diff -merge -text
-openpilot/common/hardware/comma/updater -filter -diff -merge -text
 openpilot/selfdrive/modeld/models/big_driving_warp_*_tinygrad.pkl -filter -diff -merge -text
 openpilot/selfdrive/ui/tripstats/tzgrid.bin binary
