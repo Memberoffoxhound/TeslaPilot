@@ -156,9 +156,7 @@ def tick(ui_state) -> None:
     if started and (not live.active or live.drive_id.startswith("t")) and now - _route_t > 1.0:
       _route_t = now
       route = params.get("CurrentRoute") or ""
-      if isinstance(route, bytes):
-        route = route.decode(errors="replace")
-    done = live.update(started, now, wall_now(), float(v), engaged, state, alert, alert_type, str(route))
+    done = live.update(started, now, wall_now(), float(v), engaged, state, alert, alert_type, route)
     if done is not None:
       _held.append(done)
     if _held and system_time_valid():     # a stale clock would date it on the wrong day: wait for a valid one
