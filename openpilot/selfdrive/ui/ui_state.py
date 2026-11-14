@@ -110,11 +110,8 @@ class UIState:
     self.usb_disconnected_ts: float | None = None
     self.usb_unknown: bool = False
     self.chestnut_state = ChestnutState.DISCONNECTED
-    # Jetlink, as zoompilot's ui_state_zp: jetlink's snapshot (jetlink.openpilot.Status)
-    # from the params pass, None with a chestnut fitted or no jetlink on this
-    # device (Status with shown=False when the link is off); joining state from
-    # modeld's runtime record (zoompilot uses modelDataV2SP); Jetlink holding
-    # the USB port, so ADB is off and its toggle greyed out
+    # Jetlink (zoompilot ui_state_zp): status snapshot, None with a chestnut fitted;
+    # joining state from its runtime record; adb_blocked while it holds the USB port
     self.jetlink = None
     self.adb_blocked: bool = False
     self._accelerator_state_name: str = 'none'
@@ -238,14 +235,11 @@ class UIState:
 
   @property
   def jetlink_view(self):
-    """jetlink's snapshot when the chestnut icon is the link's: no chestnut
-    fitted, and something to show. Presence comes from jetlink: the comma is
-    the gadget and enumerates nothing."""
+    """jetlink's snapshot when the link owns the chestnut icon, else None."""
     return self.jetlink if self.jetlink is not None and self.jetlink.shown else None
 
   def _jetlink_state(self, view) -> 'ChestnutState':
-    """ChestnutState for the link: progress and the records offroad, modelV2
-    and the joining model's state onroad (zoompilot ui_state_zp._jetlink_state)."""
+    """ChestnutState for the link (zoompilot ui_state_zp._jetlink_state)."""
     model_seen = self.sm.recv_frame["modelV2"] > self.started_frame
     running_big = self.sm.alive["modelV2"] and self.sm["modelV2"].big
     try:
@@ -254,22 +248,18 @@ class UIState:
       return ChestnutState.DISCONNECTED
 
   def _update_jetlink(self) -> None:
-    """On the params pass, not per frame in a layout; a fitted chestnut owns
-    chestnut_state. As zoompilot ui_state_zp: status() returns a Status with
-    shown=False when the link is off (not None), so the Models toggle is offered."""
+    """Params pass. status() is a Status with shown=False when the link is off, so Models still offers it."""
     try:
       self.jetlink = None if self.sm['deviceState'].chestnutPresent else jetlink_adapter.status()
       # Highland: no modelDataV2SP; joining state from jetlink's runtime record
       runtime = jetlink_adapter.runtime() if self.jetlink is not None else None
-      self._accelerator_state_name = (getattr(runtime, 'state', None) or 'none') if runtime is not None else 'none'
+      self._accelerator_state_name = getattr(runtime, 'state', None) or 'none'
     except Exception:
       self.jetlink, self._accelerator_state_name = None, 'none'
     self._enforce_usb_port()
 
   def _enforce_usb_port(self) -> None:
-    """ADB and Jetlink both need the comma's USB port: the link
-    on turns ADB off, and the developer panels grey its toggle out. As
-    zoompilot ui_state_zp._enforce_usb_port (Params, not adapter.release_adb)."""
+    """ADB and Jetlink share the USB port: the link on turns ADB off (zoompilot ui_state_zp)."""
     self.adb_blocked = self.jetlink is not None and self.jetlink.holds_port
     if self.adb_blocked and self.params.get_bool("AdbEnabled"):
       self.params.put_bool("AdbEnabled", False, block=True)
