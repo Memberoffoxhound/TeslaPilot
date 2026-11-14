@@ -1,6 +1,5 @@
 import math
 import os
-import threading
 import numpy as np
 import time
 import wave
@@ -8,134 +7,18 @@ import wave
 
 from openpilot.cereal import log, messaging
 from openpilot.common.basedir import BASEDIR
-from openpilot.common.hardware import HARDWARE
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.utils import retry
 from openpilot.common.swaglog import cloudlog
 
 from openpilot.system import micd
+from openpilot.common.hardware import HARDWARE
 
 SAMPLE_RATE = 48000
 SAMPLE_BUFFER = 4096 # (approx 100ms)
 MAX_VOLUME = 1.0
-THEME_RMS = 0.24
-THEME_PEAK = 0.85
-THEME_KNEE = 0.72
-SHOT_PLAY = "/data/screenshot_play"
-SHOT_WAVS = (
-  "/data/shutter.wav",
-  BASEDIR + "/openpilot/selfdrive/assets/sounds/shutter.wav",
-)
-
-
-def _resample_cubic(x: np.ndarray, src: int, dst: int) -> np.ndarray:
-  if src == dst or len(x) < 2:
-    return x
-  n_out = int(round(len(x) * dst / float(src)))
-  if len(x) < 4:
-    return np.interp(np.linspace(0, 1, n_out, endpoint=False),
-                     np.linspace(0, 1, len(x), endpoint=False), x).astype(np.float32)
-  t = np.linspace(0, len(x) - 1, n_out, endpoint=False)
-  i = np.floor(t).astype(np.int32)
-  f = (t - i).astype(np.float32)
-  xp = np.pad(x.astype(np.float32), 2, mode="edge")
-  i = i + 2
-  p0, p1, p2, p3 = xp[i - 1], xp[i], xp[i + 1], xp[i + 2]
-  f2 = f * f
-  f3 = f2 * f
-  return (0.5 * ((2.0 * p1) + (-p0 + p2) * f +
-                 (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * f2 +
-                 (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * f3)).astype(np.float32)
-
-
-def _dialog_eq(x: np.ndarray) -> np.ndarray:
-  # C4 speaker: dump rumble, lift speech, cut the tinny breakup.
-  n = len(x)
-  spec = np.fft.rfft(x)
-  f = np.maximum(np.fft.rfftfreq(n, 1.0 / SAMPLE_RATE), 1.0)
-  hp = (f ** 4) / (f ** 4 + 200.0 ** 4)
-  pres = 10 ** ((6.0 / 20.0) * np.exp(-0.5 * (np.log(f / 1700.0) * 2.0) ** 2))
-  dip = 10 ** ((-3.0 / 20.0) * np.exp(-0.5 * (np.log(f / 4500.0) * 3.0) ** 2))
-  hs = 1.0 + (10 ** (-5.5 / 20.0) - 1.0) * (f * f / (f * f + 5500.0 ** 2))
-  return np.fft.irfft(spec * (hp * pres * dip * hs), n=n).astype(np.float32)
-
-
-def _sliding_rms(x: np.ndarray, win: int) -> np.ndarray:
-  n = len(x)
-  w = max(int(win), 1)
-  pad = np.full(w, float(x[0] * x[0]) if n else 0.0, dtype=np.float64)
-  x2 = np.concatenate((pad, np.square(x, dtype=np.float64)))
-  c = np.cumsum(x2)
-  return np.sqrt(np.maximum((c[w:w + n] - c[:n]) / w, 1e-12)).astype(np.float32)
-
-
-def _agc(x: np.ndarray) -> np.ndarray:
-  rms = _sliding_rms(x, int(0.025 * SAMPLE_RATE))
-  gain = np.clip(THEME_RMS / np.maximum(rms, 1e-5), 0.40, 8.0)
-  return x * gain
-
-
-def _soft_limit(x: np.ndarray) -> np.ndarray:
-  a = np.abs(x)
-  span = THEME_PEAK - THEME_KNEE
-  shaped = THEME_KNEE + span * np.tanh((a - THEME_KNEE) / span)
-  return (np.sign(x) * np.where(a > THEME_KNEE, shaped, a)).astype(np.float32)
-
-
-def _theme_prep(x: np.ndarray) -> np.ndarray:
-  # rfft of a 60s clip stalls the 20 Hz thread; peak-limit long oneshots instead.
-  if len(x) < int(0.45 * SAMPLE_RATE) or len(x) > int(8.0 * SAMPLE_RATE):
-    peak = float(np.max(np.abs(x))) if len(x) else 0.0
-    if peak > THEME_PEAK:
-      x = x * (THEME_PEAK / peak)
-    return x.astype(np.float32)
-  return _soft_limit(_agc(_dialog_eq(x)))
-
-
-def load_wav(*paths, prep: bool = True) -> np.ndarray | None:
-  for path in paths:
-    try:
-      size = os.path.getsize(path)
-      with wave.open(path, "r") as w:
-        ch, sw, rate, n = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
-        framesize = max(int(ch), 1) * max(int(sw), 1)
-        cap = max(0, int(size) // framesize)
-        if n < 0 or n > cap:
-          cloudlog.warning(f"soundd: wav header nframes={n} capped to {cap} for {path} ({size} bytes)")
-          n = cap
-        raw = w.readframes(n)
-      if sw != 2:
-        continue
-      x = np.frombuffer(raw, dtype=np.int16).astype(np.float32)
-      if ch == 2:
-        x = x.reshape(-1, 2).mean(axis=1)
-      elif ch != 1:
-        continue
-      x /= 32768.0
-      if rate != SAMPLE_RATE:
-        x = _resample_cubic(x, rate, SAMPLE_RATE)
-      return _theme_prep(x) if prep else x.astype(np.float32)
-    except Exception:
-      cloudlog.exception(f"soundd: failed to load {path}")
-      continue
-  return None
-
-
-def _flag(path: str) -> bool:
-  try:
-    return open(path).read().strip() in ("1", "true")
-  except Exception:
-    return False
-
-
-def _clear(path: str) -> None:
-  try:
-    os.unlink(path)
-  except Exception:
-    pass
-
-
+SHOT_PLAY = "/data/screenshot_play"  # set by system/ui/lib/screenshot.py
 MIN_VOLUME = 0.1
 ALERT_RAMP_TIME = 4 # seconds to ramp critical alerts to max volume
 ALERT_MAX_TIME = 8 # seconds before critical alerts switch to the max sound
@@ -184,9 +67,6 @@ def check_selfdrive_timeout_alert(sm):
 class Soundd:
   def __init__(self):
     self.load_sounds()
-    self.oneshots: list[list] = []  # [np.ndarray, index, tag]
-    self._queue: list[list] = []
-    self._lock = threading.Lock()
 
     self.current_alert = AudibleAlert.none
     self.current_sound = AudibleAlert.none
@@ -201,23 +81,17 @@ class Soundd:
 
     self.spl_filter_weighted = FirstOrderFilter(0, 2.5, FILTER_DT, initialized=False)
 
-  def _push(self, tag: str, paths: tuple[str, ...], *, prep: bool = True) -> None:
-    # Decode here (20 Hz thread), never in the PortAudio callback. Buffer dies with the oneshot.
-    w = load_wav(*paths, prep=prep)
-    if w is None:
-      return
-    with self._lock:
-      self._queue.append([w, 0, tag])
-
   def _drain_flags(self) -> None:
-    if _flag(SHOT_PLAY):
-      self._push("shot", SHOT_WAVS)
-      _clear(SHOT_PLAY)
+    try:
+      os.unlink(SHOT_PLAY)
+      self.shutter_idx = 0
+    except OSError:
+      pass
 
   def load_sounds(self):
     self.loaded_sounds: dict[int, np.ndarray] = {}
 
-    # Stock alerts only. Theme wavs decode in _push when the event fires.
+    # Load all sounds
     for sound in sound_list:
       filename, play_count, volume = sound_list[sound]
 
@@ -228,6 +102,14 @@ class Soundd:
 
         length = wavefile.getnframes()
         self.loaded_sounds[sound] = np.frombuffer(wavefile.readframes(length), dtype=np.int16).astype(np.float32) / (2**16/2)
+
+    # screenshot shutter: peak 0.85, 6 ms fade in, 20 ms fade out
+    with wave.open(BASEDIR + "/openpilot/selfdrive/assets/sounds/shutter.wav", 'r') as w:
+      x = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / (2**16/2)
+    t = np.arange(len(x), dtype=np.float32) / SAMPLE_RATE
+    fade = np.clip(np.minimum(t / 0.006, (len(x) / SAMPLE_RATE - t) / 0.02), 0.0, 1.0)
+    self.shutter = (x * min(1.0, 0.85 / np.abs(x).max()) * fade).astype(np.float32)
+    self.shutter_idx = len(self.shutter)
 
   def get_sound_data(self, frames): # get "frames" worth of data from the current alert sound, looping when required
 
@@ -255,34 +137,11 @@ class Soundd:
           break
 
     out = ret * self.current_volume
-    with self._lock:
-      if self._queue:
-        self.oneshots.extend(self._queue)
-        self._queue.clear()
-      playing = list(self.oneshots)
-    live = []
-    sr = float(SAMPLE_RATE)
-    for arr, i, tag in playing:
-      n = min(frames, len(arr) - i)
-      if n > 0:
-        dur = len(arr) / sr
-        fi, fo = (0.006, 0.02) if dur < 0.45 else (0.012, 0.05)
-        start_s = i / sr
-        end_s = (i + n) / sr
-        if start_s >= fi and end_s <= dur - fo:
-          out[:n] += arr[i:i + n]
-        else:
-          idx = np.arange(n, dtype=np.float32) + i
-          t = idx / sr
-          env = np.ones(n, dtype=np.float32)
-          env = np.where(t < fi, np.clip(t / fi, 0.0, 1.0), env)
-          env = np.where(t > dur - fo, np.clip((dur - t) / fo, 0.0, 1.0), env)
-          out[:n] += arr[i:i + n] * env
-        i += n
-      if i < len(arr):
-        live.append([arr, i, tag])
-    with self._lock:
-      self.oneshots = live
+    i = self.shutter_idx
+    n = min(frames, len(self.shutter) - i)
+    if n > 0:
+      out[:n] += self.shutter[i:i + n]
+      self.shutter_idx = i + n
     return np.clip(out, -1.0, 1.0)
 
   def callback(self, data_out: np.ndarray, frames: int, time, status) -> None:
@@ -357,7 +216,6 @@ class Soundd:
         if self.current_alert not in (AudibleAlert.warningSoft, AudibleAlert.warningImmediate):
           self._drain_flags()
 
-        # Ramp up warning sounds (comma: soft + immediate)
         if self.current_alert in (AudibleAlert.warningSoft, AudibleAlert.warningImmediate):
           elapsed = time.monotonic() - self.ramp_start_time
           ramp_vol = float(np.interp(elapsed, [0, ALERT_RAMP_TIME], [self.ramp_start_volume, MAX_VOLUME]))
