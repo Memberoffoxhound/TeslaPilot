@@ -8,10 +8,6 @@
   --fix    replace every disallowed pointer with its real file (git lfs pull from
            the .lfsconfig store) and stage it as a normal blob. Run after each
            comma merge, then commit.
-
-A device install (comma installer `git clone`, updated's fetch) must work with no
-LFS fetch at all: the 2026 headaches were pointers that could not be resolved and
-LFS placeholders read as real assets.
 """
 import argparse
 import configparser
@@ -48,23 +44,15 @@ def pointers(repo: Path) -> list[str]:
   """Tracked files whose committed (index) blob is a pointer. Reads the blobs, not the
   working tree, so a checkout that smudged them still counts."""
   out = subprocess.run(['git', 'ls-files', '-s', '-z'], cwd=repo, capture_output=True, check=True).stdout.decode()
-  entries = []
-  for rec in filter(None, out.split('\0')):
-    meta, path = rec.split('\t', 1)
-    mode, sha, _ = meta.split()
-    if mode in ('100644', '100755'):
-      entries.append((sha, path))
+  recs = [(meta.split(), path) for meta, path in (rec.split('\t', 1) for rec in filter(None, out.split('\0')))]
+  entries = [(sha, path) for (mode, sha, _), path in recs if mode in ('100644', '100755')]
   if not entries:
     return []
   checks = subprocess.run(['git', 'cat-file', '--batch-check=%(objectname) %(objectsize)'], cwd=repo, check=True,
                           input='\n'.join(sha for sha, _ in entries).encode(), capture_output=True).stdout.decode().splitlines()
   small = [(sha, path) for (sha, path), line in zip(entries, checks, strict=True) if int(line.split()[1]) < 1024]
-  found = []
-  for sha, path in small:
-    blob = subprocess.run(['git', 'cat-file', 'blob', sha], cwd=repo, capture_output=True, check=True).stdout
-    if blob.startswith(POINTER):
-      found.append(path)
-  return found
+  return [path for sha, path in small
+          if subprocess.run(['git', 'cat-file', 'blob', sha], cwd=repo, capture_output=True, check=True).stdout.startswith(POINTER)]
 
 
 def fetchexcluded(repo: Path = ROOT) -> set[str]:
@@ -83,17 +71,11 @@ def lfs_tracked(repo: Path, path: str) -> bool:
 
 
 def problems(repo: Path = ROOT) -> list[str]:
-  errs = []
-  found = pointers(repo)
-  for p in found:
-    if p not in ALLOWED | FETCHED:
-      errs.append(f'{p}: Git LFS pointer in an installable branch')
-  missing = ALLOWED - fetchexcluded(repo)
-  for p in sorted(missing):
-    errs.append(f'{p}: allowed pointer but not in .lfsconfig fetchexclude (installs would fetch it)')
-  for p in sorted(FETCHED & set(found)):
-    if p in fetchexcluded(repo) or not lfs_tracked(repo, p):
-      errs.append(f'{p}: pointer must be filter=lfs and not fetchexcluded (updated would leave it a pointer)')
+  found, excluded = pointers(repo), fetchexcluded(repo)
+  errs = [f'{p}: Git LFS pointer in an installable branch' for p in found if p not in ALLOWED | FETCHED]
+  errs += [f'{p}: allowed pointer but not in .lfsconfig fetchexclude (installs would fetch it)' for p in sorted(ALLOWED - excluded)]
+  errs += [f'{p}: pointer must be filter=lfs and not fetchexcluded (updated would leave it a pointer)'
+           for p in sorted(FETCHED & set(found)) if p in excluded or not lfs_tracked(repo, p)]
   for sm in SUBMODULES:
     d = repo / sm
     if (d / '.git').exists():
