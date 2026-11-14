@@ -96,8 +96,8 @@ class Car:
       cached_params = None
       cached_params_raw = self.params.get("CarParamsCache")
       if cached_params_raw is not None:
-        with car.CarParams.from_bytes(cached_params_raw) as cp:
-          cached_params = cp
+        with car.CarParams.from_bytes(cached_params_raw) as _cached_params:
+          cached_params = _cached_params
 
       self.CI = get_car(*self.can_callbacks, obd_callback(self.params), alpha_long_allowed, is_release, cached_params,
                         local_fingerprints.load())
@@ -165,8 +165,7 @@ class Car:
     if prev_cp is not None:
       self.params.put("CarParamsPrevRoute", prev_cp, block=True)
 
-    # Write CarParams for controls and radard. Never cache MOCK — a missed
-    # FW query would otherwise poison the next ignition.
+    # Write CarParams for controls and radard. Never cache MOCK: a missed FW query would poison the next ignition
     cp_bytes = self.CP.to_bytes()
     self.params.put("CarParams", cp_bytes, block=True)
     self.params.put("CarParamsPersistent", cp_bytes)
