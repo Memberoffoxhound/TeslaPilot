@@ -34,12 +34,12 @@ class ScreenShotter:
     except OSError:
       pass
 
-  def held(self, events) -> bool:
+  def held(self, events) -> None:
     try:
       if os.path.isfile(SHOT_REQ):
         os.remove(SHOT_REQ)
         self._arm()
-        return True
+        return
     except OSError:
       pass
     for e in events:
@@ -47,21 +47,16 @@ class ScreenShotter:
         self._t = time.monotonic()
         self._pos = (e.pos.x, e.pos.y)
         self._fired = False
-      if e.left_down and self._pos is not None:
-        if abs(e.pos.x - self._pos[0]) > MOVE_PX or abs(e.pos.y - self._pos[1]) > MOVE_PX:
-          self._t = None
+      if e.left_down and self._pos is not None and (abs(e.pos.x - self._pos[0]) > MOVE_PX or abs(e.pos.y - self._pos[1]) > MOVE_PX):
+        self._t = None
       if e.left_released:
         self._t = None
     if self._t is not None and not self._fired and (time.monotonic() - self._t) >= HOLD_S:
       self._arm()
-      return True
-    return False
 
-  def capture(self, screen=None) -> str | None:
+  def capture(self, screen) -> str | None:
     self.pending = False
     try:
-      if screen is None:
-        raise RuntimeError("no screen")
       rgba = np.array(screen[..., :4], dtype=np.uint8)
       os.makedirs(SHOT_DIR, exist_ok=True)
       path = os.path.join(SHOT_DIR, time.strftime("%Y-%m-%d--%H-%M-%S.png"))
