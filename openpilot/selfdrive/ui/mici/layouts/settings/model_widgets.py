@@ -1,9 +1,4 @@
-"""The models panel's Jetlink widgets, from zoompilot develop
-(selfdrive/ui/sunnypilot/mici/layouts/models.py): CurrentModelInfo, the
-"active model" / "big model" block at the top of the panel, and the jetlink
-link toggle (off / usb / iOS pills), on Highland's widgets. The toggle writes
-KEYS.link through Params, as zoompilot's BigMultiParamToggleSP does.
-"""
+# models panel Jetlink widgets, from zoompilot's mici models.py on Highland widgets.
 import raylib_nb as rl
 
 from openpilot.common.params import Params
@@ -44,8 +39,6 @@ class CurrentModelInfo(Widget):
 
 
 class JetlinkLinkToggle(BigMultiToggle):
-  """zoompilot's link toggle: one pill per mode, a tap moves to the next."""
-
   def __init__(self):
     super().__init__("jetlink", [LINK_MODE_LABELS[m] for m in jetlink_adapter.MODES], select_callback=self._select,
                      description="Runs big models on a computer or phone plugged into the comma.\n" +
@@ -54,16 +47,12 @@ class JetlinkLinkToggle(BigMultiToggle):
     self.refresh()
 
   def refresh(self) -> None:
-    try:
-      value = LINK_MODE_LABELS[link_mode()]
-    except Exception:
-      value = LINK_MODE_LABELS["off"]
+    value = LINK_MODE_LABELS[link_mode()]
     if value != self.value:
       self.set_value(value)
 
   def _select(self, value: str) -> None:
     try:
-      # zoompilot: BigMultiParamToggleSP writes KEYS.link through Params
       mode = next(m for m, label in LINK_MODE_LABELS.items() if label == value)
       Params().put(jetlink_adapter.KEYS.link, jetlink_adapter.MODES.index(mode), block=True)
     except Exception:
