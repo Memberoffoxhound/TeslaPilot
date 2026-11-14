@@ -13,6 +13,8 @@ from openpilot.selfdrive.selfdrived import jetlink_events as je
 
 EventName = log.OnroadEvent.EventName
 HERE = Path(__file__).resolve().parents[1]
+# jetlink events.OFFER_S, HANDBACK_S, SWITCHING_S in selfdrived ticks
+OFFER_TICKS, HANDBACK_TICKS, SWITCHING_TICKS = round(3. / DT_CTRL), round(5. / DT_CTRL), round(1. / DT_CTRL)
 
 
 @pytest.fixture(autouse=True)
@@ -73,20 +75,20 @@ def _run(ev, runtime, state, big, in_control, ticks):
 def test_offer_swap_no_entry_chime_and_link_lost(tracked):
   ev = je.JetlinkEvents()
   # engaged, the big model ready: offered once, for OFFER_S
-  seen = _run(ev, tracked, 'ready', False, True, je.OFFER_TICKS + 50)
+  seen = _run(ev, tracked, 'ready', False, True, OFFER_TICKS + 50)
   offered = [s for s in seen if EventName.jetlinkBigModelAvailable in s]
-  assert je.OFFER_TICKS - 25 <= len(offered) <= je.OFFER_TICKS + 1
+  assert OFFER_TICKS - 25 <= len(offered) <= OFFER_TICKS + 1
   # disengaged: it swaps in; a second of no entry (bigModelLoading), then the chime
-  seen = _run(ev, tracked, 'running', True, False, je.SWITCHING_TICKS + 20)
+  seen = _run(ev, tracked, 'running', True, False, SWITCHING_TICKS + 20)
   no_entry = [i for i, s in enumerate(seen) if EventName.bigModelLoading in s]
   chime = [i for i, s in enumerate(seen) if EventName.jetlinkBigModelActive in s]
   assert len(chime) == 1 and no_entry and max(no_entry) < chime[0]
-  assert abs(len(no_entry) - je.SWITCHING_TICKS) <= 25
+  assert abs(len(no_entry) - SWITCHING_TICKS) <= 25
   assert ev.settling is False
   # engaged on the big model, the link drops: warned for HANDBACK_S, nothing else
-  seen = _run(ev, tracked, 'retrying', False, True, je.HANDBACK_TICKS + 50)
+  seen = _run(ev, tracked, 'retrying', False, True, HANDBACK_TICKS + 50)
   lost = [s for s in seen if EventName.jetlinkBigModelLost in s]
-  assert abs(len(lost) - je.HANDBACK_TICKS) <= 25
+  assert abs(len(lost) - HANDBACK_TICKS) <= 25
   assert all(set(s) <= {EventName.jetlinkBigModelLost} for s in seen)
 
 
