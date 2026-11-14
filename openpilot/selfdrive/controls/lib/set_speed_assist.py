@@ -85,7 +85,7 @@ class SetSpeedAssist:
     return self.allowed and self.params.get_bool(PARAM)
 
   def update_params(self) -> None:
-    # Called before the planner decides whether AccelBoost may run, so both never run on the same frame.
+    # reads the toggle every PARAMS_UPDATE_PERIOD
     self.frame += 1
     if self.frame % int(PARAMS_UPDATE_PERIOD / DT_MDL) == 0:
       self.enabled = self._read_enabled()

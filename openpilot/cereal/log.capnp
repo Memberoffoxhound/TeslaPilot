@@ -1250,7 +1250,6 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
   shouldStop @37: Bool;
   allowThrottle @38: Bool;
   allowBrake @39: Bool;
-  accelBoost @40 :Float32;
   setSpeedAssist @41 :Float32;  # m/s^2 Set Speed Assist added to the e2e candidate
 
 
@@ -1293,6 +1292,7 @@ struct LongitudinalPlan @0xe00b5b3eba12876c {
     gpsTrajectory @12 :Deprecated.GpsTrajectory;
     gpsPlannerActive @19 :Bool;
     personality @36 :LongitudinalPersonality;
+    accelBoost @40 :Float32;
   }
 }
 struct UiPlan {

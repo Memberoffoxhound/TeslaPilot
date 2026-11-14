@@ -7,7 +7,6 @@ from openpilot.common.constants import CV
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
-from openpilot.selfdrive.controls.lib.accel_boost import AccelBoost
 from openpilot.selfdrive.controls.lib.set_speed_assist import SetSpeedAssist, approach_accel
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc, LongitudinalPlanSource
@@ -37,7 +36,6 @@ class LongitudinalPlanner:
     self.mpc = LongitudinalMpc(dt=dt)
     self.fcw = False
     self.dt = dt
-    self.accel_boost = AccelBoost()
     self.set_speed_assist = SetSpeedAssist(CP)
 
     self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
@@ -107,11 +105,6 @@ class LongitudinalPlanner:
     self.set_speed_assist.update_params()
     a_floor = min(output_a_target_mpc, self.a_cruise, approach_accel(v_ego, v_cruise, sm['selfdriveState'].personality))
     output_a_target_e2e = self.set_speed_assist.update(sm, output_a_target_e2e, a_floor, reset_state)
-    # AccelBoost would stack on the assist's lift and push past the approach pace.
-    if self.set_speed_assist.enabled:
-      self.accel_boost.total_boost = 0.0
-    else:
-      output_a_target_e2e = self.accel_boost.update(sm, output_a_target_e2e, output_a_target_mpc, self.a_cruise)
 
     candidates = [(output_a_target_mpc, self.mpc.source, output_should_stop_mpc),
                   (self.a_cruise, LongitudinalPlanSource.cruise, cruise_should_stop),
@@ -142,7 +135,6 @@ class LongitudinalPlanner:
     longitudinalPlan.fcw = self.fcw
 
     longitudinalPlan.aTarget = float(self.output_a_target)
-    longitudinalPlan.accelBoost = float(self.accel_boost.total_boost)
     longitudinalPlan.setSpeedAssist = float(self.set_speed_assist.lift)
     longitudinalPlan.shouldStop = bool(self.output_should_stop)
     longitudinalPlan.allowBrake = True

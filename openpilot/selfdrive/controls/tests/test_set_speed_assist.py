@@ -224,7 +224,7 @@ class FakeSubMaster(dict):
     return True
 
 
-def planner_sm(engaged=False, personality=STANDARD, gas_pressed=False):
+def planner_sm(engaged=False, personality=STANDARD):
   sm = FakeSubMaster(build_sm(personality=personality))
   sds = messaging.new_message('selfdriveState')
   sds.selfdriveState.enabled = engaged
@@ -233,7 +233,6 @@ def planner_sm(engaged=False, personality=STANDARD, gas_pressed=False):
   cs = messaging.new_message('carState')
   cs.carState.vEgo = V_EGO
   cs.carState.vCruise = V_CRUISE_MS * 3.6
-  cs.carState.gasPressed = gas_pressed
   sm['carState'] = cs.carState
   return sm
 
@@ -285,20 +284,6 @@ class TestSetSpeedAssistPlanner(OpenpilotTestCase):
     plan = pm.send.call_args.args[1].longitudinalPlan
     assert np.isclose(plan.setSpeedAssist, p.set_speed_assist.lift, rtol=1e-6)
 
-  def test_accel_boost_only_without_the_assist(self, mocker):
-    # Aggressive's 0.1 starting boost would stack past the approach pace if both ran.
-    p = planner(mocker, False, engaged=True, personality=log.LongitudinalPersonality.aggressive)
-    assert p.accel_boost.total_boost >= 0.1
-    assert p.output_a_target > 0.
+  def test_engaged_aggressive_drives_at_its_approach_pace(self, mocker):
     p = planner(mocker, True, engaged=True, personality=log.LongitudinalPersonality.aggressive)
-    assert p.accel_boost.total_boost == 0.
     assert np.isclose(p.output_a_target, ssa.approach_accel(V_EGO, V_CRUISE_MS, log.LongitudinalPersonality.aggressive))
-
-  def test_switching_the_assist_on_drops_the_boost_the_same_frame(self, mocker):
-    p = planner(mocker, False, engaged=True, personality=log.LongitudinalPersonality.aggressive)
-    assert p.accel_boost.total_boost >= 0.1
-    Params().put_bool("SetSpeedAssist", True, block=True)
-    sm = planner_sm(engaged=True, personality=log.LongitudinalPersonality.aggressive)
-    while not p.set_speed_assist.enabled:
-      p.update(sm)
-      assert (p.accel_boost.total_boost > 0.) != p.set_speed_assist.enabled
