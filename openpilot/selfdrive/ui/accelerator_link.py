@@ -13,15 +13,10 @@ index into the adapter's MODES. Everything else reads ui_state.jetlink.
 """
 from __future__ import annotations
 
-from openpilot.selfdrive import jetlink_adapter  # noqa: F401
 from openpilot.selfdrive.jetlink_adapter import KEYS, MODES
 from openpilot.selfdrive.ui.ui_state import ui_state
 
 LINK_MODE_LABELS = {"off": "off", "usb": "usb", "ios": "iOS"}
-LINK_MODE_TITLES = {"off": "Off", "usb": "USB", "ios": "iOS"}
-
-# ChestnutState values (ui_state.ChestnutState), as plain strings
-_FAILED = ('uncompiled', 'failed')
 
 
 def link_mode() -> str:
