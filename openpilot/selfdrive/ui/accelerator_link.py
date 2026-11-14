@@ -21,7 +21,10 @@ LINK_MODE_LABELS = {"off": "off", "usb": "usb", "ios": "iOS"}
 
 def link_mode() -> str:
   # stored setting, shown even when jetlink cannot run so it can be turned off
-  index = ui_state.params.get(KEYS.link, return_default=True)
+  try:
+    index = ui_state.params.get(KEYS.link, return_default=True)
+  except Exception:
+    index = None
   return MODES[index] if isinstance(index, int) and 0 <= index < len(MODES) else "off"
 
 
