@@ -11,29 +11,23 @@ def restart_needed_callback(_=None):
   ui_state.params.put_bool("OnroadCycleRequested", True)
 
 
-LANE_COLOR_GREEN = 0
-LANE_COLOR_TESLA = 1
+# 0/1 cycle params: LaneColor (1 tesla), CustomOnroadUi (1 custom), CompassSize (1 large)
 LANE_COLOR_LABELS = ("openpilot", "tesla")
+ONROAD_UI_LABELS = ("stock UI", "custom UI")
+COMPASS_LARGE = 1
+COMPASS_SIZE_LABELS = ("small", "large")
 
 # Tesla Autopilot viz blue / stock openpilot green.
 THEME_TESLA_RGB = (62, 140, 235)
 THEME_OPENPILOT_RGB = (0, 255, 64)
-# Lane lines clip alpha at 0.7 so the HUD does not burn an OLED. Tesla wheel uses the same cap.
-THEME_LANE_ALPHA = 0.7
 
-ONROAD_UI_STOCK = 0
-ONROAD_UI_CUSTOM = 1
-ONROAD_UI_LABELS = ("stock UI", "custom UI")
 
-COMPASS_SMALL = 0
-COMPASS_LARGE = 1
-COMPASS_SIZE_LABELS = ("small", "large")
+def _mode(key: str, params: Params | None) -> int:
+  return int((params or ui_state.params).get(key, return_default=True) == 1)
 
 
 def lane_color_mode(params: Params | None = None) -> int:
-  params = params or ui_state.params
-  mode = params.get("LaneColor", return_default=True)
-  return LANE_COLOR_TESLA if mode == LANE_COLOR_TESLA else LANE_COLOR_GREEN
+  return _mode("LaneColor", params)
 
 
 def lane_color_label(params: Params | None = None) -> str:
@@ -41,11 +35,11 @@ def lane_color_label(params: Params | None = None) -> str:
 
 
 def next_lane_color(params: Params | None = None) -> int:
-  return LANE_COLOR_GREEN if lane_color_mode(params) == LANE_COLOR_TESLA else LANE_COLOR_TESLA
+  return 1 - lane_color_mode(params)
 
 
 def tesla_theme(params: Params | None = None) -> bool:
-  return lane_color_mode(params) == LANE_COLOR_TESLA
+  return lane_color_mode(params) == 1
 
 
 def theme_rgb(params: Params | None = None) -> tuple[int, int, int]:
@@ -59,8 +53,7 @@ def theme_color(alpha: float = 1.0, params: Params | None = None) -> rl.Color:
 
 
 def onroad_ui_mode(params: Params | None = None) -> int:
-  mode = (params or Params()).get("CustomOnroadUi", return_default=True)
-  return ONROAD_UI_CUSTOM if mode == ONROAD_UI_CUSTOM else ONROAD_UI_STOCK
+  return _mode("CustomOnroadUi", params)
 
 
 def onroad_ui_label(params: Params | None = None) -> str:
@@ -68,17 +61,15 @@ def onroad_ui_label(params: Params | None = None) -> str:
 
 
 def next_onroad_ui(params: Params | None = None) -> int:
-  return ONROAD_UI_STOCK if onroad_ui_mode(params) == ONROAD_UI_CUSTOM else ONROAD_UI_CUSTOM
+  return 1 - onroad_ui_mode(params)
 
 
 def custom_onroad_ui(params: Params | None = None) -> bool:
-  return onroad_ui_mode(params) == ONROAD_UI_CUSTOM
+  return onroad_ui_mode(params) == 1
 
 
 def compass_size(params: Params | None = None) -> int:
-  params = params or Params()
-  mode = params.get("CompassSize", return_default=True)
-  return COMPASS_LARGE if mode == COMPASS_LARGE else COMPASS_SMALL
+  return _mode("CompassSize", params)
 
 
 def compass_size_label(params: Params | None = None) -> str:
@@ -86,7 +77,7 @@ def compass_size_label(params: Params | None = None) -> str:
 
 
 def next_compass_size(params: Params | None = None) -> int:
-  return COMPASS_SMALL if compass_size(params) == COMPASS_LARGE else COMPASS_LARGE
+  return 1 - compass_size(params)
 
 
 CARDINALS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
@@ -109,8 +100,7 @@ def heading_letter() -> str | None:
 
 
 def set_onroad_ui(mode: int, params: Params | None = None) -> None:
-  mode = ONROAD_UI_CUSTOM if int(mode) == ONROAD_UI_CUSTOM else ONROAD_UI_STOCK
-  (params or Params()).put("CustomOnroadUi", mode, block=True)
+  (params or ui_state.params).put("CustomOnroadUi", int(int(mode) == 1), block=True)
 
 
 def _rpy_lines(roll: float, pitch: float, yaw: float) -> tuple[str, str, str]:
