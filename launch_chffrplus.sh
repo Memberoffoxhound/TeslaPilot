@@ -4,6 +4,16 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
 source "$DIR/launch_env.sh"
 
+# fresh installs (git clone --depth=1) leave the updater an LFS pointer, pull it before the flash loop
+function fetch_updater {
+  local u="$DIR/openpilot/common/hardware/comma/updater" t=0
+  until [ "$(head -c 4 "$u" 2>/dev/null)" = $'\x7fELF' ]; do
+    sleep $t; t=10
+    echo "AGNOS updater is an LFS pointer, pulling"
+    "$DIR/tools/lfs.sh" pull
+  done
+}
+
 function agnos_init {
   # TODO: move this to agnos
   sudo rm -f /data/etc/NetworkManager/system-connections/*.nmmeta
@@ -26,6 +36,7 @@ function agnos_init {
     if "$AGNOS_PY" --verify "$MANIFEST"; then
       sudo reboot
     fi
+    fetch_updater
     while true; do
       "$DIR/openpilot/common/hardware/comma/updater" "$AGNOS_PY" "$MANIFEST"
     done
