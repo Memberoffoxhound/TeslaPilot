@@ -1,12 +1,4 @@
-"""Settings -> models: zoompilot develop's mici models panel
-(selfdrive/ui/sunnypilot/mici/layouts/models.py) on Highland's widgets. At the
-top the active model and what the big model is doing (CurrentModelInfo), then
-the big-model picker, the jetlink link toggle, refresh and reset; Highland adds
-the small-model note (no sunnypilot small models). No charge-phone toggle
-(zoompilot has none either — JetlinkChargePhone stays in params, default off).
-The picker’s logic is selfdrive/ui/model_picker.py, the link’s
-selfdrive/ui/accelerator_link.py, both over ui_state.jetlink; none of it raises.
-"""
+# Settings -> models: zoompilot's mici models panel on Highland widgets. Logic: model_picker.py, accelerator_link.py.
 from openpilot.selfdrive.ui import accelerator_link as al
 from openpilot.selfdrive.ui import model_picker as mp
 from openpilot.selfdrive.ui.mici.layouts.settings.model_widgets import CurrentModelInfo, JetlinkLinkToggle
@@ -31,7 +23,7 @@ class ModelsLayoutMici(NavScroller):
                                       "The phone downloads and builds it; the small model drives until it is ready.")
     self._big.set_click_callback(self._show_folders)
     self._big.set_enabled(_offroad)
-    # the pills follow the param; locked onroad like the model buttons beside it: jetlink switches the link only parked
+    # locked onroad: jetlink switches the link only when parked
     self._link = JetlinkLinkToggle()
     self._link.set_enabled(_offroad)
     self._refresh = BigButton("refresh models", mp.list_label(), description="Fetches the latest list of big models.")
@@ -53,9 +45,6 @@ class ModelsLayoutMici(NavScroller):
     scroller = NavScroller()
     scroller._scroller.add_widgets(items)
     gui_app.push_widget(scroller)
-
-  def _pop_to_main(self):
-    gui_app.pop_widgets_to(self)
 
   def _show_folders(self):
     try:
@@ -88,13 +77,13 @@ class ModelsLayoutMici(NavScroller):
     try:
       mp.select(ref)
     finally:
-      self._pop_to_main()
+      gui_app.pop_widgets_to(self)
 
   def _pick_default(self):
     try:
       mp.reset_to_default()
     finally:
-      self._pop_to_main()
+      gui_app.pop_widgets_to(self)
 
   @staticmethod
   def _model_info() -> tuple[str, str, str]:
