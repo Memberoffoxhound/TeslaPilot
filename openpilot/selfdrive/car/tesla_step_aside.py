@@ -71,8 +71,7 @@ def read_signals(can_parsers) -> StockSignals:
   """The stock signals from Tesla's CarInterface parsers (opendbc Bus keys
   'party' and 'ap_party'). Every message read here is one carstate reads, so
   the parsers already track them."""
-  party = can_parsers["party"] if "party" in can_parsers else _by_value(can_parsers, "party")
-  ap = can_parsers["ap_party"] if "ap_party" in can_parsers else _by_value(can_parsers, "ap_party")
+  party, ap = can_parsers["party"], can_parsers["ap_party"]
   # comma's 3-bit DAS_steeringControlType (opendbc tesla.dbc); legacy 2-bit cars are not supported
   return StockSignals(
     ap_state=int(ap.vl["DAS_status"]["DAS_autopilotState"]),
@@ -80,13 +79,6 @@ def read_signals(can_parsers) -> StockSignals:
     autopark_state=int(party.vl["DI_state"]["DI_autoparkState"]),
     acc_state=int(ap.vl["DAS_control"]["DAS_accState"]),
   )
-
-
-def _by_value(can_parsers, name):
-  for k, v in can_parsers.items():
-    if getattr(k, "value", k) == name:
-      return v
-  raise KeyError(name)
 
 
 class StockDetector:
