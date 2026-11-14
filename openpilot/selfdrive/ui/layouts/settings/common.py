@@ -99,10 +99,6 @@ def heading_letter() -> str | None:
   return CARDINALS[int((deg + 22.5) % 360.0) // 45]
 
 
-def set_onroad_ui(mode: int, params: Params | None = None) -> None:
-  (params or ui_state.params).put("CustomOnroadUi", int(int(mode) == 1), block=True)
-
-
 def _rpy_lines(roll: float, pitch: float, yaw: float) -> tuple[str, str, str]:
   # rpyCalib is device-frame Euler: roll, pitch, yaw.
   # Pitch/yaw words match stock. +roll is clockwise looking forward (right side down).

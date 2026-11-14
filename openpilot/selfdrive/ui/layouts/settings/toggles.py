@@ -1,7 +1,7 @@
 from openpilot.cereal import log
 from openpilot.common.params import Params, UnknownKeyName
 from openpilot.selfdrive.ui.layouts.settings.common import (
-  lane_color_label, next_lane_color, onroad_ui_label, next_onroad_ui, set_onroad_ui,
+  lane_color_label, next_lane_color, onroad_ui_label, next_onroad_ui,
   compass_size_label, next_compass_size,
 )
 from openpilot.system.ui.widgets import Widget
@@ -324,7 +324,7 @@ class TogglesLayout(Widget):
     self._params.put("LongitudinalPersonality", button_index, block=True)
 
   def _cycle_onroad_ui(self):
-    set_onroad_ui(next_onroad_ui(self._params), self._params)
+    self._params.put("CustomOnroadUi", next_onroad_ui(self._params), block=True)
 
   def _cycle_lane_color(self):
     self._params.put("LaneColor", next_lane_color(self._params), block=True)

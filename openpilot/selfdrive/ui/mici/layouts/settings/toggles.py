@@ -1,14 +1,13 @@
 from collections.abc import Callable
 
 from openpilot.cereal import log
-from openpilot.common.params import Params
 from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigToggle, BigButton
 from openpilot.selfdrive.ui.mici.widgets.dialog import wire_confirm
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.system.ui.lib.application import gui_app, MousePos
 from openpilot.selfdrive.ui.layouts.settings.common import (
   lane_color_label, next_lane_color,
-  onroad_ui_label, next_onroad_ui, set_onroad_ui, restart_needed_callback,
+  onroad_ui_label, next_onroad_ui, restart_needed_callback,
   compass_size_label, next_compass_size,
 )
 from openpilot.selfdrive.ui.ui_state import ui_state
@@ -46,12 +45,12 @@ class ParkOffroadConfirmPage(NavScroller):
 
 
 class _ParamCycle(BigButton):
-  def __init__(self, title: str, label_fn, next_fn, apply_fn):
+  def __init__(self, title: str, key: str, label_fn, next_fn):
     super().__init__(title, "")
-    self._params = Params()
+    self._params = ui_state.params
+    self._key = key
     self._label_fn = label_fn
     self._next_fn = next_fn
-    self._apply_fn = apply_fn
     self.refresh()
 
   def refresh(self):
@@ -65,8 +64,7 @@ class _ParamCycle(BigButton):
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     super()._handle_mouse_release(mouse_pos)
-    nxt = self._next_fn(self._params)
-    self._apply_fn(nxt, self._params)
+    self._params.put(self._key, self._next_fn(self._params), block=True)
     self.refresh()
 
 
@@ -74,9 +72,9 @@ class ThemeLayoutMici(NavScroller):
   def __init__(self):
     super().__init__()
     self._scroller.add_widgets([
-      _ParamCycle("onroad UI", onroad_ui_label, next_onroad_ui, set_onroad_ui),
-      _ParamCycle("compass size", compass_size_label, next_compass_size, lambda nxt, p: p.put("CompassSize", nxt, block=True)),
-      _ParamCycle("theme", lane_color_label, next_lane_color, lambda nxt, p: p.put("LaneColor", nxt, block=True)),
+      _ParamCycle("onroad UI", "CustomOnroadUi", onroad_ui_label, next_onroad_ui),
+      _ParamCycle("compass size", "CompassSize", compass_size_label, next_compass_size),
+      _ParamCycle("theme", "LaneColor", lane_color_label, next_lane_color),
     ])
 
 
@@ -116,7 +114,7 @@ class TogglesLayoutMici(NavScroller):
                                        description="Enable to use TeslaPilot driver assistance.\n" +
                                                    "Disable to use your car's stock driver assistance.")
 
-    # Tesla step-aside: default on. Tolerant params helpers, so a stale params library can't crash the UI.
+    # Tesla step aside, default on
     self._step_aside_btn = BigToggle("step aside for tesla fsd", initial_state=tesla_step_aside.enabled(ui_state.params),
                                      toggle_callback=self._on_step_aside,
                                      description="When Tesla Autosteer or FSD is selected or driving (or Summon),\n" +
@@ -124,7 +122,7 @@ class TogglesLayoutMici(NavScroller):
                                                  "screen off after a 5 s alert. Back when Tesla is on TACC.")
     self._step_aside_btn.set_enabled(lambda: not ui_state.engaged)
 
-    # Park-offroad + drive summary: one toggle, confirmation first
+    # park offroad and drive summary share one toggle
     self._park_offroad_btn = BigToggle("go offroad in park", initial_state=park_offroad.enabled(ui_state.params),
                                        toggle_callback=self._on_park_offroad,
                                        description="Offroad after Park is held 3 s, back onroad on D/R.\n" +
