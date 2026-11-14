@@ -1,27 +1,12 @@
 #!/usr/bin/env python3
-"""modelmanagerd: keeps the big-model catalog fresh and applies the pick.
-
-zoompilot develop's ModelFetcherZP / ModelManagerSP main loop for the one
-slot Highland has, on plain dicts and jetlink v0.9.0's model index:
-
-  - when jetlink_adapter.lists_big_models() (no chestnut fitted), the catalog
-    is jetlink_adapter.big_catalog(REQUIRED_JSON_VERSION): jetlink's own index
-  - otherwise the chestnut HTTP catalog is fetched for a fitted board
-  - a ref the UI queues in ModelManager_DownloadRef is looked up in the
-    catalog and stored in ModelManager_ActiveBundleChestnut without files:
-    jetlink downloads and verifies the ONNX for that ref itself
-  - after a fetch, a pick the catalog no longer lists is carried over via
-    listed_ref() (same ONNX under a newer ref) or reset to the default
-
-Offroad only (process_config), so nothing here competes with driving.
-No sunnylink, no Git LFS on the device for the pick.
-"""
+# modelmanagerd: keeps the big-model catalog fresh and applies the UI's pick. Offroad only.
 from __future__ import annotations
 
 import json
 import time
 import urllib.request
 
+from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive import jetlink_adapter as ja
 from openpilot.selfdrive.modelmanager import (ACTIVE_BIG, CACHE_BIG, CACHE_TIMEOUT, CATALOG_URL, DOWNLOAD_REF, JETLINK_KEY,
                                               REQUIRED_JSON_VERSION, STATUS, SYNC_BIG, catalog_bundles, find_bundle,
@@ -30,15 +15,6 @@ from openpilot.selfdrive.modelmanager import store
 
 FETCH_TIMEOUT = 10.0
 RETRY_AFTER = (30.0, 60.0, 120.0, 300.0)
-
-
-def _log():
-  try:
-    from openpilot.common.swaglog import cloudlog
-    return cloudlog
-  except Exception:
-    import logging
-    return logging.getLogger("modelmanagerd")
 
 
 def http_fetch(url: str = CATALOG_URL, timeout: float = FETCH_TIMEOUT) -> dict:
@@ -52,16 +28,13 @@ class ModelManager:
     self.fetch = fetch
     self.clock = clock
     self.wall = wall or (lambda: time.time())  # noqa: TID251  the fetch time the UI shows
-    self.log = log or _log()
+    self.log = log or cloudlog
     self.failures = 0
     self._refetched_for: bool | None = None
     self._status: dict = {}
 
   def _expired(self, cached) -> bool:
-    try:
-      last = int(store.get(SYNC_BIG) or 0)
-    except (TypeError, ValueError):
-      last = 0
+    last = store.get(SYNC_BIG) or 0
     if last == 0 or int(self.clock() * 1e9) - last >= CACHE_TIMEOUT * 1e9:
       return True
     if not catalog_bundles(cached):
