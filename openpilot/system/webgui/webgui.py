@@ -112,29 +112,8 @@ class Handler(BaseHTTPRequestHandler):
   do_HEAD = do_GET
 
   def _file(self, f: Path, ctype: str):
-    size = f.stat().st_size
-    dl = {"Content-Disposition": f'{"attachment" if "dl=1" in self.path else "inline"}; filename="{f.name}"',
-          "Accept-Ranges": "bytes", "Cache-Control": "private, max-age=60"}
-    m = re.match(r"bytes=(\d*)-(\d*)$", self.headers.get("Range") or "")
-    lo, hi, code = 0, size - 1, 200
-    if m and size and (m.group(1) or m.group(2)):
-      lo, hi = (int(m.group(1)), int(m.group(2) or size - 1)) if m.group(1) else (max(0, size - int(m.group(2))), size - 1)
-      hi = min(hi, size - 1)
-      if lo > hi:
-        return self._send(416, b"", ctype, {"Content-Range": f"bytes */{size}"})
-      code, dl["Content-Range"] = 206, f"bytes {lo}-{hi}/{size}"
-    self.send_response(code)
-    for k, v in {"Content-Type": ctype, "Content-Length": str(hi - lo + 1), "X-Content-Type-Options": "nosniff", **dl}.items():
-      self.send_header(k, v)
-    self.end_headers()
-    if self.command == "HEAD":
-      return
-    with open(f, "rb") as fh:
-      fh.seek(lo)
-      left = hi - lo + 1
-      while left > 0 and (chunk := fh.read(min(65536, left))):
-        self.wfile.write(chunk)
-        left -= len(chunk)
+    disp = "attachment" if "dl=1" in self.path else "inline"
+    self._send(200, f.read_bytes(), ctype, {"Content-Disposition": f'{disp}; filename="{f.name}"', "Cache-Control": "private, max-age=60"})
 
   def do_POST(self):
     path, _ = self._route()

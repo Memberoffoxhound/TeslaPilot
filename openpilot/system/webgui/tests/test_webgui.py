@@ -51,15 +51,14 @@ def test_symlink_rejected(env):
   assert (app.data / "secret.png").exists()
 
 
-def test_shot_list_view_delete_range(env):
+def test_shot_list_view_delete(env):
   app, u = env
   (app.shots / "2026-10-29--10-00-00.png").write_bytes(b"0123456789")
   (app.shots / "notes.txt").write_text("x")
   _, j, _ = req(u + "/api/shots")
   assert [f["name"] for f in j["items"]] == ["2026-10-29--10-00-00.png"]
-  r = urllib.request.Request(u + "/media/shots/2026-10-29--10-00-00.png", headers={"Range": "bytes=2-5"})
-  with urllib.request.urlopen(r) as resp:
-    assert resp.status == 206 and resp.read() == b"2345" and resp.headers["Content-Range"] == "bytes 2-5/10"
+  code, body, h = req(u + "/media/shots/2026-10-29--10-00-00.png?dl=1", raw=True)
+  assert code == 200 and body == b"0123456789" and h["Content-Disposition"].startswith("attachment")
   assert req(u + "/api/shots/2026-10-29--10-00-00.png", "DELETE")[0] == 200
   assert req(u + "/api/shots")[1]["items"] == []
 
