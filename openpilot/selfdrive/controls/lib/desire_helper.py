@@ -11,7 +11,6 @@ LANE_CHANGE_SPEED_MIN = 25 * CV.MPH_TO_MS
 LANE_CHANGE_TIME_MAX = 10.
 LANE_CHANGE_START_TIME = 0.5
 
-
 class DesireHelper:
   def __init__(self):
     self.lane_change_state = LaneChangeState.off
