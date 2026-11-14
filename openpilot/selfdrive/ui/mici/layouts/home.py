@@ -29,8 +29,7 @@ SSA_ICON_SIZE = 48
 def _wordmark_font() -> rl.Font:
   """TeslaPilot wordmark glyphs from TESLA.ttf (T-E-S-L-A-P-I-L-O-T). Falls back to Inter DISPLAY."""
   try:
-    chars = "TESLAPILOT"
-    cps = sorted(map(ord, chars))
+    cps = sorted(map(ord, "TESLAPILOT"))
     with as_file(FONT_DIR) as fs:
       font = rl.load_font_ex((fs / "TESLA.ttf").as_posix(), 200, cps, len(cps))
     if font.glyphCount > 0:
@@ -168,10 +167,8 @@ class LongModeBadge(Widget):
     self._logo_w = float(self.OP_LOGO_W if self._op else self._make.logo_wh[0])
     self._sync_rect()
 
-  def _draw_letters(self, letters: str, lx: float, y: float, sz: int | None = None, col_w: int | None = None) -> None:
+  def _draw_letters(self, letters: str, lx: float, y: float, fsz: int = LETTER_SZ, col: int = COL_W) -> None:
     # equal slots so large OEM letters (Kia SCC) span the logo height
-    fsz = self.LETTER_SZ if sz is None else sz
-    col = self.COL_W if col_w is None else col_w
     sizes = [measure_text_cached(self._font, ch, fsz) for ch in letters]
     slot = self.H / len(letters)
     for i, (ch, ch_sz) in enumerate(zip(letters, sizes, strict=False)):
@@ -196,27 +193,17 @@ class LongModeBadge(Widget):
       cy += sz.y + gap
 
   def _render(self, _) -> None:
-    x, y = self.rect.x, self.rect.y
-    if self._op:
-      tex = self._comma
-      tx = x + (self._logo_w - tex.width) / 2
-      ty = y + (self.H - tex.height) / 2
-      rl.draw_texture_ex(tex, rl.Vector2(tx, ty), 0.0, 1.0, rl.WHITE)
-      letters = "LONG"
-    else:
-      m = self._make
-      if m.text_rows is not None:
-        # generic: STOCK/ACC two-row text is the whole badge (same bold font as TACC/SCC)
-        self._draw_text_icon(m.text_rows, x, y, self._logo_w)
-        return
-      tex = self._logos[self._make_name]
-      tx = x + (self._logo_w - tex.width) / 2
-      ty = y + (self.H - tex.height) / 2
-      rl.draw_texture_ex(tex, rl.Vector2(tx, ty), 0.0, 1.0, rl.WHITE)
-      letters = m.stock_label
-      self._draw_letters(letters, x + self._logo_w + 2, y, m.letter_sz, m.col_w)
+    x, y, m = self.rect.x, self.rect.y, self._make
+    if not self._op and m.text_rows is not None:
+      # generic: STOCK/ACC two-row text is the whole badge (same bold font as TACC/SCC)
+      self._draw_text_icon(m.text_rows, x, y, self._logo_w)
       return
-    self._draw_letters(letters, x + self._logo_w + 2, y)
+    tex = self._comma if self._op else self._logos[self._make_name]
+    rl.draw_texture_ex(tex, rl.Vector2(x + (self._logo_w - tex.width) / 2, y + (self.H - tex.height) / 2), 0.0, 1.0, rl.WHITE)
+    if self._op:
+      self._draw_letters("LONG", x + self._logo_w + 2, y)
+    else:
+      self._draw_letters(m.stock_label, x + self._logo_w + 2, y, m.letter_sz, m.col_w)
 
 
 class MiciHomeLayout(Widget):
@@ -239,7 +226,6 @@ class MiciHomeLayout(Widget):
     # Set Speed Assist shortcut: shown only while the toggle is on with openpilot longitudinal,
     # just left of the chestnut (Jetlink GPU link) icons; the row closes up when either is hidden
     self._ssa_icon = IconWidget("icons_mici/set_speed_assist.png", (SSA_ICON_SIZE, SSA_ICON_SIZE))
-    self._ssa_icon.set_visible(False)
 
     self._alerts_pill = AlertsPill()
 
@@ -331,9 +317,7 @@ class MiciHomeLayout(Widget):
     mark = "TESLAPILOT"
     avail = max(200, self.rect.width - HOME_PADDING * 2)
     wm = MICI_WORDMARK_SIZE
-    while wm > 28:
-      if measure_text_cached(self._wordmark_font, mark, wm).x <= avail:
-        break
+    while wm > 28 and measure_text_cached(self._wordmark_font, mark, wm).x > avail:
       wm -= 2
     rl.draw_text_ex(self._wordmark_font, mark, text_pos, wm, 0, WHITE)
 
