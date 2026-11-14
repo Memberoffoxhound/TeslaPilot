@@ -171,12 +171,8 @@ class PythonProcess(ManagerProcess):
 
 
 class RestartingPythonProcess(PythonProcess):
-  """A PythonProcess that manager starts again after it dies (ported from
-  zoompilot's sunnypilot/system/manager/processes.py, for jetlinkd).
-
-  PythonProcess.start() leaves a proc that has exited in place for good. One
-  that dies within QUICK_DEATH of its start backs off BACKOFF, doubling to
-  BACKOFF_MAX, so an import error never forks manager twice a second."""
+  """Started again after it dies (zoompilot sunnypilot/system/manager/processes.py).
+  A death within QUICK_DEATH backs off BACKOFF, doubling to BACKOFF_MAX."""
   QUICK_DEATH = 10.0
   BACKOFF = 10.0
   BACKOFF_MAX = 300.0
@@ -187,11 +183,8 @@ class RestartingPythonProcess(PythonProcess):
     self.backoff = 0.0
     self.next_start = 0.0
 
-  def now(self) -> float:
-    return time.monotonic()
-
   def start(self) -> None:
-    now = self.now()
+    now = time.monotonic()
     if self.proc is not None and self.proc.exitcode is not None:
       if now - self.started_at < self.QUICK_DEATH:
         self.backoff = min(self.BACKOFF_MAX, 2 * self.backoff or self.BACKOFF)
