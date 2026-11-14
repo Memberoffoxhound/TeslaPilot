@@ -143,7 +143,7 @@ class ParkOffroad:
       # ignition on (or toggle on): plain ignition behavior until the car leaves Park
       self._reset()
       self._ignition_prev = True
-    if autopark is not None and autopark in AUTOPARK_ACTIVE_STATES:
+    if autopark in AUTOPARK_ACTIVE_STATES:
       self._autopark_t = now
 
     if gear is not None:
