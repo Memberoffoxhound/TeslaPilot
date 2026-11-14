@@ -1,17 +1,8 @@
 """
-Jetlink's hooks into hardwared's hardware_thread, one object so hardwared.py
-carries one-line call sites. Ported from zoompilot develop 632b0b0
-(sunnypilot/system/hardware/hardwared_ext.py:15-68): the accelerator alert and
-the power-off; zoompilot's stock-ECU hand-back and forced offroad are not
-Jetlink's and stay out.
-
-An accelerator on its own supply outlives the comma, so a shutdown asks it to
-power off (jetlink's shutdown_step, which asks once and keeps its own
-deadline) and DoShutdown waits until jetlink says it may, or
-ACCELERATOR_OFF_WAIT_T has passed. hardware_thread keeps publishing
-deviceState through that wait, and no drive may start under the power-off that
-follows (powering_off is a startup condition). With the Jetlink setting off,
-As zoompilot hardwared_ext: always calls the adapter hooks.
+Jetlink's hooks into hardwared's hardware_thread (zoompilot develop 632b0b0,
+sunnypilot/system/hardware/hardwared_ext.py:15-68): the accelerator alert and the power-off.
+A shutdown asks the accelerator to power off and DoShutdown waits until jetlink allows it,
+or ACCELERATOR_OFF_WAIT_T; no drive may start meanwhile (powering_off is a startup condition).
 """
 import time
 from collections.abc import Callable
