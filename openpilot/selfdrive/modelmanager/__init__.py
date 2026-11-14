@@ -1,32 +1,5 @@
-"""Highland's model manager: the big-model catalog and pick, for Jetlink.
-
-Ported from zoompilot develop's wiring of sunnypilot's model manager
-(sunnypilot/models/{fetcher,fetcher_zp,helpers,manager}.py), cut down to what
-Highland can use, on jetlink v0.9.0's model index:
-
-  - with no chestnut fitted, the catalog is jetlink's own index
-    (jetlink_adapter.big_catalog), every big model a Jetson can run
-  - with a chestnut fitted, the chestnut catalog is still fetched over HTTP
-    (driving_models_chestnut_v27.json) for the board's own big model list
-  - the big-model pick, ModelManager_ActiveBundleChestnut, stored without
-    files: jetlink fetches and verifies the pick's ONNX itself, by its ref
-  - refresh, reset to default and the picker's status
-
-Not ported: sunnypilot's small-model bundles. Every one is a tinygrad pkl or
-ONNX for the model interface comma retired in commaai/openpilot#38916
-(img/big_img/desire_pulse/features_buffer, float16); Highland's modeld runs
-the interface that replaced it (new_img and history queues inside the ONNX),
-so none of them can load here. The small model stays the one in the tree.
-
-No sunnylink / cloud-saves: picks and the catalog live in params only.
-No Git LFS on the device for models: jetlink downloads ONNX itself.
-
-Bundles are plain dicts (the JSON the catalog lists, and in the params the
-camelCase form sunnypilot's capnp to_dict() writes), never capnp: Highland's
-cereal has no ModelManagerSP. Every key is read and written through
-store.get/put/remove, which fall back to the raw param file when the params
-library is older than the key.
-"""
+# Big-model catalog and pick for Jetlink, cut down from sunnypilot's model manager (via zoompilot).
+# Bundles are plain dicts; small-model bundles are not ported (retired model interface, #38916).
 from __future__ import annotations
 
 import re
@@ -89,10 +62,7 @@ def short_name(name: str) -> str:
 
 
 def to_slot(bundle: dict) -> dict:
-  """A catalog bundle as the pick param stores it: the camelCase dict
-  sunnypilot's ModelBundle.to_dict() writes, so jetlink (models.selected_slot)
-  and a sunnypilot reader see the same thing. models is empty: the pick is
-  stored without files, as sunnypilot does for a big model with no chestnut."""
+  # sunnypilot's ModelBundle.to_dict() form, no files: jetlink fetches the ONNX by ref
   overrides = bundle.get("overrides") or {}
   if isinstance(overrides, dict):
     overrides = [{"key": str(k), "value": str(v)} for k, v in overrides.items()]
