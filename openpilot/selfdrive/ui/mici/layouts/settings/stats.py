@@ -8,6 +8,7 @@ from datetime import date
 import raylib_nb as rl
 
 from openpilot.selfdrive.ui import tripstats
+from openpilot.selfdrive.ui.tripstats.store import STREAK_E
 from openpilot.selfdrive.ui.layouts.settings.common import theme_color
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app, FontWeight
@@ -149,9 +150,9 @@ class StatsEngageWidget(_StatsPage):
     lfont = gui_app.font(FontWeight.ROMAN)
     vfont = gui_app.font(FontWeight.BOLD)
     rows = (
-      ("Total Miles", _fmt_dist(float(v.get("life_m") or 0)), WHITE),
-      ("Engaged", _fmt_dist(float(v.get("life_e") or 0)), WHITE),
-      ("Longest streak", _fmt_dist(float(v.get("longest_m") or 0), tenths=True), theme_color()),
+      ("Total Miles", _fmt_dist(v["life_m"]), WHITE),
+      ("Engaged", _fmt_dist(v["life_e"]), WHITE),
+      ("Longest streak", _fmt_dist(v["longest_m"], tenths=True), theme_color()),
     )
     gap_lv = 12.0
     for lab_sz, val_sz in ((36, 34), (36, 32), (34, 30), (32, 28)):
@@ -167,7 +168,7 @@ class StatsEngageWidget(_StatsPage):
     cy = r.y + r.height / 2
     outer = ring_d / 2 - 1
     inner = outer - 13
-    pct = int(v.get("pct") or 0)
+    pct = v["pct"]
     gap = 26.0
     start = 90.0 + gap / 2
     track_span = 360.0 - gap
@@ -196,20 +197,16 @@ class StatsEngageWidget(_StatsPage):
     rl.draw_text_ex(sfont, sub, rl.Vector2(cx - sw.x / 2, ny + nw.y + 1), ssz, 0, LABEL)
 
     y = r.y + 8
-    streak = int(v.get("streak_days") or 0)
-    title = f"{streak} Day Streak"
+    title = f"{v['streak_days']} Day Streak"
     tw = measure_text_cached(vfont, title, lab_sz)
     rl.draw_text_ex(vfont, title, rl.Vector2(right - tw.x, y), lab_sz, 0, WHITE)
     y += 40
 
-    week = v.get("week_days") or []
     cr = 13.0
     step = 30.0
-    span = step * 7
-    left = right - span
-    for i in range(7):
-      on = i < len(week) and float((week[i] or {}).get("e") or 0) > 1
-      _draw_check(left + i * step + step / 2, y + cr, cr, on)
+    left = right - step * 7
+    for i, d in enumerate(v["week_days"]):
+      _draw_check(left + i * step + step / 2, y + cr, cr, d["e"] > STREAK_E)
     y += 36
 
     val_col_w = max((measure_text_cached(vfont, val, val_sz).x for _l, val, _c in rows), default=0.0)
@@ -238,15 +235,12 @@ class StatsWeekHWidget(_StatsPage):
     pad = 12.0
     font_b = gui_app.font(FontWeight.BOLD)
     rl.draw_text_ex(font_b, "Weekly Engaged", rl.Vector2(r.x + pad, r.y + 6), 36, 0, WHITE)
-    right = _fmt_pair(float(v.get("week_e") or 0), float(v.get("week_m") or 0))
+    right = _fmt_pair(v["week_e"], v["week_m"])
     rw = measure_text_cached(font_b, right, 30)
     rl.draw_text_ex(font_b, right, rl.Vector2(r.x + r.width - 18 - rw.x, r.y + 10), 30, 0, WHITE)
-    week = v.get("week_days") or [{"m": 0.0, "e": 0.0}] * 7
-    totals = [float(d.get("m") or 0) for d in week]
-    engaged = [float(d.get("e") or 0) for d in week]
-    current = int(v.get("today_i") or 0)
+    week = v["week_days"]
     chart = rl.Rectangle(r.x + pad, r.y + 46, r.width - pad - 18, r.height - 54)
-    _draw_hbars(chart, totals, engaged, current, _week_labels(week))
+    _draw_hbars(chart, [d["m"] for d in week], [d["e"] for d in week], v["today_i"], _week_labels(week))
 
 
 class StatsHistoryHWidget(_StatsPage):
@@ -256,24 +250,13 @@ class StatsHistoryHWidget(_StatsPage):
     pad = 12.0
     font_b = gui_app.font(FontWeight.BOLD)
     rl.draw_text_ex(font_b, "Monthly Engaged", rl.Vector2(r.x + pad, r.y + 6), 36, 0, WHITE)
-    life = _fmt_pair(float(v.get("life_e") or 0), float(v.get("life_m") or 0))
+    life = _fmt_pair(v["life_e"], v["life_m"])
     lw = measure_text_cached(font_b, life, 30)
     rl.draw_text_ex(font_b, life, rl.Vector2(r.x + r.width - 18 - lw.x, r.y + 10), 30, 0, WHITE)
-    months = v.get("months") or []
-    totals = [float(m.get("m") or 0) for m in months]
-    engaged = [float(m.get("e") or 0) for m in months]
-    current = 0
-    labels = []
-    for i, m in enumerate(months):
-      try:
-        mo = int(str(m.get("id") or "0-01").split("-")[1])
-        labels.append(MONTHS[mo - 1])
-      except (ValueError, IndexError):
-        labels.append("")
-      if m.get("current"):
-        current = i
+    months = v["months"]
     chart = rl.Rectangle(r.x + pad, r.y + 46, r.width - pad - 18, r.height - 54)
-    _draw_hbars(chart, totals, engaged, current, labels)
+    _draw_hbars(chart, [m["m"] for m in months], [m["e"] for m in months], len(months) - 1,  # the last month is current
+                [MONTHS[int(m["id"][5:7]) - 1] for m in months])
 
 
 class StatsLayoutMici(NavScroller):
@@ -282,5 +265,4 @@ class StatsLayoutMici(NavScroller):
     self._scroller._snap_items = True
     self._scroller._spacing = 0
     self._scroller._pad = 0
-    self._items = (StatsEngageWidget(), StatsWeekHWidget(), StatsHistoryHWidget())
-    self._scroller.add_widgets(list(self._items))
+    self._scroller.add_widgets([StatsEngageWidget(), StatsWeekHWidget(), StatsHistoryHWidget()])
