@@ -20,31 +20,22 @@ LINK_MODE_LABELS = {"off": "off", "usb": "usb", "ios": "iOS"}
 
 
 def link_mode() -> str:
-  """The setting as stored, one of MODES: the panel shows it even when
-  jetlink cannot run, so a link that will not start can be turned off."""
-  try:
-    index = ui_state.params.get(KEYS.link, return_default=True)
-  except Exception:
-    index = None
+  # stored setting, shown even when jetlink cannot run so it can be turned off
+  index = ui_state.params.get(KEYS.link, return_default=True)
   return MODES[index] if isinstance(index, int) and 0 <= index < len(MODES) else "off"
 
 
 def link_toggle_meaningful() -> bool:
-  """Offered wherever jetlink is checked out, as zoompilot: except beside a
-  chestnut; and while the setting is on, whatever else. Presence cannot be
-  the gate: with the link off there is no gadget for a Jetson to enumerate.
-  status() returning a Status (shown=False) with the link off is required
-  so the toggle that turns it on is offered."""
+  # not gated on presence: with the link off there is no gadget to enumerate
   if link_mode() != "off":
     return True
   return not ui_state.chestnut_present and ui_state.jetlink is not None
 
 
 def link_status(jetlink=None) -> str:
-  """One line: what is on the comma's USB-C port right now."""
   if jetlink is None:
     jetlink = ui_state.jetlink
-  port = getattr(jetlink, 'port_state', None) if jetlink is not None else None
+  port = getattr(jetlink, 'port_state', None)
   if port == "connected":
     return f"Jetlink connected: {jetlink.transport}."
   return {"empty": "Nothing on the USB port.", "device": "A device is on the USB port."}.get(port, "")
@@ -53,7 +44,7 @@ def link_status(jetlink=None) -> str:
 def big_model_progress(jetlink=None) -> tuple[str, float, str] | None:
   if jetlink is None:
     jetlink = ui_state.jetlink
-  progress = getattr(jetlink, 'progress', None) if jetlink is not None else None
+  progress = getattr(jetlink, 'progress', None)
   if not isinstance(progress, dict) or not progress:
     return None
   stage = str(progress.get('stage', ''))
