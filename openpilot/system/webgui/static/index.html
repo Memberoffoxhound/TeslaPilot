@@ -158,9 +158,8 @@ const mb=b=>b==null?"—":b>=1e9?(b/1e9).toFixed(1)+" GB":b>=1e6?(b/1e6).toFixed
 const dist=m=>m==null?"—":S.metric?m/1000:m/1609.344, U=()=>S.metric?"km":"mi";
 const fmtD=(m,dp=1)=>{const v=dist(m);return v==="—"?v:(v>=1000?Math.round(v).toLocaleString():v.toFixed(v>=100?0:dp))};
 const spd=v=>v==null?"—":Math.round(v*(S.metric?3.6:2.2369));
-async function api(u,o={}){const r=await fetch(u,{credentials:"same-origin",...o,headers:{"Content-Type":"application/json",...(o.headers||{})}});
+async function api(u,o={}){const r=await fetch(u,{...o,headers:{"Content-Type":"application/json",...(o.headers||{})}});
   const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.status);return j}
-
 
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{S.page=b.dataset.p;
   document.querySelectorAll("nav button").forEach(x=>x.classList.toggle("act",x===b));
@@ -198,9 +197,9 @@ function renderStats(d){
 function renderShots(items){
   $("gal").innerHTML=items.length?items.map(f=>`<button class="th" data-n="${esc(f.name)}"><img loading="lazy" src="/media/shots/${encodeURIComponent(f.name)}" alt=""><span>${esc(f.name.replace(".png","").replace("--"," "))}</span></button>`).join("")
     :`<div class="card empty" style="grid-column:1/-1">No screenshots yet</div>`;
-  $("gal").querySelectorAll(".th").forEach(b=>b.onclick=()=>openMedia(b.dataset.n,items.find(x=>x.name===b.dataset.n)));
+  $("gal").querySelectorAll(".th").forEach(b=>b.onclick=()=>openShot(b.dataset.n,items.find(x=>x.name===b.dataset.n)));
 }
-function openMedia(name,f){
+function openShot(name,f){
   const u=`/media/shots/${encodeURIComponent(name)}`;
   $("viewPane").innerHTML=`<img src="${u}" alt="">`+
     `<div class="row" style="border:0;margin-top:6px"><span>${esc(name)}</span><em>${mb(f&&f.size)}</em></div>
