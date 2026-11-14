@@ -19,11 +19,6 @@ def _sub():
   return _sm
 
 
-def _s(p, k: str) -> str:
-  v = p.get(k)
-  return v.decode(errors="replace") if isinstance(v, bytes) else (v or "")
-
-
 def drives_on_device(realdata: str) -> int | None:
   # "<route>--<seg>" dirs; route = everything before the last "--"
   try:
@@ -54,9 +49,9 @@ def _collect(data: str) -> dict:
     out["trips"], out["current"], out["timezone"] = None, None, None
 
   pers = p.get("LongitudinalPersonality")
-  out["sw"] = {"version": _s(p, "Version"), "branch": _s(p, "GitBranch"), "commit": _s(p, "GitCommit")[:9]}
+  out["sw"] = {"version": p.get("Version") or "", "branch": p.get("GitBranch") or "", "commit": (p.get("GitCommit") or "")[:9]}
   out["state"] = {"onroad": not p.get_bool("IsOffroad"), "engaged": p.get_bool("IsEngaged"), "metric": p.get_bool("IsMetric"),
-                  "route": _s(p, "CurrentRoute"), "personality": PERSONALITY.get(int(pers)) if pers is not None else None}
+                  "route": p.get("CurrentRoute") or "", "personality": PERSONALITY.get(int(pers)) if pers is not None else None}
   out["drives_on_device"] = drives_on_device(os.path.join(data, "media/0/realdata"))
 
   try:

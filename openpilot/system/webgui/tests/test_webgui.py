@@ -82,8 +82,7 @@ def test_param_keys_exist():
   src = (Path(stats.__file__).parents[2] / "common/params_keys.h").read_text()
   keys = set(re.findall(r'\{"(\w+)",', src))
   assert set(stats.PARAMS) <= keys
-  used = set(re.findall(r'p\.get(?:_bool)?\("(\w+)"', Path(stats.__file__).read_text()) +
-             re.findall(r'_s\(p, "(\w+)"\)', Path(stats.__file__).read_text()))
+  used = set(re.findall(r'p\.get(?:_bool)?\("(\w+)"', Path(stats.__file__).read_text()))
   assert used and used <= set(stats.PARAMS)
 
 
