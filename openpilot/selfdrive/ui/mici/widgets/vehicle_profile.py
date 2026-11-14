@@ -31,17 +31,9 @@ def make(CP) -> str:
   """tesla | kia | generic from CarParams (or None)."""
   if CP is None:
     return "generic"
-  brand = getattr(CP, "brand", "") or ""
-  if brand in ("", "mock"):
-    return "generic"
-  if brand == "tesla":
+  if CP.brand == "tesla":
     return "tesla"
   # HKG shares brand "hyundai"; Kia platforms are KIA_*
-  fp = getattr(CP, "carFingerprint", "") or ""
-  if brand == "hyundai" and fp.startswith("KIA_"):
+  if CP.brand == "hyundai" and CP.carFingerprint.startswith("KIA_"):
     return "kia"
   return "generic"
-
-
-def stock_make(CP) -> Make:
-  return MAKES[make(CP)]

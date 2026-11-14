@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from openpilot.selfdrive.ui.mici.widgets.vehicle_profile import MAKES, make, stock_make
+from openpilot.selfdrive.ui.mici.widgets.vehicle_profile import MAKES, make
 
 
 def CP(brand, fingerprint=""):
@@ -40,8 +40,3 @@ def test_oem_labels_and_assets():
   assert MAKES["tesla"].letter_sz == 11
   assert MAKES["tesla"].col_w == 16
 
-
-def test_stock_make_follows_cp():
-  assert stock_make(CP("tesla", "TESLA_MODEL_3")).stock_label == "TACC"
-  assert stock_make(CP("hyundai", "KIA_K5_2021")).stock_label == "SCC"
-  assert stock_make(CP("toyota", "TOYOTA_COROLLA")).text_rows == ("STOCK", "ACC")
