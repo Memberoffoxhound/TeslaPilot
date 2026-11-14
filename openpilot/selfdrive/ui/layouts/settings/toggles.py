@@ -216,7 +216,7 @@ class TogglesLayout(Widget):
 
       self._toggles[param] = toggle
 
-      # insert longitudinal personality + ALC cycle after NDOG toggle
+      # insert longitudinal personality after NDOG toggle
       if param == "DisengageOnAccelerator":
         self._toggles["LongitudinalPersonality"] = self._long_personality_setting
         self._toggles["CustomOnroadUi"] = self._onroad_ui_setting
@@ -257,10 +257,6 @@ class TogglesLayout(Widget):
     for toggle_def in self._toggle_defs:
       if self._toggle_defs[toggle_def][3] and toggle_def not in self._locked_toggles:
         self._toggles[toggle_def].action_item.set_enabled(not ui_state.engaged)
-
-    self._onroad_ui_setting.action_item.set_text(lambda: tr(onroad_ui_label(self._params)))
-    self._lane_color_setting.action_item.set_text(lambda: tr(lane_color_label(self._params)))
-    self._compass_size_setting.action_item.set_text(lambda: tr(compass_size_label(self._params)))
 
   def _render(self, rect):
     self._scroller.render(rect)
@@ -328,16 +324,10 @@ class TogglesLayout(Widget):
     self._params.put("LongitudinalPersonality", button_index, block=True)
 
   def _cycle_onroad_ui(self):
-    nxt = next_onroad_ui(self._params)
-    set_onroad_ui(nxt, self._params)
-    self._onroad_ui_setting.action_item.set_text(lambda: tr(onroad_ui_label(self._params)))
+    set_onroad_ui(next_onroad_ui(self._params), self._params)
 
   def _cycle_lane_color(self):
-    nxt = next_lane_color(self._params)
-    self._params.put("LaneColor", nxt, block=True)
-    self._lane_color_setting.action_item.set_text(lambda: tr(lane_color_label(self._params)))
+    self._params.put("LaneColor", next_lane_color(self._params), block=True)
 
   def _cycle_compass_size(self):
-    nxt = next_compass_size(self._params)
-    self._params.put("CompassSize", nxt, block=True)
-    self._compass_size_setting.action_item.set_text(lambda: tr(compass_size_label(self._params)))
+    self._params.put("CompassSize", next_compass_size(self._params), block=True)
