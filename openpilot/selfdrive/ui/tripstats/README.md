@@ -103,7 +103,7 @@ DriveSummaryLast = {"v": 2, "days": {"2026-10-29": [m, e], ...}, "life": [m, e],
 ```
 `m` is meters driven and `e` meters engaged. Each stored drive has `end` (UTC seconds), `off` (the zone's UTC offset then), `ok` (the clock was valid) and `shown` (its card came up). `open` holds drives not counted yet: the one in progress, or one that ended on a wrong clock. A missing or unreadable store starts fresh, and a single bad entry is dropped on its own.
 
-**Streaks.** A day counts with more than 1 m engaged. `view()` returns `streak_now`, the current run, and `streak_days`, the best run ever. The card and Statistics show the best run.
+**Streaks.** A day counts with more than 1 m engaged. `view()` returns `streak_days`, the best run ever, which the card and Statistics show.
 
 **Timeline layering.** As in connect (`src/actions/cached.js`, parseEvents), engaged, alert and override are separate events, and the one that started last is drawn on top. A bookmark is 1 second wide and drawn above everything. Stored drives keep one letter per bucket (`recorder.CODES`). The old "s" (stopped) draws blue, since connect has no stopped color.
 

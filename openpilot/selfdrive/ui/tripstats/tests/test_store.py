@@ -3,7 +3,7 @@ device-local days in more than one zone, and a drive ending by Park (Tesla) or b
 import ast
 import json
 import types
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -72,17 +72,15 @@ def test_months_and_lifetime():
 
 # -- streaks --------------------------------------------------------------------------------
 
-def test_streak_current_and_best():
+def test_streak_best():
   d = fresh()
   for day in (1, 2, 3, 4, 5, 10, 11, 12):
     d = add(d, drv(), wall(2026, 10, day, 12))
   d = add(d, drv(e=0.5), wall(2026, 10, 13, 12))      # driven, not engaged: doesn't count
-  assert store.streaks(d["days"], date(2026, 10, 12)) == (3, 5)
-  assert store.streaks(d["days"], date(2026, 10, 13)) == (3, 5)   # nothing engaged yet today: yesterday's run
-  assert store.streaks(d["days"], date(2026, 10, 14)) == (0, 5)
+  assert store.longest_streak(d["days"]) == 5
   v = store.view(d, at=at(2026, 10, 13, 12))
-  assert v["streak_now"] == 3 and v["streak_days"] == 5          # the card / Statistics show the best ever
-  assert store.streaks({}, date(2026, 10, 1)) == (0, 0)
+  assert v["streak_days"] == 5          # the card / Statistics show the best ever
+  assert store.longest_streak({}) == 0
 
 
 def test_best_streak_outlives_pruning():
@@ -98,7 +96,7 @@ def test_best_streak_outlives_pruning():
 def test_drive_in_progress_counts_today_and_streak():
   d = add(fresh(), drv(), wall(2026, 10, 28, 12))
   v = store.view(d, [drv(m=2000.0, e=2000.0, best_m=1500.0)], at=at(2026, 10, 29, 9))
-  assert v["today_m"] == 2000 and v["streak_now"] == 2 and v["longest_m"] == 1500 and v["life_m"] == 3000
+  assert v["today_m"] == 2000 and v["streak_days"] == 2 and v["longest_m"] == 1500 and v["life_m"] == 3000
   assert "2026-10-29" not in d["days"]                             # view never writes the store
 
 

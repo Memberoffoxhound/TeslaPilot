@@ -92,11 +92,11 @@ def add_drive(data: dict, drive: dict) -> dict:
   days[k] = [round(m0 + m, 1), round(e0 + e, 1)]
   return {**data, "days": days, "life": [round(data["life"][0] + m, 1), round(data["life"][1] + e, 1)],
           "record_m": round(max(data["record_m"], drive["best_m"]), 1),
-          "streak_max": max(data["streak_max"], streaks(days, date.fromisoformat(k))[1]), "last": drive}
+          "streak_max": max(data["streak_max"], longest_streak(days)), "last": drive}
 
 
-def streaks(days: dict, today: date) -> tuple[int, int]:
-  """(current, longest) runs of consecutive days engaged. Current ends today, or yesterday until today counts."""
+def longest_streak(days: dict) -> int:
+  """Longest run of consecutive days engaged."""
   on = {date.fromisoformat(k) for k, (_, e) in days.items() if e > STREAK_E}
   longest = 0
   for d in on:
@@ -105,10 +105,7 @@ def streaks(days: dict, today: date) -> tuple[int, int]:
       while d + timedelta(days=n) in on:
         n += 1
       longest = max(longest, n)
-  d, cur = today if today in on else today - timedelta(days=1), 0
-  while d in on:
-    d, cur = d - timedelta(days=1), cur + 1
-  return cur, longest
+  return longest
 
 
 def view(data: dict, open_drives=(), at: datetime | None = None, tz: tzinfo | None = None, first: int = 6) -> dict:
@@ -132,9 +129,9 @@ def view(data: dict, open_drives=(), at: datetime | None = None, tz: tzinfo | No
     months.append({"id": mk, "m": sum(v[0] for v in sel), "e": sum(v[1] for v in sel), "current": i == 0})
   tm, te = days.get(today.isoformat(), (0.0, 0.0))
   wm, we = sum(d["m"] for d in week), sum(d["e"] for d in week)
-  (lm, le), (cur, longest) = data["life"], streaks(days, today)
+  lm, le = data["life"]
   return {"today_m": tm, "today_e": te, "today_pct": engaged_pct(te, tm),
           "week_m": wm, "week_e": we, "week_pct": engaged_pct(we, wm), "week_days": week, "today_i": (today - start).days,
           "months": months,
           "life_m": lm, "life_e": le, "pct": engaged_pct(le, lm), "longest_m": data["record_m"],
-          "streak_days": max(data["streak_max"], longest), "streak_now": cur}
+          "streak_days": max(data["streak_max"], longest_streak(days))}
