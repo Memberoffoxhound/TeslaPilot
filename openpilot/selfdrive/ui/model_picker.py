@@ -1,10 +1,4 @@
-"""The Models page's logic, without a UI (tested in modelmanager/tests).
-
-Reads the model manager's params (catalog, pick, status) through
-modelmanager.store, so a stale params library never takes the UI down, and
-queues picks for modelmanagerd as sunnypilot's panel does: the ref goes in
-ModelManager_DownloadRef and the manager writes the pick. Nothing here raises.
-"""
+# Models page logic, no UI. Picks queue in ModelManager_DownloadRef for modelmanagerd, as sunnypilot does.
 from __future__ import annotations
 
 import time
@@ -21,15 +15,8 @@ SMALL_NOTE = ("The small model is the one Highland ships; it updates with Highla
               "in September 2026, so Highland's modeld cannot run them.")
 
 
-def _get(key):
-  try:
-    return store.get(key)
-  except Exception:
-    return None
-
-
 def bundles() -> list[dict]:
-  return catalog_bundles(_get(CACHE_BIG))
+  return catalog_bundles(store.get(CACHE_BIG))
 
 
 def folders() -> list[tuple[str, list[dict]]]:
@@ -41,21 +28,13 @@ def folders() -> list[tuple[str, list[dict]]]:
 
 
 def picked() -> dict | None:
-  pick = _get(ACTIVE_BIG)
+  pick = store.get(ACTIVE_BIG)
   return pick if isinstance(pick, dict) and pick.get("ref") else None
 
 
 def default_name() -> str:
-  """zoompilot's default_big_model: jetlink's default when no chestnut is fitted."""
-  try:
-    from openpilot.selfdrive.ui.ui_state import ui_state
-    return ja.default_big_model(getattr(ui_state, 'chestnut_present', False), getattr(ui_state, 'jetlink', None))
-  except Exception:
-    try:
-      from jetlink.registry.catalog import DEFAULT_BIG_MODEL_NAME
-      return str(DEFAULT_BIG_MODEL_NAME)
-    except Exception:
-      return DEFAULT_LABEL
+  from openpilot.selfdrive.ui.ui_state import ui_state
+  return ja.default_big_model(ui_state.chestnut_present, ui_state.jetlink)
 
 
 def big_model_label() -> str:
@@ -66,12 +45,12 @@ def big_model_label() -> str:
 
 
 def queued() -> str | None:
-  ref = _get(DOWNLOAD_REF)
+  ref = store.get(DOWNLOAD_REF)
   return str(ref) if ref else None
 
 
 def status() -> dict:
-  value = _get(STATUS)
+  value = store.get(STATUS)
   return value if isinstance(value, dict) else {}
 
 
