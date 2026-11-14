@@ -1113,6 +1113,7 @@ if HARDWARE.get_device_type() == 'mici':
       ET.USER_DISABLE: ImmediateDisableAlert("Reverse"),
       ET.NO_ENTRY: NoEntryAlert("Reverse"),
     },
+    EventName.personalityChanged: {},
   })
 
 
