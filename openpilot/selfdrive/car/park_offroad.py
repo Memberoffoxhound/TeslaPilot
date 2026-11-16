@@ -33,6 +33,7 @@ NONE, PARKING, PARKED = 0, 1, 2
 
 PARK_HOLD_S = 3.0        # Park held this long, not engaged, before going offroad
 MIN_OFFROAD_S = 3.0      # once latched, stay offroad at least this long before R/D can return
+MAX_OFFROAD_S = 10.0     # cap: return on R/D even if camerad never reports stopped
 RETURN_SAMPLES = 2       # consecutive R/D samples before coming back onroad (~0.1 s at 20 Hz)
 CAN_TIMEOUT_S = 2.0      # parked offroad with no valid gear frame this long: give up until ignition cycles
 AUTOPARK_HOLD_S = 1.5    # DI_state is 10 Hz; an active reading counts this long
@@ -116,7 +117,7 @@ class ParkOffroad:
     return self._autopark_t is not None and now - self._autopark_t <= AUTOPARK_HOLD_S
 
   def update(self, now: float, gear: int | None, ignition: bool, engaged: bool,
-             autopark: int | None = None, enabled: bool = True) -> bool:
+             autopark: int | None = None, enabled: bool = True, cam_stopped: bool = True) -> bool:
     if not enabled:
       self._reset()
       self._ign_off_t = None
@@ -154,8 +155,10 @@ class ParkOffroad:
     if gear in RETURN_GEARS:
       self._p_since = None
       if self.parked:
-        if self.autopark_active(now) or (self._parked_t is not None and now - self._parked_t < MIN_OFFROAD_S):
-          self._return_n = 0          # Summon, or min offroad dwell
+        dwell = now - self._parked_t if self._parked_t is not None else MAX_OFFROAD_S
+        ready = dwell >= MAX_OFFROAD_S or (dwell >= MIN_OFFROAD_S and cam_stopped)
+        if self.autopark_active(now) or not ready:
+          self._return_n = 0          # Summon, or wait for camerad / min dwell
         else:
           self._return_n += 1
           if self._return_n >= RETURN_SAMPLES:
@@ -257,7 +260,7 @@ def main() -> None:
     source = PARK_SOURCES.get(brand(params))
 
   can_sock = messaging.sub_sock("can", conflate=True, timeout=0)
-  sm = messaging.SubMaster(["pandaStates", "selfdriveState"])
+  sm = messaging.SubMaster(["pandaStates", "selfdriveState", "managerState"])
   ctrl = ParkOffroad()
   published = NONE
   rk = Ratekeeper(20, print_delay_threshold=None)
@@ -276,9 +279,12 @@ def main() -> None:
                   any(ps.ignitionLine or ps.ignitionCan for ps in sm["pandaStates"]))
       engaged = (sm.recv_frame["selfdriveState"] > 0 and now - sm.recv_time["selfdriveState"] < 1.0 and
                  sm["selfdriveState"].enabled)
+      # no/stale managerState: treat camerad as still running, so the 10 s cap governs
+      ms_ok = sm.recv_frame["managerState"] > 0 and now - sm.recv_time["managerState"] <= 2.0
+      cam_stopped = ms_ok and not any(p.name == "camerad" and p.running for p in sm["managerState"].processes)
       if now - on_t > 1.0:
         on, on_t = enabled(params), now
-      ctrl.update(now, gear, ignition, engaged, autopark, on)
+      ctrl.update(now, gear, ignition, engaged, autopark, on, cam_stopped)
       state = ctrl.state
       if state != published:
         put_state(params, state, block=True)

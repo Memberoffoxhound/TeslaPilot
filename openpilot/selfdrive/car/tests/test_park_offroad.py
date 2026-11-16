@@ -54,7 +54,7 @@ def frame_286(autopark):
   return (0x286, 0, bytes(dat))
 
 
-def run(ctrl, t0, seconds, gear, ignition=True, engaged=False, autopark=None, dt=0.05):
+def run(ctrl, t0, seconds, gear, ignition=True, engaged=False, autopark=None, dt=0.05, cam_stopped=True):
   """Feed synthetic 20 Hz samples; returns (end time, parked at end, first time parked flipped)."""
   t, flip, start = t0, None, ctrl.parked
   while t < t0 + seconds - 1e-9:
@@ -62,7 +62,7 @@ def run(ctrl, t0, seconds, gear, ignition=True, engaged=False, autopark=None, dt
     if autopark is not None:
       frames.append(frame_286(autopark))
     g, ap = po.sample(frames)
-    parked = ctrl.update(t, g, ignition, engaged, ap)
+    parked = ctrl.update(t, g, ignition, engaged, ap, cam_stopped=cam_stopped)
     if flip is None and parked != start:
       flip = t - t0
     t += dt
@@ -171,6 +171,42 @@ def test_rd_half_second_after_latch_waits_min_offroad(gear):
   t, parked, _ = run(ctrl, t, po.MIN_OFFROAD_S - 0.6, gear)   # until 2.9 s
   assert parked
   _, parked, flip = run(ctrl, t, 0.5, gear)
+  assert not parked and flip <= 0.2
+
+
+@pytest.mark.parametrize("gear", [po.GEAR_D, po.GEAR_R])
+def test_rd_waits_for_camerad_after_min_offroad(gear):
+  ctrl = po.ParkOffroad()
+  t = drive_then_park(ctrl)
+  t, parked, _ = run(ctrl, t, po.PARK_HOLD_S + 0.2, po.GEAR_P)
+  assert parked
+  t, parked, _ = run(ctrl, t, po.MIN_OFFROAD_S + 0.2, gear, cam_stopped=False)
+  assert parked
+  _, parked, flip = run(ctrl, t, 0.5, gear, cam_stopped=True)
+  assert not parked and flip <= 0.2
+
+
+@pytest.mark.parametrize("gear", [po.GEAR_D, po.GEAR_R])
+def test_rd_returns_at_max_offroad_if_camerad_never_stops(gear):
+  ctrl = po.ParkOffroad()
+  t = drive_then_park(ctrl)
+  t, parked, _ = run(ctrl, t, po.PARK_HOLD_S + 0.2, po.GEAR_P)
+  assert parked
+  t, parked, _ = run(ctrl, t, po.MAX_OFFROAD_S - 0.2, gear, cam_stopped=False)
+  assert parked
+  _, parked, flip = run(ctrl, t, 0.5, gear, cam_stopped=False)
+  assert not parked and flip <= 0.2
+
+
+@pytest.mark.parametrize("gear", [po.GEAR_D, po.GEAR_R])
+def test_rd_returns_at_min_offroad_if_camerad_already_stopped(gear):
+  ctrl = po.ParkOffroad()
+  t = drive_then_park(ctrl)
+  t, parked, _ = run(ctrl, t, po.PARK_HOLD_S + 0.2, po.GEAR_P)
+  assert parked
+  t, parked, _ = run(ctrl, t, po.MIN_OFFROAD_S - 0.2, gear, cam_stopped=True)
+  assert parked
+  _, parked, flip = run(ctrl, t, 0.5, gear, cam_stopped=True)
   assert not parked and flip <= 0.2
 
 
@@ -551,13 +587,17 @@ def test_parkd_main_loop_smoke(monkeypatch, tmp_path):
     def __init__(self, services):
       self.recv_frame = dict.fromkeys(services, 0)
       self.recv_time = dict.fromkeys(services, 0.0)
-      self.data = {"pandaStates": [], "selfdriveState": SimpleNamespace(enabled=False)}
+      self.data = {"pandaStates": [], "selfdriveState": SimpleNamespace(enabled=False),
+                   "managerState": SimpleNamespace(processes=[])}
 
     def update(self, timeout=0):
       _, ign = state()
       self.data["pandaStates"] = [SimpleNamespace(ignitionLine=False, ignitionCan=ign)]
       self.recv_frame["pandaStates"] += 1
       self.recv_time["pandaStates"] = clock.t
+      self.data["managerState"] = SimpleNamespace(processes=[SimpleNamespace(name="camerad", running=world.started)])
+      self.recv_frame["managerState"] += 1
+      self.recv_time["managerState"] = clock.t
 
     def __getitem__(self, k):
       return self.data[k]
