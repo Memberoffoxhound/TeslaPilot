@@ -32,6 +32,7 @@ PARAM_STATE = "ParkOffroadState"        # parkd's output (CLEAR_ON_MANAGER_START
 NONE, PARKING, PARKED = 0, 1, 2
 
 PARK_HOLD_S = 3.0        # Park held this long, not engaged, before going offroad
+MIN_OFFROAD_S = 3.0      # once latched, stay offroad at least this long before R/D can return
 RETURN_SAMPLES = 2       # consecutive R/D samples before coming back onroad (~0.1 s at 20 Hz)
 CAN_TIMEOUT_S = 2.0      # parked offroad with no valid gear frame this long: give up until ignition cycles
 AUTOPARK_HOLD_S = 1.5    # DI_state is 10 Hz; an active reading counts this long
@@ -100,6 +101,7 @@ class ParkOffroad:
     self.unavailable = False
     self._parking = False
     self._p_since: float | None = None
+    self._parked_t: float | None = None
     self._return_n = 0
     self._last_gear_t: float | None = None
     self._autopark_t: float | None = None
@@ -152,8 +154,8 @@ class ParkOffroad:
     if gear in RETURN_GEARS:
       self._p_since = None
       if self.parked:
-        if self.autopark_active(now):
-          self._return_n = 0          # Summon moving the car: stay offroad, relay open
+        if self.autopark_active(now) or (self._parked_t is not None and now - self._parked_t < MIN_OFFROAD_S):
+          self._return_n = 0          # Summon, or min offroad dwell
         else:
           self._return_n += 1
           if self._return_n >= RETURN_SAMPLES:
@@ -171,7 +173,7 @@ class ParkOffroad:
     fresh = self._last_gear_t is not None and now - self._last_gear_t <= CAN_TIMEOUT_S
     self._parking = fresh and self._p_since is not None and self.armed and not self.parked and not self.unavailable and not engaged
     if self._parking and now - self._p_since >= PARK_HOLD_S:
-      self.parked, self._parking = True, False
+      self.parked, self._parking, self._parked_t = True, False, now
 
     if self.parked and (self._last_gear_t is None or now - self._last_gear_t > CAN_TIMEOUT_S):
       # no gear frames offroad: never strand the device offroad with ignition on

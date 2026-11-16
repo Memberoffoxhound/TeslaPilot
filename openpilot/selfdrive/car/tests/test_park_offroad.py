@@ -154,10 +154,24 @@ def test_neutral_resets_the_hold_and_keeps_offroad():
 def test_d_or_r_returns_onroad_promptly(gear):
   ctrl = po.ParkOffroad()
   t = drive_then_park(ctrl)
-  t, parked, _ = run(ctrl, t, 4.0, po.GEAR_P)
+  t, parked, _ = run(ctrl, t, po.PARK_HOLD_S + po.MIN_OFFROAD_S + 0.2, po.GEAR_P)
   assert parked
   _, parked, flip = run(ctrl, t, 1.0, gear)
   assert not parked and flip <= 0.1
+
+
+@pytest.mark.parametrize("gear", [po.GEAR_D, po.GEAR_R])
+def test_rd_half_second_after_latch_waits_min_offroad(gear):
+  ctrl = po.ParkOffroad()
+  t = drive_then_park(ctrl)
+  t, parked, _ = run(ctrl, t, po.PARK_HOLD_S + 0.2, po.GEAR_P)
+  assert parked
+  t, parked, _ = run(ctrl, t, 0.3, po.GEAR_P)                 # 0.5 s after latch
+  assert parked
+  t, parked, _ = run(ctrl, t, po.MIN_OFFROAD_S - 0.6, gear)   # until 2.9 s
+  assert parked
+  _, parked, flip = run(ctrl, t, 0.5, gear)
+  assert not parked and flip <= 0.2
 
 
 def test_single_glitch_sample_does_not_return():
@@ -299,7 +313,7 @@ def test_state_parking_then_parked():
   assert ctrl.state == po.PARKING
   t, _, _ = run(ctrl, t, 2.5, po.GEAR_P)
   assert ctrl.state == po.PARKED
-  run(ctrl, t, 0.2, po.GEAR_D)
+  run(ctrl, t, po.MIN_OFFROAD_S + 0.2, po.GEAR_D)
   assert ctrl.state == po.NONE
 
 
