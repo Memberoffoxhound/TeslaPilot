@@ -74,11 +74,11 @@ Hold display 3s → `/data/media/0/screenshots`. Web GUI `system/webgui` on **80
 `jetlink_repo` is pinned at `9cfde98` (**v0.9.0**, adapter API 4). The comma, Jetson and phone runtime versions must agree.
 
 - `selfdrive/jetlink_adapter` uses Jetlink's `Stock` adapter and `Hooks`; keep it aligned with zoompilot's porting guide.
-- **Settings → models** offers the big-model picker and off/USB/iOS link setting. There is no charge-phone control; `JetlinkChargePhone` remains default-off because Jetlink's keys require it.
+- **Settings → models** offers the big-model picker and a jetlink over iPhone toggle; hardwared detects a chestnut or a Jetson over USB on its own (`system/hardware/accel_detect.py`). There is no charge-phone control; `JetlinkChargePhone` remains default-off because Jetlink's keys require it.
 - Both modes list Jetlink's model index, each with its own pick. Jetlink downloads its pick's ONNX; a chestnut compiles its pick on device, offroad, and falls back to the bundled comma big model.
 - Jetlink's `Status` and `/dev/shm/jetlink/modeld.json` feed the existing chestnut icons. Waiting is dim; active is green.
 - selfdrived reports available/lost/active events (`log.capnp` @107–109; Tesla step-aside is @106). A swap briefly blocks entry with `bigModelLoading`; link events do not disengage.
-- hardwared reports an unavailable accelerator and coordinates shutdown. The launch hook stops USB-C charging while the link is enabled; ADB is unavailable while Jetlink owns the port.
+- hardwared reports an unavailable accelerator and coordinates shutdown. The launch hook stops USB-C charging while the link is enabled; turning ADB on turns Jetlink off.
 - modeld retains the stock USB-host exclusion when detecting a chestnut cable and publishes `lat_delay` for the joining model.
 
 ## CommaView
