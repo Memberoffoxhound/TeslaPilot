@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from collections import namedtuple
 
+from openpilot.selfdrive.modeld.accel_keys import CHESTNUT_FAILED, CHESTNUT_PICK
+
 # sunnypilot's helpers.REQUIRED_JSON_VERSION on zoompilot develop: the catalog
 # entries this build lists, and the selector passed to big_catalog()
 REQUIRED_JSON_VERSION = 20
@@ -18,11 +20,9 @@ SYNC_BIG = "ModelManager_LastSyncTime_Chestnut"    # monotonic ns of the last fe
 DOWNLOAD_REF = "ModelManager_DownloadRef"          # a pick the UI queued; jetlink's keys.select
 STATUS = "ModelManager_Status"                     # what the manager is doing, for the UI
 # a chestnut keeps its own pick, so swapping hardware never drops the other's
-CHESTNUT_PICK = "ChestnutModelPick"
 CHESTNUT_CACHE = "ChestnutModelsCache"
 CHESTNUT_SYNC = "ChestnutModelsSync"
 CHESTNUT_REF = "ChestnutModelRef"
-CHESTNUT_FAILED = "ChestnutModelFailed"        # a pick that would not compile or load
 CHESTNUT_PROGRESS = "ChestnutCompileProgress"
 
 KEY_TYPES = {ACTIVE_BIG: "json", CACHE_BIG: "json", SYNC_BIG: "int", DOWNLOAD_REF: "str", STATUS: "json",

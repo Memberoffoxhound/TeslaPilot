@@ -7,10 +7,10 @@ from pathlib import Path
 
 from openpilot.common.hardware import AGNOS
 from openpilot.common.hardware.usb import CHESTNUT_USB_PRODUCT, USB_DEVICES_PATH, is_chestnut_usb_id
+from openpilot.selfdrive.modeld.accel_keys import CHESTNUT_PICK
 
 MODELS_DIR = Path(__file__).resolve().parent / 'models'
 CHESTNUT_DIR = Path('/data/models/chestnut')  # <ref>/driving_tinygrad.pkl, compiled on device
-CHESTNUT_PICK = 'ChestnutModelPick'
 
 
 def modeld_pkl_path(chestnut: bool):

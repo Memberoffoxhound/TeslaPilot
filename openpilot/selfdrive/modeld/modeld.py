@@ -41,6 +41,7 @@ from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive import jetlink_adapter
+from openpilot.selfdrive.modeld.accel_keys import CHESTNUT_FAILED
 from openpilot.selfdrive.modeld.helpers import (MODELS_DIR, chestnut_pick, chestnut_pick_pkl, chestnut_present, chestnut_compiled, modeld_pkl_path,
                                                load_oob, wait_for_chestnut)
 
@@ -255,7 +256,7 @@ def load_chestnut(params, cam_w, cam_h, model_state=None):
     except Exception:
       cloudlog.exception(f"big model load failed: {path or 'bundled'}")
       if path is not None:
-        params.put("ChestnutModelFailed", chestnut_pick(params) or "")
+        params.put(CHESTNUT_FAILED, chestnut_pick(params) or "")
   return None
 
 
