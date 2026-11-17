@@ -19,7 +19,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.common.hardware import AGNOS, HARDWARE
 from openpilot.common.version import get_build_metadata
-from openpilot.selfdrive.modeld.accel_keys import DEVICE_KEY
+from openpilot.selfdrive.modeld.accel_keys import BIG_MODEL, DEVICE_KEY
 
 LOCK_FILE = os.getenv("UPDATER_LOCK_FILE", "/tmp/safe_staging_overlay.lock")
 STAGING_ROOT = os.getenv("UPDATER_STAGING_ROOT", "/data/safe_staging")
@@ -172,9 +172,6 @@ def init_overlay() -> None:
   git_diff = run(["git", "diff", "--submodule=diff"], OVERLAY_MERGED)
   params.put("GitDiff", git_diff, block=True)
   cloudlog.info(f"git diff output:\n{git_diff}")
-
-
-BIG_MODEL = "openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl"
 
 
 def lfs_exclude(params) -> list[str]:

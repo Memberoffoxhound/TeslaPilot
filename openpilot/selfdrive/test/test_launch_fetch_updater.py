@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from openpilot.common.basedir import BASEDIR
+from openpilot.selfdrive.modeld import accel_keys
 
 LAUNCH = Path(BASEDIR) / 'launch_chffrplus.sh'
 UPDATER = 'openpilot/common/hardware/comma/updater'
@@ -53,6 +54,7 @@ def test_updater_pull_skips_the_big_model():
   s = LAUNCH.read_text()
   assert '"$DIR/tools/lfs.sh" pull --exclude "$BIG_MODEL"' in s
   assert 'BIG_MODEL="openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl"' in s
+  assert f'BIG_MODEL="{accel_keys.BIG_MODEL}"' in s
   assert s.index('fetch_big_model &') < s.index('    agnos_init\n')
   assert 'scripts/fetch_big_model.py' in s
 

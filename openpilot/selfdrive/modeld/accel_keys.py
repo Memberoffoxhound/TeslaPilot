@@ -1,4 +1,5 @@
 # accelerator param names and paths, stdlib only so any process can import it
+BIG_MODEL = 'openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl'  # repo-relative; launch_chffrplus.sh repeats it
 CHESTNUT_PICK = 'ChestnutModelPick'
 CHESTNUT_FAILED = 'ChestnutModelFailed'  # a pick that would not compile or load
 

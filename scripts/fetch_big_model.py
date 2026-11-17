@@ -10,8 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT))
 import lfs
-
-PKL = 'openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl'
+from openpilot.selfdrive.modeld.accel_keys import BIG_MODEL as PKL
 
 
 def partial(oid: str) -> Path:
