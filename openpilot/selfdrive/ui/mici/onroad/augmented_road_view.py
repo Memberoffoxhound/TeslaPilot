@@ -13,7 +13,7 @@ from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.mici.onroad.navigation import NavigationPanel, PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.confidence_ball import ConfidenceBall
 from openpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
-from openpilot.selfdrive.ui.layouts.settings.common import custom_onroad_ui
+from openpilot.selfdrive.ui.layouts.settings.common import custom_onroad_ui, compass_size, COMPASS_LARGE
 from openpilot.system.ui.lib.application import FontWeight, gui_app, MousePos, MouseEvent, TextAlignment, TextAlignmentVertical
 from openpilot.system.ui.widgets.label import UnifiedLabel
 from openpilot.system.ui.widgets import Widget
@@ -39,6 +39,7 @@ ROAD_CAM_MIN_SPEED = 10.0  # m/s (22 mph)
 
 CAM_Y_OFFSET = 20
 LEFT_COLUMN_WIDTH = 92
+LONG_RECT_W, LONG_RECT_BOTTOM, LONG_MARGIN = 64, 168, 10  # personality bars end 10 px above the video bottom
 
 
 class BookmarkIcon(Widget):
@@ -263,6 +264,12 @@ class AugmentedRoadView(CameraView):
       self._confidence_ball.set_left(custom_onroad_ui(), self._hud_renderer.set_speed_alpha())
       self._confidence_ball.render(self._content_rect)
     self._hud_renderer.render(self._content_rect)
+    # with the small compass the personality moves to the video's bottom right, under alerts
+    small_compass = custom_onroad_ui() and compass_size() != COMPASS_LARGE
+    if small_compass:
+      c = self._content_rect
+      self._long_indicator.set_should_draw(alert_to_render is None)
+      self._long_indicator.render(rl.Rectangle(c.x + c.width - LONG_MARGIN - LONG_RECT_W, c.y + c.height - LONG_RECT_BOTTOM, LONG_RECT_W, c.height))
     self._alert_renderer.render(self._content_rect)
 
     # Draw fake rounded border
@@ -285,8 +292,12 @@ class AugmentedRoadView(CameraView):
     dm_size = self._driver_state_renderer.rect.width
     self._driver_state_renderer.set_position(left_rect.x + (left_rect.width - dm_size) / 2, left_rect.y + 36 - dm_size / 2)
     self._driver_state_renderer.render()
-    self._long_indicator.set_should_draw(not show_navigation or not self._hud_renderer.drawing_top_icons())
-    self._long_indicator.render(left_rect)
+    top_ok = not show_navigation or not self._hud_renderer.drawing_top_icons()
+    if small_compass:
+      self._hud_renderer.render_small_compass(left_rect, top_ok)
+    else:
+      self._long_indicator.set_should_draw(top_ok)
+      self._long_indicator.render(left_rect)
     self._hud_renderer.render_steering_wheel(left_rect)
 
     # Custom UI extension point - add custom overlays here

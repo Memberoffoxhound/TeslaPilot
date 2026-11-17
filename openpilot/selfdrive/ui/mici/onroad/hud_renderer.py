@@ -122,6 +122,7 @@ class HudRenderer(Widget):
     self._compass_letter: str | None = None
     self._heading_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps, initialized=False)
     self._compass_fade = FirstOrderFilter(0.0, 0.05, 1 / gui_app.target_fps)
+    self._compass_dim = FirstOrderFilter(1.0, 0.05, 1 / gui_app.target_fps)
     self._wheel_alpha_filter = FirstOrderFilter(0, 0.05, 1 / gui_app.target_fps)
     self._wheel_color_filters = [FirstOrderFilter(c, 0.05, 1 / gui_app.target_fps) for c in WHEEL_WHITE]
     self._wheel_glow_filter = FirstOrderFilter(0, 0.05, 1 / gui_app.target_fps)
@@ -185,6 +186,9 @@ class HudRenderer(Widget):
 
     self._draw_model_source(rect)
     self._draw_compass(rect)
+
+  def render_small_compass(self, rect: rl.Rectangle, visible: bool) -> None:
+    self._draw_compass(rect, visible)
 
   def render_steering_wheel(self, rect: rl.Rectangle) -> None:
     """Draw the steering wheel centered at the bottom of rect, after render() has updated state."""
@@ -251,7 +255,11 @@ class HudRenderer(Widget):
                         rl.Rectangle(pos_x, pos_y, wheel_txt.width, wheel_txt.height),
                         rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(255, 255, 255, int(alpha * glow)))
 
-  def _draw_compass(self, rect: rl.Rectangle) -> None:
+  def _draw_compass(self, rect: rl.Rectangle, panel_visible: bool | None = None) -> None:
+    # large draws from render(), small from the side panel
+    large = compass_size() == COMPASS_LARGE
+    if large == (panel_visible is not None):
+      return
     letter, deg = heading_letter(), heading_deg()
     if letter:
       self._compass_letter = letter
@@ -261,11 +269,11 @@ class HudRenderer(Widget):
     heading, letter = self._heading_filter.x, self._compass_letter
 
     custom = custom_onroad_ui()
-    large = compass_size() == COMPASS_LARGE
-    # large sits under alerts, the small one shares its spot with the set speed box
-    shown = custom and ui_state.status != UIStatus.DISENGAGED and (self._can_draw_top_icons if large else self._set_speed_alpha_filter.x < 1e-2)
+    # large sits under alerts and hides disengaged, small dims like the other panel icons
+    shown = custom and (self._can_draw_top_icons and ui_state.status != UIStatus.DISENGAGED if large else bool(panel_visible))
     self._compass_fade.update(1.0 if shown else 0.0)
-    a = int(255 * 0.9 * self._compass_fade.x)
+    dim = self._compass_dim.update(1.0 if large or ui_state.status != UIStatus.DISENGAGED else DIMMED_ICON_ALPHA / 0.9)
+    a = int(255 * 0.9 * self._compass_fade.x * dim)
     if not custom or a < 3:
       return
     if large:
@@ -274,7 +282,7 @@ class HudRenderer(Widget):
       bg, fan_tex = self._txt_compass_bg90, self._txt_compass_fan90
     else:
       size, fan, sz = 60, 52, 28
-      cx, cy = rect.x + 16 + size / 2, rect.y + rect.height / 2
+      cx, cy = rect.x + rect.width / 2, rect.y + rect.height / 2
       bg, fan_tex = self._txt_compass_bg, self._txt_compass_fan
     fade = rl.Color(255, 255, 255, a)
     rl.draw_texture_ex(bg, rl.Vector2(cx - size / 2, cy - size / 2), 0.0, 1.0, fade)
