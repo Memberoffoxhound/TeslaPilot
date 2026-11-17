@@ -9,13 +9,14 @@ class FakeParams(dict):
     self[key] = value
 
 
-def test_card_copy():
-  chestnut = "Settings have been updated to manage your chestnut. The comma big model is ready. You can change your model in Settings, Models."
-  assert ac.card('chestnut') == ("Chestnut connected", chestnut)
-  assert ac.card('chestnut', False)[1].endswith("The comma big model is downloading. You can change your model in Settings, Models.")
-  jetlink = "Settings have been updated to manage Jetlink. You can change your model in Settings, Models."
-  assert ac.card('jetlink') == ("Jetlink connected", jetlink)
+def test_card_pages():
+  line = "You can see progress and change your model in Settings, Models."
+  assert ac.card('chestnut') == ("Chestnut connected", ["Settings have been updated to manage your chestnut.",
+                                                        "The comma big model is ready.", line])
+  assert ac.card('chestnut', False)[1][1] == "The comma big model downloads the first time. The chestnut icon fills as it downloads."
+  assert ac.card('jetlink') == ("Jetlink connected", ["Settings have been updated to manage Jetlink.", line])
   assert ac.card('none') is None
+  assert not any('\u2014' in p for m in ('chestnut', 'jetlink') for p in ac.card(m)[1])
 
 
 def test_due_once_per_device():
