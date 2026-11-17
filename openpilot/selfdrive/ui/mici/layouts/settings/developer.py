@@ -125,8 +125,7 @@ class DeveloperLayoutMici(NavScroller):
     # Disable toggles that require offroad
     for item in onroad_blocked_toggles:
       item.set_enabled(lambda: ui_state.is_offroad())
-    # Jetlink holds the USB port that ADB needs (zoompilot does the same)
-    self._adb_toggle.set_enabled(lambda: ui_state.is_offroad() and not ui_state.adb_blocked)
+    self._adb_toggle.set_enabled(lambda: ui_state.is_offroad())
 
     # Disable toggles that require not engaged
     for item in engaged_blocked_toggles:

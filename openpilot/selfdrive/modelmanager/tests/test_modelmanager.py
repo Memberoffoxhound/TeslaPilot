@@ -462,7 +462,7 @@ def page(monkeypatch):
   jetlink = SimpleNamespace(active_model=None, standin=None, progress={'stage': 'download', 'frac': 0.5, 'msg': 'train track'})
   fakes = {
     'openpilot.selfdrive.ui.mici.widgets.button': {'BigButton': _Widget, 'GreyBigButton': _Widget, 'BigToggle': _Toggle},
-    'openpilot.selfdrive.ui.mici.layouts.settings.model_widgets': {'CurrentModelInfo': _Info, 'JetlinkLinkToggle': _Link},
+    'openpilot.selfdrive.ui.mici.layouts.settings.model_widgets': {'CurrentModelInfo': _Info, 'JetlinkIosToggle': _Link},
     'openpilot.selfdrive.ui.ui_state': {'ui_state': SimpleNamespace(started=False, jetlink=jetlink, chestnut_present=False,
                                                                     chestnut_state=SimpleNamespace(value='loading'))},
     'openpilot.system.ui.lib.application': {'gui_app': gui},

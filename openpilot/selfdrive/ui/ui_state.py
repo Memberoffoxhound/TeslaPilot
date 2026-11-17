@@ -111,9 +111,8 @@ class UIState:
     self.usb_unknown: bool = False
     self.chestnut_state = ChestnutState.DISCONNECTED
     # Jetlink (zoompilot ui_state_zp): status snapshot, None with a chestnut fitted;
-    # joining state from its runtime record; adb_blocked while it holds the USB port
+    # joining state from its runtime record
     self.jetlink = None
-    self.adb_blocked: bool = False
     self._accelerator_state_name: str = 'none'
     self.started: bool = False
     self.ignition: bool = False
@@ -256,13 +255,6 @@ class UIState:
       self._accelerator_state_name = getattr(runtime, 'state', None) or 'none'
     except Exception:
       self.jetlink, self._accelerator_state_name = None, 'none'
-    self._enforce_usb_port()
-
-  def _enforce_usb_port(self) -> None:
-    """ADB and Jetlink share the USB port: the link on turns ADB off (zoompilot ui_state_zp)."""
-    self.adb_blocked = self.jetlink is not None and self.jetlink.holds_port
-    if self.adb_blocked and self.params.get_bool("AdbEnabled"):
-      self.params.put_bool("AdbEnabled", False, block=True)
 
   def _update_chestnut_state(self) -> None:
     if (view := self.jetlink_view) is not None:

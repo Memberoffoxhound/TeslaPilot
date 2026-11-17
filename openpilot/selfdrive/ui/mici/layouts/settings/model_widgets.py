@@ -2,9 +2,8 @@
 import raylib_nb as rl
 
 from openpilot.common.params import Params
-from openpilot.selfdrive import jetlink_adapter
-from openpilot.selfdrive.ui.accelerator_link import LINK_MODE_LABELS, link_mode
-from openpilot.selfdrive.ui.mici.widgets.button import BigMultiToggle
+from openpilot.selfdrive.ui.accelerator_link import IOS_KEY
+from openpilot.selfdrive.ui.mici.widgets.button import BigToggle
 from openpilot.system.ui.lib.application import FontWeight
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import UnifiedLabel
@@ -38,23 +37,18 @@ class CurrentModelInfo(Widget):
     self.info_text.render()
 
 
-class JetlinkLinkToggle(BigMultiToggle):
+class JetlinkIosToggle(BigToggle):
   def __init__(self):
-    super().__init__("jetlink", [LINK_MODE_LABELS[m] for m in jetlink_adapter.MODES], select_callback=self._select,
-                     description="Runs big models on a computer or phone plugged into the comma.\n" +
-                                 "USB for a Mac, Jetson, Linux PC or Android. iOS for an iPhone or iPad.\n" +
-                                 "Turns off ADB. The small model drives until the big model is ready.")
+    super().__init__("jetlink over iPhone", toggle_callback=self._toggle,
+                     description="Runs big models on an iPhone or iPad plugged into the comma.\n" +
+                                 "A Jetson over USB is found on its own. Turn ADB off to use Jetlink.")
     self.refresh()
 
   def refresh(self) -> None:
-    value = LINK_MODE_LABELS[link_mode()]
-    if value != self.value:
-      self.set_value(value)
+    self.set_checked(Params().get_bool(IOS_KEY))
 
-  def _select(self, value: str) -> None:
+  def _toggle(self, checked: bool) -> None:
     try:
-      mode = next(m for m, label in LINK_MODE_LABELS.items() if label == value)
-      Params().put(jetlink_adapter.KEYS.link, jetlink_adapter.MODES.index(mode), block=True)
+      Params().put_bool(IOS_KEY, checked, block=True)
     except Exception:
       pass
-    self.refresh()

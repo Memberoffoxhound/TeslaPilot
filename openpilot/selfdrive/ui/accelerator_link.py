@@ -7,32 +7,18 @@ Ported to Highland from zoompilot develop
 zoompilot Jetlink UI commits merge cleanly; import path is Highland's
 openpilot.selfdrive.jetlink_adapter.
 
-The user's say over the Jetlink setting, shared by the models panel:
-Off, USB (a Jetson, a Linux PC or a Mac) or iOS (an iPhone), stored as an
-index into the adapter's MODES. Everything else reads ui_state.jetlink.
+Models panel helpers. Everything reads ui_state.jetlink; the link itself is
+switched by hardwared's accel_detect.
 """
 from __future__ import annotations
 
-from openpilot.selfdrive.jetlink_adapter import KEYS, MODES
 from openpilot.selfdrive.ui.ui_state import ui_state
 
-LINK_MODE_LABELS = {"off": "off", "usb": "usb", "ios": "iOS"}
+IOS_KEY = "JetlinkIos"  # iPhone is manual; a Jetson over USB is auto-detected (accel_detect.py)
 
 
-def link_mode() -> str:
-  # stored setting, shown even when jetlink cannot run so it can be turned off
-  try:
-    index = ui_state.params.get(KEYS.link, return_default=True)
-  except Exception:
-    index = None
-  return MODES[index] if isinstance(index, int) and 0 <= index < len(MODES) else "off"
-
-
-def link_toggle_meaningful() -> bool:
-  # not gated on presence: with the link off there is no gadget to enumerate
-  if link_mode() != "off":
-    return True
-  return not ui_state.chestnut_present and ui_state.jetlink is not None
+def ios_toggle_meaningful() -> bool:
+  return not ui_state.chestnut_present
 
 
 def link_status(jetlink=None) -> str:

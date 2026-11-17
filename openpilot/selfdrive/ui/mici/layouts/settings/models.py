@@ -1,7 +1,7 @@
 # Settings -> models: zoompilot's mici models panel on Highland widgets. Logic: model_picker.py, accelerator_link.py.
 from openpilot.selfdrive.ui import accelerator_link as al
 from openpilot.selfdrive.ui import model_picker as mp
-from openpilot.selfdrive.ui.mici.layouts.settings.model_widgets import CurrentModelInfo, JetlinkLinkToggle
+from openpilot.selfdrive.ui.mici.layouts.settings.model_widgets import CurrentModelInfo, JetlinkIosToggle
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, GreyBigButton
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
@@ -24,7 +24,7 @@ class ModelsLayoutMici(NavScroller):
     self._big.set_click_callback(self._show_folders)
     self._big.set_enabled(_offroad)
     # locked onroad: jetlink switches the link only when parked
-    self._link = JetlinkLinkToggle()
+    self._link = JetlinkIosToggle()
     self._link.set_enabled(_offroad)
     self._refresh = BigButton("refresh models", mp.list_label(), description="Fetches the latest list of big models.")
     self._refresh.set_click_callback(mp.refresh)
@@ -108,6 +108,6 @@ class ModelsLayoutMici(NavScroller):
       self._set(self._refresh, mp.list_label())
       self._info.set_info(*self._model_info())
       self._link.refresh()
-      self._link.set_visible(al.link_toggle_meaningful())
+      self._link.set_visible(al.ios_toggle_meaningful())
     except Exception:
       pass
