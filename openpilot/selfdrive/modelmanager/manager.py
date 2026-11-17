@@ -34,10 +34,10 @@ class ModelManager:
     last = store.get(slot.sync) or 0
     return last == 0 or int(self.clock() * 1e9) - last >= CACHE_TIMEOUT * 1e9
 
-  def refresh_catalog(self, slot=None, force: bool = False) -> bool:
+  def refresh_catalog(self, slot=None) -> bool:
     """Fetch the catalog if it is due. True when a new one was cached."""
     slot = slot or self.slot()
-    if not force and not self._expired(slot):
+    if not self._expired(slot):
       return False
     self.report(state="fetching")
     try:
