@@ -13,6 +13,7 @@ from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.mici.onroad.navigation import NavigationPanel, PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.confidence_ball import ConfidenceBall
 from openpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
+from openpilot.selfdrive.ui.layouts.settings.common import custom_onroad_ui
 from openpilot.system.ui.lib.application import FontWeight, gui_app, MousePos, MouseEvent, TextAlignment, TextAlignmentVertical
 from openpilot.system.ui.widgets.label import UnifiedLabel
 from openpilot.system.ui.widgets import Widget
@@ -256,12 +257,13 @@ class AugmentedRoadView(CameraView):
     self._hud_renderer.set_torque_bar_hidden(alert_to_render is not None and alert_to_render.status == log.SelfdriveState.AlertStatus.critical)
     self._hud_renderer.set_wheel_critical_icon(alert_to_render is not None and not not_animating_out and
                                                alert_to_render.visual_alert == car.CarControl.HUDControl.VisualAlert.steerRequired)
-    self._hud_renderer.render(self._content_rect)
-    self._alert_renderer.render(self._content_rect)
-
+    # ball under the hud and alerts
     if not show_navigation:
       self._confidence_ball.set_hidden(alert_to_render is not None and not not_animating_out)
+      self._confidence_ball.set_left(custom_onroad_ui(), self._hud_renderer.set_speed_alpha())
       self._confidence_ball.render(self._content_rect)
+    self._hud_renderer.render(self._content_rect)
+    self._alert_renderer.render(self._content_rect)
 
     # Draw fake rounded border
     rl.draw_rectangle_rounded_lines_ex(self._content_rect, 0.2 * 1.02, 10, 50, rl.BLACK)

@@ -34,9 +34,15 @@ class ConfidenceBall(Widget):
     self._confidence_filter = FirstOrderFilter(0.0, 0.5, 1 / gui_app.target_fps)
     self._alpha_filter = FirstOrderFilter(1.0, 0.05, 1 / gui_app.target_fps)
     self._hidden = False
+    self._left = False
+    self._occlusion = 0.0
 
   def set_hidden(self, hidden: bool):
     self._hidden = hidden
+
+  def set_left(self, left: bool, occlusion: float = 0.0):
+    # on the left it sits under the set speed, so fade with it
+    self._left, self._occlusion = left, occlusion if left else 0.0
 
   def _update_state(self):
     # rests at the bottom while disengaged
@@ -47,14 +53,14 @@ class ConfidenceBall(Widget):
                                                         (1 - max(ui_state.sm['modelV2'].meta.disengagePredictions.steerOverrideProbs or [1])))
 
   def _render(self, _):
-    alpha = self._alpha_filter.update(0.0 if self._hidden else 1.0)
+    alpha = self._alpha_filter.update(0.0 if self._hidden else 1.0) * (1 - self._occlusion)
     if alpha < 1e-2:
       return
 
-    # drawn over the right edge of the camera view
+    # drawn over the left or right edge of the camera view
     status_dot_radius = 16
     margin = 10
-    dot_x = self._rect.x + self._rect.width - margin - status_dot_radius
+    dot_x = self._rect.x + margin + status_dot_radius if self._left else self._rect.x + self._rect.width - margin - status_dot_radius
     dot_height = (1 - self._confidence_filter.x) * (self._rect.height - 2 * (status_dot_radius + margin)) + status_dot_radius + margin
     dot_height = self._rect.y + dot_height
 

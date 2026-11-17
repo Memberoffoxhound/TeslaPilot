@@ -138,6 +138,9 @@ class HudRenderer(Widget):
     """Set whether to draw the top part of the HUD."""
     self._can_draw_top_icons = can_draw_top_icons
 
+  def set_speed_alpha(self) -> float:
+    return self._set_speed_alpha_filter.x
+
   def drawing_top_icons(self) -> bool:
     # whether we're drawing any top icons currently
     return bool(self._set_speed_alpha_filter.x > 1e-2)
