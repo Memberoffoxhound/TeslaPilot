@@ -172,6 +172,11 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ModelManager_LastSyncTime_Chestnut", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"ModelManager_DownloadRef", {CLEAR_ON_MANAGER_START, STRING}},
     {"ModelManager_Status", {CLEAR_ON_MANAGER_START, JSON}},
+    // chestnut's own pick and catalog
+    {"ChestnutModelPick", {PERSISTENT, JSON}},
+    {"ChestnutModelsCache", {PERSISTENT, JSON}},
+    {"ChestnutModelsSync", {CLEAR_ON_MANAGER_START, INT, "0"}},
+    {"ChestnutModelRef", {CLEAR_ON_MANAGER_START, STRING}},
     {"ChestnutRetry", {CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_ON, BOOL}},
     {"Version", {PERSISTENT, STRING}},
 };

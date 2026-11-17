@@ -1,92 +1,68 @@
 #!/usr/bin/env python3
-# modelmanagerd: keeps the big-model catalog fresh and applies the UI's pick. Offroad only.
+# modelmanagerd: keeps the active accelerator's catalog fresh and applies the UI's pick. Offroad only.
 from __future__ import annotations
 
-import json
 import time
-import urllib.request
 
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive import jetlink_adapter as ja
-from openpilot.selfdrive.modelmanager import (ACTIVE_BIG, CACHE_BIG, CACHE_TIMEOUT, CATALOG_URL, DOWNLOAD_REF, JETLINK_KEY,
-                                              REQUIRED_JSON_VERSION, STATUS, SYNC_BIG, catalog_bundles, find_bundle,
-                                              is_jetlinks, to_slot)
+from openpilot.selfdrive.modelmanager import (CACHE_TIMEOUT, REQUIRED_JSON_VERSION, STATUS, catalog_bundles, find_bundle,
+                                              slot_for, to_slot)
 from openpilot.selfdrive.modelmanager import store
 
-FETCH_TIMEOUT = 10.0
 RETRY_AFTER = (30.0, 60.0, 120.0, 300.0)
 
 
-def http_fetch(url: str = CATALOG_URL, timeout: float = FETCH_TIMEOUT) -> dict:
-  request = urllib.request.Request(url, headers={"User-Agent": "highland-modelmanager"})
-  with urllib.request.urlopen(request, timeout=timeout) as response:
-    return json.loads(response.read(16 << 20))
+def index_catalog() -> dict | None:
+  return ja.big_catalog(REQUIRED_JSON_VERSION)
 
 
 class ModelManager:
-  def __init__(self, fetch=http_fetch, clock=time.monotonic, wall=None, log=None):
+  def __init__(self, fetch=index_catalog, clock=time.monotonic, wall=None, log=None, mode=None):
     self.fetch = fetch
     self.clock = clock
     self.wall = wall or (lambda: time.time())  # noqa: TID251  the fetch time the UI shows
     self.log = log or cloudlog
+    self.mode = mode or ja.accel_mode
     self.failures = 0
-    self._refetched_for: bool | None = None
     self._status: dict = {}
 
-  def _expired(self, cached) -> bool:
-    last = store.get(SYNC_BIG) or 0
-    if last == 0 or int(self.clock() * 1e9) - last >= CACHE_TIMEOUT * 1e9:
-      return True
-    if not catalog_bundles(cached):
-      return False  # a failed fetch's back-off is still running
-    # fetched for other hardware (a chestnut came or went): once per change
-    jetlink = bool(ja.lists_big_models())
-    if is_jetlinks(cached) != jetlink and self._refetched_for != jetlink:
-      self._refetched_for = jetlink
-      self.log.warning(f"modelmanagerd: catalog was fetched for {'a chestnut' if jetlink else 'jetlink'}; refetching")
-      return True
-    return False
+  def slot(self):
+    return slot_for(self.mode())
 
-  def _fetch_catalog(self) -> dict | None:
-    """Jetlink's index when no chestnut is fitted; else the chestnut HTTP catalog."""
-    if ja.lists_big_models():
-      catalog = ja.big_catalog(REQUIRED_JSON_VERSION)
-      if catalog is None:
-        return None
-      return {**catalog, JETLINK_KEY: True}
-    data = self.fetch()
-    if not catalog_bundles(data):
-      raise ValueError("catalog lists no usable models")
-    return {**data, JETLINK_KEY: False}
+  def _expired(self, slot) -> bool:
+    last = store.get(slot.sync) or 0
+    return last == 0 or int(self.clock() * 1e9) - last >= CACHE_TIMEOUT * 1e9
 
-  def refresh_catalog(self, force: bool = False) -> bool:
+  def refresh_catalog(self, slot=None, force: bool = False) -> bool:
     """Fetch the catalog if it is due. True when a new one was cached."""
-    cached = store.get(CACHE_BIG)
-    if not force and not self._expired(cached):
+    slot = slot or self.slot()
+    if not force and not self._expired(slot):
       return False
     self.report(state="fetching")
     try:
-      data = self._fetch_catalog()
+      data = self.fetch()
       if data is None:
-        raise ValueError("jetlink big-model list unavailable")
+        raise ValueError("model index unavailable")
       if not catalog_bundles(data):
         raise ValueError("catalog lists no usable models")
-      store.put(CACHE_BIG, data)
-      store.put(SYNC_BIG, int(self.clock() * 1e9))
+      store.put(slot.cache, data)
+      store.put(slot.sync, int(self.clock() * 1e9))
     except Exception as e:
       self.failures += 1
       delay = RETRY_AFTER[min(self.failures, len(RETRY_AFTER)) - 1]
-      store.put(SYNC_BIG, int((self.clock() - CACHE_TIMEOUT + delay) * 1e9))
+      store.put(slot.sync, int((self.clock() - CACHE_TIMEOUT + delay) * 1e9))
       self.log.warning(f"modelmanagerd: catalog fetch failed ({type(e).__name__}: {e}), retrying in {delay:.0f} s")
       self.report(state="failed", error=f"{type(e).__name__}: {e}"[:200])
       return False
     self.failures = 0
     self.report(state="idle", fetched=int(self.wall()), models=len(catalog_bundles(data)), error=None)
-    self.validate_pick(data)
+    self.validate_pick(data, slot)
     return True
 
-  def validate_pick(self, catalog) -> None:
-    pick = store.get(ACTIVE_BIG)
+  def validate_pick(self, catalog, slot=None) -> None:
+    slot = slot or self.slot()
+    pick = store.get(slot.pick)
     if not isinstance(pick, dict) or not pick.get("ref"):
       return
     if not catalog_bundles(catalog):
@@ -96,18 +72,19 @@ class ModelManager:
     # same ONNX under a newer ref (jetlink's listed_ref); queue that pick
     listed = ja.listed_ref(str(pick["ref"]))
     if listed and find_bundle(catalog, listed) is not None:
-      if store.get(DOWNLOAD_REF) is None:
-        store.put(DOWNLOAD_REF, listed)
+      if store.get(slot.ref) is None:
+        store.put(slot.ref, listed)
         self.log.warning(f"modelmanagerd: carrying {pick.get('displayName')} over to {listed[:10]}")
       return
     self.log.warning(f"modelmanagerd: the catalog no longer lists {pick.get('displayName')} ({str(pick['ref'])[:10]}), back to the default")
-    store.remove(ACTIVE_BIG)
+    store.remove(slot.pick)
 
-  def process_request(self) -> None:
-    ref = store.get(DOWNLOAD_REF)
+  def process_request(self, slot=None) -> None:
+    slot = slot or self.slot()
+    ref = store.get(slot.ref)
     if not ref:
       return
-    catalog = store.get(CACHE_BIG)
+    catalog = store.get(slot.cache)
     bundle = find_bundle(catalog, str(ref))
     if bundle is None:
       if not catalog_bundles(catalog):
@@ -115,11 +92,11 @@ class ModelManager:
       self.log.warning(f"modelmanagerd: {str(ref)[:10]} is not in the catalog")
       self.report(state="failed", error="that model is not in the catalog")
     else:
-      store.put(ACTIVE_BIG, to_slot(bundle))
+      store.put(slot.pick, to_slot(bundle))
       self.log.warning(f"modelmanagerd: big model set to {bundle['display_name']} ({bundle['ref'][:10]})")
       self.report(selected=bundle["ref"], error=None, state="idle")
-    if store.get(DOWNLOAD_REF) == ref:
-      store.remove(DOWNLOAD_REF)
+    if store.get(slot.ref) == ref:
+      store.remove(slot.ref)
 
   def report(self, **fields) -> None:
     status = {**self._status, **fields}
@@ -131,9 +108,10 @@ class ModelManager:
         pass
 
   def step(self) -> None:
+    slot = self.slot()
     for name, work in (("catalog", self.refresh_catalog), ("request", self.process_request)):
       try:
-        work()
+        work(slot)
       except Exception:
         self.log.exception(f"modelmanagerd: {name} step failed")
 

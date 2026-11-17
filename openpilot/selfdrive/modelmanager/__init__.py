@@ -3,27 +3,37 @@
 from __future__ import annotations
 
 import re
+from collections import namedtuple
 
 # sunnypilot's helpers.REQUIRED_JSON_VERSION on zoompilot develop: the catalog
 # entries this build lists, and the selector passed to big_catalog()
 REQUIRED_JSON_VERSION = 20
 
-# chestnut-board catalog only (used when a chestnut is fitted / lists_big_models is false)
-CATALOG_URL = ("https://raw.githubusercontent.com/sunnypilot/sunnypilot-models/refs/heads/gh-pages/docs/" +
-               "driving_models_chestnut_v27.json")
 CACHE_TIMEOUT = 3600.0  # seconds, sunnypilot's ModelCache default
 
 # params, all in params_keys.h (none BACKUP: Highland has no such flag)
-ACTIVE_BIG = "ModelManager_ActiveBundleChestnut"   # the big-model pick; jetlink's keys.big_model
-CACHE_BIG = "ModelManager_ModelsCache_Chestnut"    # the catalog JSON; jetlink's keys.catalog
+ACTIVE_BIG = "ModelManager_ActiveBundleChestnut"   # Jetlink's pick; jetlink reads it as keys.big_model
+CACHE_BIG = "ModelManager_ModelsCache_Chestnut"    # Jetlink's catalog JSON; jetlink's keys.catalog
 SYNC_BIG = "ModelManager_LastSyncTime_Chestnut"    # monotonic ns of the last fetch, 0 asks for one
-DOWNLOAD_REF = "ModelManager_DownloadRef"          # a pick the UI queued for the manager
+DOWNLOAD_REF = "ModelManager_DownloadRef"          # a pick the UI queued; jetlink's keys.select
 STATUS = "ModelManager_Status"                     # what the manager is doing, for the UI
+# a chestnut keeps its own pick, so swapping hardware never drops the other's
+CHESTNUT_PICK = "ChestnutModelPick"
+CHESTNUT_CACHE = "ChestnutModelsCache"
+CHESTNUT_SYNC = "ChestnutModelsSync"
+CHESTNUT_REF = "ChestnutModelRef"
 
-KEY_TYPES = {ACTIVE_BIG: "json", CACHE_BIG: "json", SYNC_BIG: "int", DOWNLOAD_REF: "str", STATUS: "json"}
+KEY_TYPES = {ACTIVE_BIG: "json", CACHE_BIG: "json", SYNC_BIG: "int", DOWNLOAD_REF: "str", STATUS: "json",
+             CHESTNUT_PICK: "json", CHESTNUT_CACHE: "json", CHESTNUT_SYNC: "int", CHESTNUT_REF: "str"}
 
-# stamped on the big-model catalog: it is jetlink's list, not the chestnut HTTP one
-JETLINK_KEY = "jetlink"
+Slot = namedtuple('Slot', 'pick cache sync ref')
+SLOTS = {'jetlink': Slot(ACTIVE_BIG, CACHE_BIG, SYNC_BIG, DOWNLOAD_REF),
+         'chestnut': Slot(CHESTNUT_PICK, CHESTNUT_CACHE, CHESTNUT_SYNC, CHESTNUT_REF)}
+
+
+def slot_for(mode: str) -> Slot:
+  return SLOTS['chestnut' if mode == 'chestnut' else 'jetlink']
+
 
 _REF = re.compile(r"[0-9a-f]{40}")
 _TRAILING_DATE = re.compile(r"\s*\([A-Za-z]+ \d{1,2}, \d{4}\)\s*$")
@@ -84,7 +94,3 @@ def to_slot(bundle: dict) -> dict:
 
 def find_bundle(catalog, ref: str) -> dict | None:
   return next((b for b in catalog_bundles(catalog) if b.get("ref") == ref), None)
-
-
-def is_jetlinks(catalog) -> bool:
-  return isinstance(catalog, dict) and catalog.get(JETLINK_KEY) is True

@@ -1,11 +1,11 @@
-# Models page logic, no UI. Picks queue in ModelManager_DownloadRef for modelmanagerd, as sunnypilot does.
+# Models page logic, no UI. Picks queue for modelmanagerd in the active accelerator's slot, as sunnypilot does.
 from __future__ import annotations
 
+import sys
 import time
 
 from openpilot.selfdrive import jetlink_adapter as ja
-from openpilot.selfdrive.modelmanager import (ACTIVE_BIG, CACHE_BIG, DOWNLOAD_REF, STATUS, SYNC_BIG, catalog_bundles, folder_of,
-                                              short_name)
+from openpilot.selfdrive.modelmanager import STATUS, catalog_bundles, folder_of, short_name, slot_for
 from openpilot.selfdrive.modelmanager import store
 
 DEFAULT_LABEL = "default"
@@ -15,8 +15,17 @@ SMALL_NOTE = ("The small model is the one Highland ships; it updates with Highla
               "in September 2026, so Highland's modeld cannot run them.")
 
 
+def mode() -> str:
+  ui = sys.modules.get('openpilot.selfdrive.ui.ui_state')
+  return ja.accel_mode(ui.ui_state.chestnut_present if ui else None)
+
+
+def slot():
+  return slot_for(mode())
+
+
 def bundles() -> list[dict]:
-  return catalog_bundles(store.get(CACHE_BIG))
+  return catalog_bundles(store.get(slot().cache))
 
 
 def folders() -> list[tuple[str, list[dict]]]:
@@ -28,7 +37,7 @@ def folders() -> list[tuple[str, list[dict]]]:
 
 
 def picked() -> dict | None:
-  pick = store.get(ACTIVE_BIG)
+  pick = store.get(slot().pick)
   return pick if isinstance(pick, dict) and pick.get("ref") else None
 
 
@@ -45,7 +54,7 @@ def big_model_label() -> str:
 
 
 def queued() -> str | None:
-  ref = store.get(DOWNLOAD_REF)
+  ref = store.get(slot().ref)
   return str(ref) if ref else None
 
 
@@ -77,13 +86,14 @@ def model_note(ref: str) -> str:
 
 
 def select(ref: str) -> None:
-  store.put(DOWNLOAD_REF, ref)
+  store.put(slot().ref, ref)
 
 
 def reset_to_default() -> None:
-  store.remove(DOWNLOAD_REF)
-  store.remove(ACTIVE_BIG)
+  s = slot()
+  store.remove(s.ref)
+  store.remove(s.pick)
 
 
 def refresh() -> None:
-  store.put(SYNC_BIG, 0)
+  store.put(slot().sync, 0)
