@@ -16,8 +16,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 POINTER = b'version https://git-lfs.github.com/spec/v1'
-# pointer files allowed to stay and never fetched
-ALLOWED: set[str] = set()
 # pointers kept like comma: updated's `tools/lfs.sh pull` and launch replace them
 FETCHED = {
   'openpilot/common/hardware/comma/updater',
@@ -70,8 +68,7 @@ def lfs_tracked(repo: Path, path: str) -> bool:
 
 def problems(repo: Path = ROOT) -> list[str]:
   found, excluded = pointers(repo), fetchexcluded(repo)
-  errs = [f'{p}: Git LFS pointer in an installable branch' for p in found if p not in ALLOWED | FETCHED]
-  errs += [f'{p}: allowed pointer but not in .lfsconfig fetchexclude (installs would fetch it)' for p in sorted(ALLOWED - excluded)]
+  errs = [f'{p}: Git LFS pointer in an installable branch' for p in found if p not in FETCHED]
   errs += [f'{p}: pointer must be filter=lfs and not fetchexcluded (updated would leave it a pointer)'
            for p in sorted(FETCHED & set(found)) if p in excluded or not lfs_tracked(repo, p)]
   for sm in SUBMODULES:
@@ -82,7 +79,7 @@ def problems(repo: Path = ROOT) -> list[str]:
 
 
 def fix(repo: Path = ROOT) -> int:
-  bad = [p for p in pointers(repo) if p not in ALLOWED | FETCHED]
+  bad = [p for p in pointers(repo) if p not in FETCHED]
   if not bad:
     return 0
   subprocess.run(['git', 'lfs', 'pull', '--include', ','.join(bad), '--exclude', ''], cwd=repo, check=True)
@@ -105,7 +102,7 @@ def main() -> int:
   errs = problems()
   for e in errs:
     print(e)
-  print('LFS check:', 'FAIL' if errs else 'OK', f'({len(pointers(ROOT))} pointer(s) tracked, allowed: {sorted(ALLOWED | FETCHED)})')
+  print('LFS check:', 'FAIL' if errs else 'OK', f'({len(pointers(ROOT))} pointer(s) tracked, allowed: {sorted(FETCHED)})')
   return 1 if errs else 0
 
 
