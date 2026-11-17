@@ -63,11 +63,5 @@ def _frac(progress: dict) -> float:
     return 0.0
 
 
-def fill_level(progress, t: float) -> float:
-  kind, frac = progress
-  # compile has no percent: sweep, never full so it never reads as ready
-  return frac if kind == 'download' else 0.05 + 0.85 * (0.5 - 0.5 * math.cos(t * 2.0))
-
-
 def pulse(t: float) -> float:
   return 0.35 + 0.65 * (0.5 - 0.5 * math.cos(t * 6.0))

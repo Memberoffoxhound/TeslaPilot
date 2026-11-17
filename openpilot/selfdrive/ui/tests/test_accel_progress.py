@@ -37,9 +37,3 @@ def test_provisioning():
   assert ap.provisioning('jetlink', None, {'stage': 'build', 'frac': 0.5}, None) == ('compile', None)
   assert ap.provisioning('jetlink', None, {'stage': 'ready'}, None) is None
   assert ap.provisioning('none', None, {'stage': 'download'}, 0.1) is None
-
-
-def test_fill_level():
-  assert ap.fill_level(('download', 0.3), 5.0) == 0.3
-  levels = [ap.fill_level(('compile', None), t / 10) for t in range(40)]
-  assert min(levels) < 0.1 and 0.85 < max(levels) < 0.95

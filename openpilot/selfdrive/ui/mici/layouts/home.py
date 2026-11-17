@@ -222,7 +222,7 @@ class MiciHomeLayout(Widget):
     self._chestnut_icon = IconWidget("icons_mici/chestnut_green.png", (54, 40))
     self._chestnut_loading_icon = IconWidget("icons_mici/chestnut.png", (68, 40))
     self._chestnut_failed_icon = IconWidget("icons_mici/chestnut_orange.png", (68, 40))
-    self._chestnut_fill_icon = FillIcon("icons_mici/chestnut.png", "icons_mici/chestnut_green.png", (54, 40))
+    self._chestnut_fill_icon = FillIcon("icons_mici/chestnut.png", (54, 40))
     self._mic_icon = IconWidget("icons_mici/microphone.png", (32, 46))
     self._body_icon = IconWidget("icons_mici/body.png", (54, 37))
     # Set Speed Assist shortcut: shown only while the toggle is on with openpilot longitudinal,
@@ -362,7 +362,7 @@ class MiciHomeLayout(Widget):
     # ready, and only a swap window away: steady rather than the loading pulse,
     # dim rather than the solid green of a model that is driving
     waiting = chestnut_state == ChestnutState.WAITING
-    # downloading or compiling a big model: the icon fills; orange only for a real failure
+    # downloading fills the dimmed icon, compiling flashes it; orange only for a real failure
     provisioning = ui_state.accel_progress is not None
     chestnut_failed = not provisioning and chestnut_state in (ChestnutState.UNCOMPILED, ChestnutState.FAILED)
     self._usb_icon.set_visible(usb_connected and usb_unknown and not chestnut_failed and not provisioning)

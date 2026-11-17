@@ -201,7 +201,7 @@ class HudRenderer(Widget):
     if ui_state.accel_progress is not None:
       self._chestnut_icon, self._chestnut_fade_time = None, rl.get_time()
       alpha = self._chestnut_alpha_filter.update(True)
-      draw_progress(self._txt_chestnut, self._txt_chestnut_green, x, rect.y + rect.height - 10 - self._txt_chestnut.height, alpha)
+      draw_progress(self._txt_chestnut, x, rect.y + rect.height - 10 - self._txt_chestnut.height, alpha)
       return
     loading = ui_state.chestnut_state == ChestnutState.LOADING
     if loading:
