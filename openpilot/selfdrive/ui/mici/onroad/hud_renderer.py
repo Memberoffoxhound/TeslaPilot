@@ -24,6 +24,8 @@ CRUISE_DISABLED_CHAR = '–'
 
 SET_SPEED_PERSISTENCE = 2.5  # seconds
 COMPASS_FULL_ALPHA = 229.5
+COMPASS_TOP = 10  # dm icon top: 52 px centered 36 down
+COMPASS_RIGHT = 4
 WHEEL_SIZE = 52
 WHEEL_WHITE = (255, 255, 255)
 WHEEL_GREEN = (0, 255, 64)
@@ -260,15 +262,15 @@ class HudRenderer(Widget):
 
     custom = custom_onroad_ui()
     large = compass_size() == COMPASS_LARGE
-    # the small compass shares its spot with the set speed box
-    shown = custom and ui_state.status != UIStatus.DISENGAGED and (large or self._set_speed_alpha_filter.x < 1e-2)
+    # large sits under alerts, the small one shares its spot with the set speed box
+    shown = custom and ui_state.status != UIStatus.DISENGAGED and (self._can_draw_top_icons if large else self._set_speed_alpha_filter.x < 1e-2)
     self._compass_fade.update(1.0 if shown else 0.0)
     a = int(255 * 0.9 * self._compass_fade.x)
     if not custom or a < 3:
       return
     if large:
       size, fan, sz = 90, 78, 42
-      cx, cy = rect.x + rect.width - 52 - size / 2, rect.y + 10 + size / 2  # clear of the confidence dot
+      cx, cy = rect.x + rect.width - COMPASS_RIGHT - size / 2, rect.y + COMPASS_TOP + size / 2
       bg, fan_tex = self._txt_compass_bg90, self._txt_compass_fan90
     else:
       size, fan, sz = 60, 52, 28
