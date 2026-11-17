@@ -67,13 +67,6 @@ def test_ios_key():
   assert al.IOS_KEY == 'JetlinkIos'
 
 
-def test_link_status():
-  assert al.link_status(None) == ''
-  assert al.link_status(SimpleNamespace(port_state='connected', transport='iOS over USB')) == 'Jetlink connected: iOS over USB.'
-  assert al.link_status(SimpleNamespace(port_state='empty')) == 'Nothing on the USB port.'
-  assert al.link_status(SimpleNamespace(port_state=None)) == ''
-
-
 def test_progress_and_drops():
   assert al.big_model_progress(None) is None
   assert al.big_model_progress(SimpleNamespace(progress={'stage': 'ready'})) is None

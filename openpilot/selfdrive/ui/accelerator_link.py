@@ -17,15 +17,6 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 IOS_KEY = "JetlinkIos"  # iPhone is manual; a Jetson over USB is auto-detected (accel_detect.py)
 
 
-def link_status(jetlink=None) -> str:
-  if jetlink is None:
-    jetlink = ui_state.jetlink
-  port = getattr(jetlink, 'port_state', None)
-  if port == "connected":
-    return f"Jetlink connected: {jetlink.transport}."
-  return {"empty": "Nothing on the USB port.", "device": "A device is on the USB port."}.get(port, "")
-
-
 def big_model_progress(jetlink=None, progress=None) -> tuple[str, float, str] | None:
   if jetlink is None:
     jetlink = ui_state.jetlink
