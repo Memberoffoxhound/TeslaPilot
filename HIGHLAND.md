@@ -1,6 +1,6 @@
 > User-facing README: [README.md](README.md). This file is Highland working notes only.
 
-# TeslaPilot — Highland
+# TeslaPilot: Highland
 
 These notes describe **Highland-Dev**: version **0.11.23**, synced through comma master `89e7e0a4c` (openpilot **0.11.3**).
 
@@ -8,7 +8,7 @@ AGNOS is **20.3** (`launch_env.sh`). The first boot on an older OS flashes it. O
 
 ## opendbc pin
 
-`.gitmodules` points `opendbc_repo` at `Memberoffoxhound/TeslaPilot-opendbc` (same-org sibling, not commaai/opendbc — Tesla 3-bit / coop steering cannot live on comma's SHA).
+`.gitmodules` points `opendbc_repo` at `Memberoffoxhound/TeslaPilot-opendbc` (same-org sibling, not commaai/opendbc; Tesla 3-bit / coop steering cannot live on comma's SHA).
 
 Structure matches comma: gitlink SHA is what ships, not the branch tip. The SHA is **comma openpilot master's opendbc pin plus Tesla-only commits**:
 
@@ -41,8 +41,8 @@ Stock recognition runs first. Unknown cars remain onroad in dashcam mode. The UI
 | `ParkOffroad` | off | "Go Offroad in Park" (warning confirm; also sets `DriveSummary`). After R/D this ignition cycle, Park held 3 s, not engaged → normal offroad. Only R/D returns onroad (new route); ignitionCan staying on never does. Ignition off ≥ 5 s clears it. No gear frames 2 s → stock until the next ignition cycle. Summon/Autopark stays offroad. `selfdrive/car/park_offroad.py` (parkd), hardwared `not_parked`. |
 | `ParkOffroadState` | 0 | parkd's output: 0 none, 1 parking, 2 parked. Cleared on manager start only, re-asserted every second. |
 | `DriveSummary` | off | Trip card as the onroad page when a trip ends (stopped, ≥ 0.1 mi / 30 s); stock scroll to home after 20 s (`SHOW_S`) or a tap; swipe back to see it until the next drive. With `ParkOffroad`: up at the first Park sample with brightness held, and R/D skips `ONROAD_DELAY` and the brightness ramp. Any car; see PORTING.md. |
-| `DriveSummaryLast` | — | The one trip-stats store (JSON): 400 days of totals, lifetime, best stretch, best streak, last drive, drives not stored yet. See `selfdrive/ui/tripstats/README.md`. |
-| `Timezone` | — | Time zone for trip-stats days, looked up from `LastGPSPosition` in the offline 190 KB map (`tzgrid.bin`). The system zone is used until the first GPS fix. Written off the UI thread. There is no manual override. |
+| `DriveSummaryLast` | none | The one trip-stats store (JSON): 400 days of totals, lifetime, best stretch, best streak, last drive, drives not stored yet. See `selfdrive/ui/tripstats/README.md`. |
+| `Timezone` | none | Time zone for trip-stats days, looked up from `LastGPSPosition` in the offline 190 KB map (`tzgrid.bin`). The system zone is used until the first GPS fix. Written off the UI thread. There is no manual override. |
 
 ## Trip stats
 
