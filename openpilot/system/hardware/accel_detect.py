@@ -71,8 +71,7 @@ class AccelDetect:
 
     now = self.now()
     if not self.cable():
-      self._end_probe()
-      self.cable_ts = self.absent_ts = None
+      self.cable_ts = self.probe_ts = self.absent_ts = None
       self.probed = False
       self._link(LINK[self.device])
       return
