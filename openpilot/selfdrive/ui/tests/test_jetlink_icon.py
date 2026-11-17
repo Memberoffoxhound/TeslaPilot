@@ -9,7 +9,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from openpilot.selfdrive import jetlink_adapter as ja
 from openpilot.selfdrive.ui import accelerator_link as al
 
 UI = Path(__file__).resolve().parents[1]
