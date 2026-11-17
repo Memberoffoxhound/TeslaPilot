@@ -41,7 +41,8 @@ from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive import jetlink_adapter
-from openpilot.selfdrive.modeld.helpers import MODELS_DIR, chestnut_present, chestnut_compiled, modeld_pkl_path, load_oob, wait_for_chestnut
+from openpilot.selfdrive.modeld.helpers import (MODELS_DIR, chestnut_pick, chestnut_pick_pkl, chestnut_present, chestnut_compiled, modeld_pkl_path,
+                                               load_oob, wait_for_chestnut)
 
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
 
@@ -148,8 +149,8 @@ def compile_copy(tensor: Tensor) -> Callable[[], Tensor]:
 class ModelState:
   prev_desire: np.ndarray  # for tracking the rising edge of the pulse
 
-  def __init__(self, cam_w: int, cam_h: int, chestnut: bool):
-    jits = load_oob(modeld_pkl_path(chestnut), chestnut)
+  def __init__(self, cam_w: int, cam_h: int, chestnut: bool, pkl=None):
+    jits = load_oob(pkl or modeld_pkl_path(chestnut), chestnut)
     self.model_device = jits['input_specs']['new_img'][2]
     self.input_shapes = {name: (shape, np.dtype(dtype)) for name, (shape, dtype, _) in jits['input_specs'].items()}
     self.state_pairs = {name: f'next_{name}' for name in self.input_shapes if f'next_{name}' in jits['metadata']['output_shapes']}
@@ -242,6 +243,22 @@ class ModelState:
     self.prev_desire[:] = 0
 
 
+def load_chestnut(params, cam_w, cam_h, model_state=None):
+  # the pick if compiled for this tinygrad, else the bundled comma big model
+  model_state = model_state or ModelState
+  pkl = chestnut_pick_pkl(params)
+  for path in ([pkl] if pkl else []) + [None]:
+    try:
+      m = model_state(cam_w, cam_h, True, path)
+      m.warmup()
+      return m
+    except Exception:
+      cloudlog.exception(f"big model load failed: {path or 'bundled'}")
+      if path is not None:
+        params.put("ChestnutModelFailed", chestnut_pick(params) or "")
+  return None
+
+
 def main(demo=False):
   cloudlog.warning("modeld init")
 
@@ -292,11 +309,10 @@ def main(demo=False):
       nonlocal big_model
       try:
         wait_for_chestnut()
-        m = ModelState(cam_w, cam_h, True)
-        m.warmup()
-        big_model = m
       except Exception:
         cloudlog.exception("big model load failed")
+        return
+      big_model = load_chestnut(params, cam_w, cam_h)
     loader = threading.Thread(target=load_big, daemon=True)
     loader.start()
     loader.join(BIG_MODEL_TIMEOUT)

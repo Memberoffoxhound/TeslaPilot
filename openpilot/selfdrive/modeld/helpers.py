@@ -1,11 +1,16 @@
+import json
+import subprocess
 import sys
 import time
+from functools import cache
 from pathlib import Path
 
 from openpilot.common.hardware import AGNOS
 from openpilot.common.hardware.usb import CHESTNUT_USB_PRODUCT, USB_DEVICES_PATH, is_chestnut_usb_id
 
 MODELS_DIR = Path(__file__).resolve().parent / 'models'
+CHESTNUT_DIR = Path('/data/models/chestnut')  # <ref>/driving_tinygrad.pkl, compiled on device
+CHESTNUT_PICK = 'ChestnutModelPick'
 
 
 def modeld_pkl_path(chestnut: bool):
@@ -52,3 +57,36 @@ def chestnut_compiled() -> bool:
   warps = [MODELS_DIR / f'big_driving_warp_{size}_tinygrad.pkl' for size in ('1344x760', '1928x1208')]
   # the big model is an LFS pointer until launch fetches it; never load a placeholder
   return all(p.is_file() and not is_lfs_pointer(p) for p in (path, *warps))
+
+
+@cache
+def tinygrad_ref() -> str:
+  # a compiled pkl only loads on the tinygrad that built it
+  try:
+    root = Path(__file__).resolve().parents[3]
+    return subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD:tinygrad_repo'], text=True, stderr=subprocess.DEVNULL).strip()
+  except Exception:
+    return ''
+
+def compiled_dir(ref: str) -> Path:
+  return CHESTNUT_DIR / ref
+
+def compiled_ready(ref: str) -> bool:
+  d = compiled_dir(ref)
+  try:
+    return (d / 'driving_tinygrad.pkl').is_file() and (d / 'tinygrad_ref').read_text().strip() == tinygrad_ref() != ''
+  except OSError:
+    return False
+
+def chestnut_pick(params) -> str | None:
+  try:
+    pick = params.get(CHESTNUT_PICK)
+    pick = json.loads(pick) if isinstance(pick, (bytes, str)) else pick
+  except Exception:
+    return None
+  ref = pick.get('ref') if isinstance(pick, dict) else pick
+  return str(ref) if ref else None
+
+def chestnut_pick_pkl(params) -> Path | None:
+  ref = chestnut_pick(params)
+  return compiled_dir(ref) / 'driving_tinygrad.pkl' if ref and compiled_ready(ref) else None
