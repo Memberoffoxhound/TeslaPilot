@@ -216,7 +216,8 @@ class HudRenderer(Widget):
     if alpha < 1e-2:
       return
 
-    pos = rl.Vector2(rect.x + 14, rect.y + rect.height - 10 - icon.height)
+    # clear of the confidence ball when it's on the left
+    pos = rl.Vector2(rect.x + (56 if custom_onroad_ui() else 14), rect.y + rect.height - 10 - icon.height)
     rl.draw_texture_ex(icon, pos, 0.0, 1.0, rl.Color(255, 255, 255, int(255 * opacity * alpha)))
 
   def _draw_steering_wheel(self, rect: rl.Rectangle) -> None:
