@@ -29,6 +29,7 @@ from openpilot.system.hardware.fan_controller import FanController
 from openpilot.system.hardware.chestnut.monitoring import chestnut_state_thread
 from openpilot.system.hardware.chestnut.status import ChestnutStatus
 from openpilot.system.hardware.jetlink_power import JetlinkPower
+from openpilot.system.hardware.accel_detect import AccelDetect
 from openpilot.selfdrive.car import park_offroad
 from openpilot.common.version import terms_version, training_version
 from openpilot.system.athena.registration import UNREGISTERED_DONGLE_ID
@@ -253,6 +254,7 @@ def hardware_thread(end_event, hw_queue) -> None:
   chestnut = Chestnut()
   chestnut_status = ChestnutStatus()
   jetlink_power = JetlinkPower(log=cloudlog)
+  accel_detect = AccelDetect(params, log=cloudlog)
   park_timer = park_offroad.OffroadTimer()
   branch = get_short_branch()
 
@@ -327,6 +329,7 @@ def hardware_thread(end_event, hw_queue) -> None:
                            params.get_bool("ChestnutLoading"), params.get("ChestnutActive"),
                            chestnut_state if chestnut_valid else None, set_offroad_alert_if_changed)
     jetlink_power.alerts(set_offroad_alert_if_changed)
+    accel_detect.step(started_ts is not None)
     # this subset is only used for offroad
     temp_sources = [
       msg.deviceState.memoryTempC,

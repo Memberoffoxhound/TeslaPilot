@@ -160,6 +160,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"AcceleratorProgress", {CLEAR_ON_MANAGER_START, JSON}},
     {"JetlinkLink", {PERSISTENT, INT, "0"}},
     {"AcceleratorDevice", {PERSISTENT, STRING, "none"}},  // none, chestnut, jetlink-usb, jetlink-ios; see accel_detect.py
+    {"JetlinkIos", {PERSISTENT, BOOL, "0"}},  // Jetlink over an iPhone: manual, iOS is not auto-detected
     {"AcceleratorAck", {PERSISTENT, STRING, "none"}},  // the device the one-time card last showed
     {"JetlinkSpec", {PERSISTENT, JSON}},
     {"JetlinkChargePhone", {PERSISTENT, BOOL, "0"}},
