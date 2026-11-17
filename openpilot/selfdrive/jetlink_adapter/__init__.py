@@ -250,16 +250,20 @@ HOOK_NAMES = (*_Off.ANSWERS, 'reason')
  big_catalog, listed_ref, swap_events, runtime, reason) = map(_hook, HOOK_NAMES)
 
 
+CHESTNUT_DEFAULT = "comma big model"
+
+
 def default_big_model(chestnut: bool, jetlink) -> str:
   """What an empty big-model slot runs, by name: jetlink's default with no
-  chestnut fitted, else the chestnut's model in the tree. `jetlink` is a
+  chestnut fitted, else the bundled comma big model. `jetlink` is a
   status() snapshot or None; the UI passes its own."""
-  # Highland: no sunnypilot.models.model_name
+  if chestnut:
+    return CHESTNUT_DEFAULT
   try:
     from jetlink.registry.index import DEFAULT_BIG_MODEL_NAME
     default = str(DEFAULT_BIG_MODEL_NAME)
   except Exception:
     default = "default"
-  if not chestnut and jetlink is not None and getattr(jetlink, 'default_model', None):
+  if jetlink is not None and getattr(jetlink, 'default_model', None):
     return jetlink.default_model
   return default

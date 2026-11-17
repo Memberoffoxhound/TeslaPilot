@@ -119,7 +119,7 @@ def test_default_big_model_uses_the_index():
   assert ja.default_big_model(False, None) == DEFAULT_BIG_MODEL_NAME
   status = mock.Mock(default_model='From Status')
   assert ja.default_big_model(False, status) == 'From Status'
-  assert ja.default_big_model(True, status) == DEFAULT_BIG_MODEL_NAME
+  assert ja.default_big_model(True, status) == 'comma big model'
 
 
 # -- the catalog -------------------------------------------------------------------
@@ -393,6 +393,15 @@ class _Widget:
   def set_value(self, value):
     self.value = value
 
+  def set_visible(self, visible):
+    self.visible = visible
+
+  def set_text(self, text):
+    self.text = text
+
+  def set_long_press_callback(self, cb):
+    self.long_press = cb
+
 
 class _Scroller:
   def __init__(self):
@@ -452,6 +461,7 @@ def page(monkeypatch):
     'openpilot.selfdrive.ui.mici.layouts.settings.model_widgets': {'CurrentModelInfo': _Info, 'JetlinkIosToggle': _Link},
     'openpilot.selfdrive.ui.ui_state': {'ui_state': SimpleNamespace(started=False, jetlink=jetlink, chestnut_present=False,
                                                                     chestnut_state=SimpleNamespace(value='loading'))},
+    'openpilot.selfdrive.ui.mici.widgets.dialog': {'SettingDescriptionDialog': _Widget},
     'openpilot.system.ui.lib.application': {'gui_app': gui},
     'openpilot.system.ui.widgets.scroller': {'NavScroller': _NavScroller},
   }
@@ -494,3 +504,35 @@ def test_models_page_locked_onroad(page):
   mod.ui_state.started = True
   assert not p._big.enabled() and not p._refresh.enabled() and not p._reset.enabled()
   assert not p._link.enabled()
+
+
+def test_models_page_per_mode(page, monkeypatch, tmp_path):
+  from openpilot.selfdrive.modeld import helpers
+  mod, gui = page
+  mode = ['none']
+  monkeypatch.setattr(ja, 'accel_mode', lambda chestnut=None: mode[0])
+  monkeypatch.setattr(helpers, 'CHESTNUT_DIR', tmp_path / 'models')
+  p = mod.ModelsLayoutMici()
+  p.show_event()
+  assert not p._big.visible and not p._refresh.visible and p._link.visible
+  mode[0] = 'chestnut'
+  store.put(mm.CHESTNUT_CACHE, CATALOG)
+  p.show_event()
+  assert p._big.visible and not p._link.visible and p._big.text == 'chestnut big model'
+  p._update_state()
+  assert p._big.value == 'comma big model (default)'
+  assert mp.model_note(REF_A) == 'compiles on device'
+  store.put(mm.CHESTNUT_PICK, {'ref': REF_A, 'displayName': 'Alpha'})
+  store.put(mm.CHESTNUT_PROGRESS, {'ref': REF_A, 'stage': 'compiling', 'frac': 0.0, 'msg': 'compiling on chestnut'})
+  assert mp.model_note(REF_A) == 'compiling...'
+  p._tick = 0
+  p._update_state()
+  assert p._info.info[1:] == ('big model', 'compiling on chestnut')
+  store.put(mm.CHESTNUT_FAILED, REF_A)
+  store.remove(mm.CHESTNUT_PROGRESS)
+  assert mp.model_note(REF_A) == 'failed'
+  mp.select(REF_A)
+  assert store.get(mm.CHESTNUT_FAILED) is None and store.get(mm.CHESTNUT_REF) == REF_A
+  mode[0] = 'jetlink'
+  p.show_event()
+  assert p._big.text == 'jetlink big model' and p._link.visible and mp.picked() is None

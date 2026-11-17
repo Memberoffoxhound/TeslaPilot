@@ -3,9 +3,17 @@ from openpilot.selfdrive.ui import accelerator_link as al
 from openpilot.selfdrive.ui import model_picker as mp
 from openpilot.selfdrive.ui.mici.layouts.settings.model_widgets import CurrentModelInfo, JetlinkIosToggle
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, GreyBigButton
+from openpilot.selfdrive.ui.mici.widgets.dialog import SettingDescriptionDialog
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets.scroller import NavScroller
+
+
+JETLINK_DESC = ("Picks the big model Jetlink runs on the phone or computer.\n" +
+                "The phone downloads and builds it; the small model drives until it is ready.")
+CHESTNUT_DESC = ("Picks the big model the chestnut runs.\n" +
+                 "Others compile on the chestnut while parked; the comma big model drives until one is ready.")
+TITLES = {'chestnut': ("chestnut big model", CHESTNUT_DESC), 'jetlink': ("jetlink big model", JETLINK_DESC)}
 
 
 def _offroad() -> bool:
@@ -18,9 +26,7 @@ class ModelsLayoutMici(NavScroller):
     self._info = CurrentModelInfo(*self._model_info())
     self._small = GreyBigButton("small model", mp.SMALL_MODEL)
     self._small_note = GreyBigButton("", mp.SMALL_NOTE)
-    self._big = BigButton("jetlink big model", mp.big_model_label(),
-                          description="Picks the big model Jetlink runs on the phone or computer.\n" +
-                                      "The phone downloads and builds it; the small model drives until it is ready.")
+    self._big = BigButton("jetlink big model", mp.big_model_label(), description=JETLINK_DESC)
     self._big.set_click_callback(self._show_folders)
     self._big.set_enabled(_offroad)
     # locked onroad: jetlink switches the link only when parked
@@ -29,11 +35,12 @@ class ModelsLayoutMici(NavScroller):
     self._refresh = BigButton("refresh models", mp.list_label(), description="Fetches the latest list of big models.")
     self._refresh.set_click_callback(mp.refresh)
     self._refresh.set_enabled(_offroad)
-    self._reset = BigButton("reset to default", "", description="Goes back to Jetlink's default big model.")
+    self._reset = BigButton("reset to default", "", description="Goes back to the default big model.")
     self._reset.set_click_callback(mp.reset_to_default)
     self._reset.set_enabled(lambda: _offroad() and mp.picked() is not None)
     self._scroller.add_widgets([self._info, self._big, self._link, self._refresh, self._reset, self._small, self._small_note])
     self._tick = 0
+    self._mode = ''
 
   @staticmethod
   def _set(btn, value):
@@ -89,7 +96,7 @@ class ModelsLayoutMici(NavScroller):
   def _model_info() -> tuple[str, str, str]:
     try:
       return al.model_info(ui_state.jetlink, ui_state.chestnut_state.value, ui_state.chestnut_present,
-                           mp.SMALL_MODEL, mp.big_model_label())
+                           mp.SMALL_MODEL, mp.big_model_label(), mp.compile_progress())
     except Exception:
       return mp.SMALL_MODEL, "big model", "-"
 
@@ -97,6 +104,19 @@ class ModelsLayoutMici(NavScroller):
     super().show_event()
     self._tick = 0
     self._link.refresh()
+    self._apply_mode()
+
+  def _apply_mode(self):
+    # only what the fitted accelerator uses: no picker without one, no iPhone toggle on a chestnut
+    mode = mp.mode()
+    for w in (self._big, self._refresh, self._reset):
+      w.set_visible(mode != 'none')
+    self._link.set_visible(mode != 'chestnut')
+    if mode in TITLES and self._mode != mode:
+      title, desc = TITLES[mode]
+      self._big.set_text(title)
+      self._big.set_long_press_callback(lambda: gui_app.push_widget(SettingDescriptionDialog(title, desc)))
+    self._mode = mode
 
   def _update_state(self):
     super()._update_state()
@@ -108,6 +128,6 @@ class ModelsLayoutMici(NavScroller):
       self._set(self._refresh, mp.list_label())
       self._info.set_info(*self._model_info())
       self._link.refresh()
-      self._link.set_visible(al.ios_toggle_meaningful())
+      self._apply_mode()
     except Exception:
       pass

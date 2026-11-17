@@ -5,7 +5,7 @@ import sys
 import time
 
 from openpilot.selfdrive import jetlink_adapter as ja
-from openpilot.selfdrive.modelmanager import CHESTNUT_FAILED, STATUS, catalog_bundles, folder_of, short_name, slot_for
+from openpilot.selfdrive.modelmanager import CHESTNUT_FAILED, CHESTNUT_PROGRESS, STATUS, catalog_bundles, folder_of, short_name, slot_for
 from openpilot.selfdrive.modelmanager import store
 
 DEFAULT_LABEL = "default"
@@ -43,7 +43,13 @@ def picked() -> dict | None:
 
 def default_name() -> str:
   from openpilot.selfdrive.ui.ui_state import ui_state
-  return ja.default_big_model(ui_state.chestnut_present, ui_state.jetlink)
+  return ja.default_big_model(mode() == 'chestnut', ui_state.jetlink)
+
+
+def compile_progress() -> dict | None:
+  """The chestnut compile of the current pick, in jetlink.progress's shape."""
+  p, pick = store.get(CHESTNUT_PROGRESS), picked()
+  return p if isinstance(p, dict) and pick and p.get('ref') == pick['ref'] else None
 
 
 def big_model_label() -> str:
@@ -78,9 +84,19 @@ def list_label() -> str:
 
 
 def model_note(ref: str) -> str:
-  """'ready' when the Jetson has built it, 'downloaded' when on the comma, else ''."""
+  """jetlink: 'ready' when the Jetson has built it, 'downloaded' when on the comma.
+  chestnut: 'ready' once compiled, the compile's stage, 'failed', else 'compiles on device'."""
   try:
-    return str(ja.model_state(ref) or "")
+    if mode() != 'chestnut':
+      return str(ja.model_state(ref) or "")
+    from openpilot.selfdrive.modeld.helpers import compiled_ready
+    p = store.get(CHESTNUT_PROGRESS)
+    if isinstance(p, dict) and p.get('ref') == ref and p.get('stage') in ('downloading', 'compiling'):
+      frac = float(p.get('frac') or 0)
+      return p['stage'] + (f" {frac * 100:.0f}%" if frac > 0 else "...")
+    if store.get(CHESTNUT_FAILED) == ref:
+      return "failed"
+    return "ready" if compiled_ready(ref) else "compiles on device"
   except Exception:
     return ""
 

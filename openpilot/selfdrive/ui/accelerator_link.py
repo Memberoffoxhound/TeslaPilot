@@ -30,10 +30,11 @@ def link_status(jetlink=None) -> str:
   return {"empty": "Nothing on the USB port.", "device": "A device is on the USB port."}.get(port, "")
 
 
-def big_model_progress(jetlink=None) -> tuple[str, float, str] | None:
+def big_model_progress(jetlink=None, progress=None) -> tuple[str, float, str] | None:
   if jetlink is None:
     jetlink = ui_state.jetlink
-  progress = getattr(jetlink, 'progress', None)
+  if progress is None:
+    progress = getattr(jetlink, 'progress', None)
   if not isinstance(progress, dict) or not progress:
     return None
   stage = str(progress.get('stage', ''))
@@ -63,7 +64,7 @@ def big_model_state(chestnut_state: str) -> str | None:
 
 
 def model_info(jetlink=None, chestnut_state: str | None = None, chestnut_present: bool | None = None,
-               small_name: str = "built-in", big_name: str = "default") -> tuple[str, str, str]:
+               small_name: str = "built-in", big_name: str = "default", progress=None) -> tuple[str, str, str]:
   """(active model, info header, info text) for the models panel."""
   try:
     if jetlink is None:
@@ -76,7 +77,7 @@ def model_info(jetlink=None, chestnut_state: str | None = None, chestnut_present
     if not chestnut_present and chestnut_state == 'active' and jetlink is not None:
       carry = jetlink.active_model
     active_text = (carry or small_name).lower()
-    provisioning = big_model_progress(jetlink)
+    provisioning = big_model_progress(jetlink, progress)
     if provisioning is not None:
       stage, frac, msg = provisioning
       if stage == 'failed':
