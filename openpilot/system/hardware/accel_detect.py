@@ -73,7 +73,7 @@ class AccelDetect:
     if not self.cable():
       self.cable_ts = self.probe_ts = self.absent_ts = None
       self.probed = False
-      self._link(LINK[self.device])
+      self._link(0)  # keep memory; nothing on the port
       return
     if self.cable_ts is None:
       self.cable_ts = now

@@ -112,3 +112,14 @@ def test_chestnut_memory_probes_a_host():
   r.present = True
   r.run(1)
   assert r.device == 'jetlink-usb'
+
+
+def test_unplugged_link_is_off_memory_stays():
+  r = Rig('jetlink-usb')
+  assert r.link == 1
+  r.run(1)
+  assert r.device == 'jetlink-usb' and r.link == 0
+  r.cable = True
+  r.run(0.5)
+  assert r.link == 1
+
