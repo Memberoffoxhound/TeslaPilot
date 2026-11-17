@@ -225,7 +225,7 @@ class UIState:
         self.status = UIStatus.DISENGAGED
         self.started_frame = self.sm.frame
         self.started_time = time.monotonic()
-        self.chestnut_present = self.sm["deviceState"].chestnutPresent or (self.chestnut_compiled and self.usb_connected and not usb_host_connected())
+        self.chestnut_present = self.sm["deviceState"].chestnutPresent or (self.chestnut_compiled and jetlink_adapter.chestnut_cable(self.usb_connected) and not usb_host_connected())
 
       for callback in self._offroad_transition_callbacks:
         callback()

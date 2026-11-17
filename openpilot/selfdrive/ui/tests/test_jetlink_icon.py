@@ -100,3 +100,10 @@ def test_model_info():
   assert al.model_info(j, 'ready', False, small, big)[2] == 'old model for now'
   assert al.model_info(None, 'disconnected', False, small, big) == ('built-in', 'big model', 'cinque terre')
   assert al.model_info(object(), 'active', False, small, big)[0] == 'built-in'   # never raises
+
+
+def test_ui_chestnut_guess_matches_modeld():
+  ui = (UI / 'ui_state.py').read_text()
+  modeld = (UI.parent / 'modeld/modeld.py').read_text()
+  assert 'jetlink_adapter.chestnut_cable(self.usb_connected)' in ui
+  assert 'jetlink_adapter.chestnut_cable()' in modeld
