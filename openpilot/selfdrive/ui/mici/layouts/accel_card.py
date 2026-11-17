@@ -56,5 +56,6 @@ class AccelCard:
       ui_state.params.put(ACK, mode)
       title, body = card(mode, chestnut_compiled())
       self.page = SettingDescriptionDialog(title, body, gui_app.texture("icons_mici/offroad_alerts/orange_warning.png", 64, 64))
+      self.page._scroller.items[0].set_value("settings updated")
       gui_app.push_widget(self.page)
     return self.active
