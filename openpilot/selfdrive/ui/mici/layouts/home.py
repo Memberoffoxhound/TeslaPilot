@@ -256,6 +256,8 @@ class MiciHomeLayout(Widget):
     self._ssa_on = False
     self._ssa_hit = rl.Rectangle(0, 0, 0, 0)
     self._on_ssa_click: Callable | None = None
+    self._accel_hit = rl.Rectangle(0, 0, 0, 0)
+    self._on_models_click: Callable | None = None
 
   def _update_state(self):
     self._refresh_trip()
@@ -273,18 +275,23 @@ class MiciHomeLayout(Widget):
   def set_callbacks(self, on_settings: Callable | None = None, on_alerts: Callable | None = None,
                     on_stats: Callable | None = None,
                     on_set_speed_assist: Callable | None = None,
+                    on_models: Callable | None = None,
                     alert_count_callback: Callable[[], int] | None = None,
                     alert_icon_callback: Callable[[], rl.Texture | None] | None = None):
     self._on_settings_click = on_settings
     self._on_alerts_click = on_alerts
     self._on_stats_click = on_stats
     self._on_ssa_click = on_set_speed_assist
+    self._on_models_click = on_models
     self._alert_count_callback = alert_count_callback
     self._alerts_pill.set_alert_count_callback(alert_count_callback, alert_icon_callback)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     if self._on_ssa_click and self._ssa_hit.width > 0 and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._ssa_hit):
       self._on_ssa_click()
+      return
+    if self._on_models_click and self._accel_hit.width > 0 and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._accel_hit):
+      self._on_models_click()
       return
     if (self._on_stats_click and self._trip_hit.width > 0 and
         rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._trip_hit)):
@@ -377,6 +384,10 @@ class MiciHomeLayout(Widget):
       self._ssa_hit = rl.Rectangle(r.x - 8, r.y - 8, r.width + 16, r.height + 8)
     else:
       self._ssa_hit = rl.Rectangle(0, 0, 0, 0)
+    # the accelerator icon opens Settings > Models
+    accel = next((w for w in (self._chestnut_icon, self._chestnut_loading_icon, self._chestnut_failed_icon, self._chestnut_fill_icon)
+                  if w.is_visible), None)
+    self._accel_hit = rl.Rectangle(accel.rect.x - 8, accel.rect.y - 8, accel.rect.width + 16, accel.rect.height + 8) if accel else rl.Rectangle(0, 0, 0, 0)
 
     self._alerts_pill.set_position(self.rect.x + self.rect.width - self._alerts_pill.rect.width - HOME_PADDING,
                                    self.rect.y + self.rect.height - self._alerts_pill.rect.height)
