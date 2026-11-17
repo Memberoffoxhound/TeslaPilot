@@ -48,7 +48,6 @@ def params_root(tmp_path, monkeypatch):
   store._store.clear()
   # no params library here: Params() fails and every read is the file
   monkeypatch.setattr(store, '_params', mock.Mock(side_effect=ImportError('no params_pyx')))
-  monkeypatch.setattr(ja, 'lists_big_models', lambda: False)
   monkeypatch.setattr(ja, 'accel_mode', lambda chestnut=None: 'none')
   monkeypatch.setattr(ja, 'big_catalog', lambda selector: (_ for _ in ()).throw(AssertionError('big_catalog')))
   monkeypatch.setattr(ja, 'listed_ref', lambda ref: None)
