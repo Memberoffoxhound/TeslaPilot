@@ -20,6 +20,14 @@ def _offroad() -> bool:
   return not ui_state.started
 
 
+def _bundled_progress() -> dict | None:
+  # the first-boot pull of the comma big model reads as progress, not "unavailable"
+  p = getattr(ui_state, 'accel_progress', None)
+  if mp.mode() == 'chestnut' and p is not None and p[0] == 'download':
+    return {'stage': 'downloading', 'frac': p[1] or 0.0}
+  return None
+
+
 class ModelsLayoutMici(NavScroller):
   def __init__(self):
     super().__init__()
@@ -96,7 +104,7 @@ class ModelsLayoutMici(NavScroller):
   def _model_info() -> tuple[str, str, str]:
     try:
       return al.model_info(ui_state.jetlink, ui_state.chestnut_state.value, ui_state.chestnut_present,
-                           mp.SMALL_MODEL, mp.big_model_label(), mp.compile_progress())
+                           mp.SMALL_MODEL, mp.big_model_label(), mp.compile_progress() or _bundled_progress())
     except Exception:
       return mp.SMALL_MODEL, "big model", "-"
 
