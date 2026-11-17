@@ -161,11 +161,6 @@ def test_modeld_asks_the_adapter_about_the_cable():
   assert 'jetlink_adapter.attach(' in source
 
 
-def test_select_is_the_model_managers_queue():
-  from openpilot.selfdrive import modelmanager as mm
-  assert ja.KEYS.select == mm.DOWNLOAD_REF
-
-
 def test_accel_mode(params_root):
   params_root.mkdir(parents=True, exist_ok=True)
   from openpilot.selfdrive.modeld.accel_keys import DEVICE_KEY

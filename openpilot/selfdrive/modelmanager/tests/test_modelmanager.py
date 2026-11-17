@@ -82,7 +82,6 @@ def test_jetlink_keys_are_the_model_managers():
   assert ja.KEYS.big_model == 'ModelManager_ActiveBundleChestnut' == mm.ACTIVE_BIG
   assert ja.KEYS.catalog == 'ModelManager_ModelsCache_Chestnut' == mm.CACHE_BIG
   assert ja.KEYS.select == mm.DOWNLOAD_REF
-  assert ja.KEYS.big_model == mm.ACTIVE_BIG and ja.KEYS.catalog == mm.CACHE_BIG
   assert mm.REQUIRED_JSON_VERSION == 20
 
 
