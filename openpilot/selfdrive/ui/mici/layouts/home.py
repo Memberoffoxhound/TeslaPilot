@@ -10,6 +10,7 @@ from collections.abc import Callable
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.layouts import HBoxLayout
 from openpilot.system.ui.widgets.icon_widget import IconWidget
+from openpilot.selfdrive.ui.mici.widgets.fill_icon import FillIcon
 from openpilot.system.ui.widgets.label import UnifiedLabel, gui_label
 from importlib.resources import as_file
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos, FONT_DIR, TextAlignment, TextAlignmentVertical
@@ -221,6 +222,7 @@ class MiciHomeLayout(Widget):
     self._chestnut_icon = IconWidget("icons_mici/chestnut_green.png", (54, 40))
     self._chestnut_loading_icon = IconWidget("icons_mici/chestnut.png", (68, 40))
     self._chestnut_failed_icon = IconWidget("icons_mici/chestnut_orange.png", (68, 40))
+    self._chestnut_fill_icon = FillIcon("icons_mici/chestnut.png", "icons_mici/chestnut_green.png", (54, 40))
     self._mic_icon = IconWidget("icons_mici/microphone.png", (32, 46))
     self._body_icon = IconWidget("icons_mici/body.png", (54, 37))
     # Set Speed Assist shortcut: shown only while the toggle is on with openpilot longitudinal,
@@ -238,6 +240,7 @@ class MiciHomeLayout(Widget):
       self._chestnut_icon,
       self._chestnut_loading_icon,
       self._chestnut_failed_icon,
+      self._chestnut_fill_icon,
       self._body_icon,
       self._mic_icon,
     ], spacing=18)
@@ -352,12 +355,15 @@ class MiciHomeLayout(Widget):
     # ready, and only a swap window away: steady rather than the loading pulse,
     # dim rather than the solid green of a model that is driving
     waiting = chestnut_state == ChestnutState.WAITING
-    chestnut_failed = chestnut_state in (ChestnutState.UNCOMPILED, ChestnutState.FAILED)
-    self._usb_icon.set_visible(usb_connected and usb_unknown and not chestnut_failed)
+    # downloading or compiling a big model: the icon fills; orange only for a real failure
+    provisioning = ui_state.accel_progress is not None
+    chestnut_failed = not provisioning and chestnut_state in (ChestnutState.UNCOMPILED, ChestnutState.FAILED)
+    self._usb_icon.set_visible(usb_connected and usb_unknown and not chestnut_failed and not provisioning)
+    self._chestnut_fill_icon.set_visible(provisioning)
     self._chestnut_loading_icon.set_opacity(0.35 + 0.65 * (0.5 - 0.5 * math.cos(rl.get_time() * 6.0)))
-    self._chestnut_loading_icon.set_visible(not usb_unknown and loading)
+    self._chestnut_loading_icon.set_visible(not provisioning and not usb_unknown and loading)
     self._chestnut_icon.set_opacity(0.5 if waiting else 1.0)
-    self._chestnut_icon.set_visible(not usb_unknown and not loading and
+    self._chestnut_icon.set_visible(not provisioning and not usb_unknown and not loading and
                                     chestnut_state in (ChestnutState.READY, ChestnutState.ACTIVE, ChestnutState.WAITING))
     self._chestnut_failed_icon.set_visible(chestnut_failed)
     self._mic_icon.set_visible(ui_state.recording_audio)

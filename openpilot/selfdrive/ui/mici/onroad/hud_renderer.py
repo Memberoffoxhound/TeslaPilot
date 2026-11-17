@@ -6,6 +6,7 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.ui.mici.onroad import DIMMED_ICON_ALPHA
 from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus, ChestnutState
+from openpilot.selfdrive.ui.mici.widgets.fill_icon import draw_progress
 from openpilot.selfdrive.ui.layouts.settings.common import (
   custom_onroad_ui, heading_deg, heading_letter, compass_size, COMPASS_LARGE,
   tesla_theme, theme_color, THEME_TESLA_RGB,
@@ -195,6 +196,13 @@ class HudRenderer(Widget):
     self._draw_steering_wheel(rect)
 
   def _draw_model_source(self, rect: rl.Rectangle) -> None:
+    # clear of the confidence ball when it's on the left
+    x = rect.x + (56 if custom_onroad_ui() else 14)
+    if ui_state.accel_progress is not None:
+      self._chestnut_icon, self._chestnut_fade_time = None, rl.get_time()
+      alpha = self._chestnut_alpha_filter.update(True)
+      draw_progress(self._txt_chestnut, self._txt_chestnut_green, x, rect.y + rect.height - 10 - self._txt_chestnut.height, alpha)
+      return
     loading = ui_state.chestnut_state == ChestnutState.LOADING
     if loading:
       icon = self._txt_chestnut
@@ -216,8 +224,7 @@ class HudRenderer(Widget):
     if alpha < 1e-2:
       return
 
-    # clear of the confidence ball when it's on the left
-    pos = rl.Vector2(rect.x + (56 if custom_onroad_ui() else 14), rect.y + rect.height - 10 - icon.height)
+    pos = rl.Vector2(x, rect.y + rect.height - 10 - icon.height)
     rl.draw_texture_ex(icon, pos, 0.0, 1.0, rl.Color(255, 255, 255, int(255 * opacity * alpha)))
 
   def _draw_steering_wheel(self, rect: rl.Rectangle) -> None:
