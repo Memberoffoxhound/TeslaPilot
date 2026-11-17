@@ -4,7 +4,6 @@ import os
 from SCons.Script import Action, Value
 from openpilot.common.transformations.camera import _ar_ox_fisheye, _os_fisheye
 from openpilot.common.transformations.model import MEDMODEL_INPUT_SIZE, DM_INPUT_SIZE
-from openpilot.selfdrive.modeld.helpers import chestnut_present
 from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 
 
@@ -31,11 +30,6 @@ else:
   # JIT=2 disables graph batching, which produces incorrect outputs after buffers change.
   # Use Apple's clang for the CPU helper runtime without requiring libLLVM.
   tg_flags = 'DEV=METAL HCQ_RUNTIME_DEV=CPU:CLANG JIT=2' if arch == 'Darwin' else 'DEV=CPU:LLVM'
-
-# installs leave the big pkl out (see .lfsconfig, as zoompilot); a chestnut build fetches it
-if chestnut_present():
-  from openpilot.selfdrive.modeld.big_model_source import ensure_big_pkl
-  ensure_big_pkl()
 
 # tinygrad calls brew which needs a $HOME in the env
 mac_brew_string = f'HOME={os.path.expanduser("~")}' if arch == 'Darwin' else ''

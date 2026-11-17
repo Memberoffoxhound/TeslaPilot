@@ -38,10 +38,17 @@ def wait_for_chestnut(timeout: float = 10.) -> None:
       raise TimeoutError("chestnut did not enumerate")
     time.sleep(0.1)
 
+LFS_POINTER = b'version https://git-lfs.github.com/spec/v1'
+
+def is_lfs_pointer(path: Path) -> bool:
+  try:
+    with open(path, 'rb') as f:
+      return f.read(len(LFS_POINTER)) == LFS_POINTER
+  except OSError:
+    return False
+
 def chestnut_compiled() -> bool:
-  from openpilot.selfdrive.modeld.big_model_source import is_lfs_pointer
   path = modeld_pkl_path(chestnut=True)
   warps = [MODELS_DIR / f'big_driving_warp_{size}_tinygrad.pkl' for size in ('1344x760', '1928x1208')]
-  # installs leave the big model a pointer (.lfsconfig fetchexclude, as zoompilot). The warps are
-  # normal blobs here, but check them too so no LFS placeholder is ever loaded as a model
+  # the big model is an LFS pointer until launch fetches it; never load a placeholder
   return all(p.is_file() and not is_lfs_pointer(p) for p in (path, *warps))

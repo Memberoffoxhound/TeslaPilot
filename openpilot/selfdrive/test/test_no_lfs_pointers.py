@@ -19,7 +19,7 @@ def _lfs():
 
 
 def test_no_lfs_pointer_in_the_tree():
-  # allowed: the fetchexcluded chestnut big model and the updater, which updated pulls
+  # allowed: the chestnut big model and the updater, which launch and updated pull
   assert _lfs().problems(Path(BASEDIR)) == []
 
 
@@ -32,8 +32,6 @@ def test_the_check_catches_a_pointer(tmp_path):
   errs = lfs.problems(tmp_path)
   assert any(e.startswith('wheel.png:') for e in errs)
   assert not any(e.startswith('real.png:') for e in errs)
-  # the allowed big model must be fetchexcluded, else installs pull 776 MB
-  assert any('fetchexclude' in e for e in errs)
 
 
 def test_the_check_needs_the_updater_fetched(tmp_path):
@@ -60,7 +58,7 @@ def test_chestnut_compiled_refuses_placeholders(tmp_path, monkeypatch, pointer_f
 
 
 def test_chestnut_compiled_false_on_this_checkout():
-  # installs leave the big model a pointer, so no chestnut path ever loads it
+  # a checkout without the pulled big model never loads its pointer
   big = helpers.modeld_pkl_path(chestnut=True)
   if big.is_file() and big.read_bytes()[:len(POINTER) - 80].startswith(b'version https://git-lfs'):
     assert not helpers.chestnut_compiled()

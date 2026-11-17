@@ -14,6 +14,15 @@ function fetch_updater {
   done
 }
 
+# the chestnut big model ships in LFS (767 MB); a fresh clone leaves a pointer, so pull it in the background
+function fetch_big_model {
+  local m="$DIR/openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl" t=0
+  while [ "$(head -c 7 "$m" 2>/dev/null)" = "version" ]; do
+    sleep $t; t=60
+    "$DIR/tools/lfs.sh" pull
+  done
+}
+
 function agnos_init {
   # TODO: move this to agnos
   sudo rm -f /data/etc/NetworkManager/system-connections/*.nmmeta
@@ -101,6 +110,7 @@ function launch {
     # with Jetlink on, draw nothing from its USB-C port from boot (docs/porting.md in jetlink)
     sudo -n bash jetlink/comma/jetlink-root.sh boot /data/params/d/JetlinkLink &
     agnos_init
+    fetch_big_model &
   fi
 
   # write tmux scrollback to a file

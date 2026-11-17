@@ -2,9 +2,8 @@
 """TeslaPilot: installable branches carry no Git LFS objects.
 
   --check  (default) exit 1 if any tracked file is a Git LFS pointer, other than
-           the chestnut-only big model, which must also be fetchexcluded in
-           .lfsconfig, and the AGNOS updater, which must stay filter=lfs and
-           fetched. Checked-out submodules are scanned too.
+           the chestnut big model and the AGNOS updater, which must stay
+           filter=lfs and fetched. Checked-out submodules are scanned too.
   --fix    replace every disallowed pointer with its real file (git lfs pull from
            the .lfsconfig store) and stage it as a normal blob. Run after each
            comma merge, then commit.
@@ -17,13 +16,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 POINTER = b'version https://git-lfs.github.com/spec/v1'
-# pointer files allowed to stay: loaded only after chestnut_compiled() refuses pointers
-ALLOWED = {
-  'openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl',
-}
-# pointers kept like comma: updated's `tools/lfs.sh pull` replaces them before finalizing
+# pointer files allowed to stay and never fetched
+ALLOWED: set[str] = set()
+# pointers kept like comma: updated's and launch's `tools/lfs.sh pull` replace them
 FETCHED = {
   'openpilot/common/hardware/comma/updater',
+  'openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl',
 }
 # jetlink's own test fixture for its pointer detection; jetlink has no .gitattributes, so nothing smudges it
 SUBMODULE_ALLOWED = {

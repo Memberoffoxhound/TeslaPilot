@@ -15,7 +15,7 @@ openpilot/selfdrive/car/tests/test_models_segs.txt filter=lfs diff=lfs merge=lfs
 openpilot/common/hardware/comma/updater filter=lfs diff=lfs merge=lfs -text
 
 # Runtime assets are normal blobs. The updater follows comma in LFS (updated pulls it);
-# the chestnut big model stays a fetchexcluded pointer that chestnut_compiled() rejects.
+# the chestnut big model also stays in LFS; launch pulls it in the background.
 # After an upstream merge, run scripts/teslapilot_lfs.py --fix, then --check.
 *.onnx -filter -diff -merge -text
 *.svg -filter -diff -merge -text
