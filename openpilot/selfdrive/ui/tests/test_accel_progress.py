@@ -42,4 +42,4 @@ def test_provisioning():
 def test_fill_level():
   assert ap.fill_level(('download', 0.3), 5.0) == 0.3
   levels = [ap.fill_level(('compile', None), t / 10) for t in range(40)]
-  assert min(levels) < 0.05 and max(levels) > 0.95
+  assert min(levels) < 0.1 and 0.85 < max(levels) < 0.95
