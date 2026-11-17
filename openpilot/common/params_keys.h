@@ -159,6 +159,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     // JetlinkChargePhone: kept for jetlink KEYS (default off); no UI toggle (zoompilot).
     {"AcceleratorProgress", {CLEAR_ON_MANAGER_START, JSON}},
     {"JetlinkLink", {PERSISTENT, INT, "0"}},
+    {"AcceleratorDevice", {PERSISTENT, STRING, "none"}},  // none, chestnut, jetlink-usb, jetlink-ios; see accel_detect.py
+    {"AcceleratorAck", {PERSISTENT, STRING, "none"}},  // the device the one-time card last showed
     {"JetlinkSpec", {PERSISTENT, JSON}},
     {"JetlinkChargePhone", {PERSISTENT, BOOL, "0"}},
     // hardwared reports an enabled but unavailable accelerator.

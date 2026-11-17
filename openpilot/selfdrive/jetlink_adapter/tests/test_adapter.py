@@ -164,3 +164,21 @@ def test_modeld_asks_the_adapter_about_the_cable():
 def test_select_is_the_model_managers_queue():
   from openpilot.selfdrive import modelmanager as mm
   assert ja.KEYS.select == mm.DOWNLOAD_REF
+
+
+def test_accel_mode(params_root):
+  params_root.mkdir(parents=True, exist_ok=True)
+  key = params_root / ja.DEVICE_KEY
+  assert ja.accel_mode(chestnut=False) == 'none'
+  key.write_text('jetlink-ios')
+  assert ja.accel_mode(chestnut=False) == 'jetlink'
+  assert ja.accel_mode(chestnut=True) == 'chestnut'
+  key.write_text('chestnut')
+  assert ja.accel_mode(chestnut=False) == 'chestnut'
+  key.write_text('bogus')
+  assert ja.remembered() == 'none'
+
+
+def test_device_keys_declared():
+  header = (ROOT / 'openpilot/common/params_keys.h').read_text()
+  assert '"AcceleratorDevice"' in header and '"AcceleratorAck"' in header
