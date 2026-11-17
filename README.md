@@ -66,11 +66,17 @@ The driving model doesn't know your set speed, so it often drives slower than yo
 
 Off by default. Turn it on in **Settings → toggles → set speed assist**. It needs openpilot longitudinal control (**Settings → developer → alpha longitudinal**) and does nothing without it. When it's on, the icon above shows on Home. Tap it to get back to the toggle.
 
-### Jetlink big model (optional)
+### Big model on a chestnut or Jetlink (optional)
 
 Credit: [Zeph Leggett / zoompilot](https://github.com/zoompilot): [zoompilot/jetlink](https://github.com/zoompilot/jetlink) (MIT) and the wiring in [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot). TeslaPilot's adapter and model picker follow the same layout, so future Jetlink updates are easy to bring over.
 
-Runs openpilot's big driving model on a phone or computer plugged into the comma's USB-C port. Set it up in **Settings → models**. If you leave it off, nothing changes.
+Runs openpilot's big driving model on a comma chestnut, or with Jetlink on a phone or computer plugged into the comma's USB-C port. There's nothing to turn on, and the comma checks while it's offroad. A chestnut is found when it's plugged in. A Jetson on the USB-C port is found on its own; an iPhone needs **jetlink over iPhone** in **Settings → models**. Turning on ADB (**Settings → developer**) turns Jetlink off. The first time one connects, a card says your settings were updated.
+
+The comma big model (767 MB) downloads in the background only after a chestnut or Jetlink has been seen, so installs without one never download it. The small model drives until a big model is ready.
+
+Pick a big model in **Settings → models**. A chestnut and Jetlink each keep their own pick. On a chestnut, a new pick compiles on the chestnut while parked, and the comma big model drives until it's ready.
+
+The chestnut icon on Home and onroad shows progress. It dims and fills white while a model downloads, and flashes while it compiles and loads. It only turns orange if something failed. Tap it on Home to open **Settings → models**.
 
 ### Step aside for Tesla FSD (Tesla only)
 
