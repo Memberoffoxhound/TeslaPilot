@@ -235,7 +235,7 @@ def default_big_model(chestnut: bool, jetlink) -> str:
   status() snapshot or None; the UI passes its own."""
   # Highland: no sunnypilot.models.model_name
   try:
-    from jetlink.registry.catalog import DEFAULT_BIG_MODEL_NAME
+    from jetlink.registry.index import DEFAULT_BIG_MODEL_NAME
     default = str(DEFAULT_BIG_MODEL_NAME)
   except Exception:
     default = "default"

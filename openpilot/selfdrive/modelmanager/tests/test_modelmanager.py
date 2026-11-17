@@ -114,16 +114,12 @@ def test_store_uses_params_when_it_knows_the_key(monkeypatch):
   fake.put.assert_called_once_with(mm.ACTIVE_BIG, {'ref': REF_B}, block=True)
 
 
-def test_adapter_catalog_defaults_until_fetched():
-  pytest.importorskip('jetlink.registry.catalog')
-  from jetlink.registry.catalog import DEFAULT_BIG_MODEL_REF
-  a = ja.Adapter.__new__(ja.Adapter)
-  a._stores = {}
-  with mock.patch.object(ja.Adapter, '_params', side_effect=ImportError):
-    cat = a.get(ja.KEYS.catalog)
-    assert [b['ref'] for b in mm.catalog_bundles(cat)] == [DEFAULT_BIG_MODEL_REF]
-    store.put(mm.CACHE_BIG, CATALOG)
-    assert a.get(ja.KEYS.catalog) == CATALOG
+def test_default_big_model_uses_the_index():
+  from jetlink.registry.index import DEFAULT_BIG_MODEL_NAME
+  assert ja.default_big_model(False, None) == DEFAULT_BIG_MODEL_NAME
+  status = mock.Mock(default_model='From Status')
+  assert ja.default_big_model(False, status) == 'From Status'
+  assert ja.default_big_model(True, status) == DEFAULT_BIG_MODEL_NAME
 
 
 # -- the catalog -------------------------------------------------------------------
