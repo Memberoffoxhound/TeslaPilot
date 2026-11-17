@@ -47,7 +47,7 @@ def default_name() -> str:
 
 
 def compile_progress() -> dict | None:
-  """The chestnut compile of the current pick, in jetlink.progress's shape."""
+  # the chestnut compile of the current pick, in jetlink.progress's shape
   p, pick = store.get(CHESTNUT_PROGRESS), picked()
   return p if isinstance(p, dict) and pick and p.get('ref') == pick['ref'] else None
 
@@ -84,8 +84,7 @@ def list_label() -> str:
 
 
 def model_note(ref: str) -> str:
-  """jetlink: 'ready' when the Jetson has built it, 'downloaded' when on the comma.
-  chestnut: 'ready' once compiled, the compile's stage, 'failed', else 'compiles on device'."""
+  # jetlink: 'ready' (built on the Jetson) or 'downloaded'; chestnut: its compile stage, 'failed', 'ready' or 'compiles on device'
   try:
     if mode() != 'chestnut':
       return str(ja.model_state(ref) or "")

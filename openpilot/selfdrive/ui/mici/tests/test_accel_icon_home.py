@@ -1,4 +1,4 @@
-"""Accelerator icon on the mici Home Screen: fills while provisioning, orange only on failure, tap opens Models."""
+# mici home accelerator icon: fills while provisioning, orange only on failure, tap opens Models
 import json
 import os
 import subprocess
