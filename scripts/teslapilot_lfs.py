@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 POINTER = b'version https://git-lfs.github.com/spec/v1'
 # pointer files allowed to stay and never fetched
 ALLOWED: set[str] = set()
-# pointers kept like comma: updated's and launch's `tools/lfs.sh pull` replace them
+# pointers kept like comma: updated's `tools/lfs.sh pull` and launch replace them
 FETCHED = {
   'openpilot/common/hardware/comma/updater',
   'openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl',

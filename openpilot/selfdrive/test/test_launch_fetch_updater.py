@@ -54,3 +54,4 @@ def test_updater_pull_skips_the_big_model():
   assert '"$DIR/tools/lfs.sh" pull --exclude "$BIG_MODEL"' in s
   assert 'BIG_MODEL="openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl"' in s
   assert s.index('fetch_big_model &') < s.index('    agnos_init\n')
+  assert 'scripts/fetch_big_model.py' in s

@@ -17,12 +17,13 @@ function fetch_updater {
   done
 }
 
-# the chestnut big model ships in LFS (767 MB); a fresh clone leaves a pointer, so pull it in the background
+# the chestnut big model ships in LFS (767 MB); a fresh clone leaves a pointer, so pull it in the background.
+# one stream that resumes across reboots; a real file skips this
 function fetch_big_model {
   local m="$DIR/$BIG_MODEL" t=0
   while [ "$(head -c 7 "$m" 2>/dev/null)" = "version" ]; do
     sleep $t; t=60
-    "$DIR/tools/lfs.sh" pull
+    nice -n 19 "$DIR/scripts/fetch_big_model.py"
   done
 }
 
