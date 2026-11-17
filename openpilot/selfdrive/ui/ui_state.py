@@ -15,6 +15,7 @@ from openpilot.system.ui.lib.application import gui_app
 from openpilot.common.hardware import HARDWARE, PC
 from openpilot.common.hardware.usb import cable_connected, get_usb_state, is_chestnut_usb_id, usb_host_connected
 from openpilot.selfdrive.modeld.helpers import chestnut_compiled
+from openpilot.selfdrive.ui import accel_progress, model_picker
 from openpilot.selfdrive.car import tesla_step_aside, park_offroad
 from openpilot.selfdrive.ui.lib.park_view import HOLD, JUMP, ParkView
 from openpilot.selfdrive import jetlink_adapter
@@ -110,6 +111,7 @@ class UIState:
     self.usb_disconnected_ts: float | None = None
     self.usb_unknown: bool = False
     self.chestnut_state = ChestnutState.DISCONNECTED
+    self.accel_progress: tuple[str, float | None] | None = None  # accel_progress.provisioning()
     # Jetlink (zoompilot ui_state_zp): status snapshot, None with a chestnut fitted;
     # joining state from its runtime record
     self.jetlink = None
@@ -225,7 +227,8 @@ class UIState:
         self.status = UIStatus.DISENGAGED
         self.started_frame = self.sm.frame
         self.started_time = time.monotonic()
-        self.chestnut_present = self.sm["deviceState"].chestnutPresent or (self.chestnut_compiled and jetlink_adapter.chestnut_cable(self.usb_connected) and not usb_host_connected())
+        self.chestnut_present = self.sm["deviceState"].chestnutPresent or (self.chestnut_compiled and jetlink_adapter.chestnut_cable(self.usb_connected)
+                                                                           and not usb_host_connected())
 
       for callback in self._offroad_transition_callbacks:
         callback()
@@ -255,6 +258,14 @@ class UIState:
       self._accelerator_state_name = getattr(runtime, 'state', None) or 'none'
     except Exception:
       self.jetlink, self._accelerator_state_name = None, 'none'
+
+  def _update_accel_progress(self) -> None:
+    try:
+      mode = jetlink_adapter.accel_mode(self.chestnut_present)
+      bundled = accel_progress.bundled_download() if mode == 'chestnut' and not self.chestnut_compiled else None
+      self.accel_progress = accel_progress.provisioning(mode, model_picker.compile_progress(), getattr(self.jetlink, 'progress', None), bundled)
+    except Exception:
+      self.accel_progress = None
 
   def _update_chestnut_state(self) -> None:
     if (view := self.jetlink_view) is not None:
@@ -309,6 +320,7 @@ class UIState:
     self.chestnut_loading = self.params.get_bool("ChestnutLoading")
     self.chestnut_alert = any(self.params.get(k) is not None for k, a in OFFROAD_ALERTS.items() if k.startswith("Offroad_Chestnut") and a["severity"] >= 0)
     self._update_jetlink()
+    self._update_accel_progress()
     # the Jetson configures the gadget ~25 s after a cold boot, after the one-shot
     # usb_unknown decision; recognising it late still clears "unknown"
     if (view := self.jetlink_view) is not None and view.present and self.usb_unknown:
