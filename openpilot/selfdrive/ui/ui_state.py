@@ -263,7 +263,9 @@ class UIState:
     try:
       mode = jetlink_adapter.accel_mode(self.chestnut_present)
       bundled = accel_progress.bundled_download() if mode == 'chestnut' and not self.chestnut_compiled else None
-      self.accel_progress = accel_progress.provisioning(mode, model_picker.compile_progress(), getattr(self.jetlink, 'progress', None), bundled)
+      # one mode read; only a chestnut uses its compile progress
+      compiling = model_picker.compile_progress(mode) if mode == 'chestnut' and bundled is None else None
+      self.accel_progress = accel_progress.provisioning(mode, compiling, getattr(self.jetlink, 'progress', None), bundled)
     except Exception:
       self.accel_progress = None
 

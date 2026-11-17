@@ -20,8 +20,8 @@ def mode() -> str:
   return ja.accel_mode(ui.ui_state.chestnut_present if ui else None)
 
 
-def slot():
-  return slot_for(mode())
+def slot(m: str | None = None):
+  return slot_for(m or mode())
 
 
 def bundles() -> list[dict]:
@@ -36,8 +36,8 @@ def folders() -> list[tuple[str, list[dict]]]:
   return sorted(grouped.items(), key=lambda kv: max(int(b.get("index", 0)) for b in kv[1]), reverse=True)
 
 
-def picked() -> dict | None:
-  pick = store.get(slot().pick)
+def picked(m: str | None = None) -> dict | None:
+  pick = store.get(slot(m).pick)
   return pick if isinstance(pick, dict) and pick.get("ref") else None
 
 
@@ -46,9 +46,9 @@ def default_name() -> str:
   return ja.default_big_model(mode() == 'chestnut', ui_state.jetlink)
 
 
-def compile_progress() -> dict | None:
+def compile_progress(m: str | None = None) -> dict | None:
   # the chestnut compile of the current pick, in jetlink.progress's shape
-  p, pick = store.get(CHESTNUT_PROGRESS), picked()
+  p, pick = store.get(CHESTNUT_PROGRESS), picked(m)
   return p if isinstance(p, dict) and pick and p.get('ref') == pick['ref'] else None
 
 
