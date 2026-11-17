@@ -168,7 +168,8 @@ def test_select_is_the_model_managers_queue():
 
 def test_accel_mode(params_root):
   params_root.mkdir(parents=True, exist_ok=True)
-  key = params_root / ja.DEVICE_KEY
+  from openpilot.selfdrive.modeld.accel_keys import DEVICE_KEY
+  key = params_root / DEVICE_KEY
   assert ja.accel_mode(chestnut=False) == 'none'
   key.write_text('jetlink-ios')
   assert ja.accel_mode(chestnut=False) == 'jetlink'

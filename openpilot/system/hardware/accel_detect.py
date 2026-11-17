@@ -3,6 +3,7 @@
 import time
 
 from openpilot.selfdrive import jetlink_adapter as ja
+from openpilot.selfdrive.modeld.accel_keys import DEVICE_KEY, known
 
 GRACE_S = 3.0    # a chestnut enumerates within this after the cable
 PROBE_S = 8.0    # how long a probe waits for a Jetlink host
@@ -28,8 +29,7 @@ class AccelDetect:
   def __init__(self, params, now=time.monotonic, chestnut=_chestnut, cable=_cable, present=_present, log=None):
     self.params, self.now, self.log = params, now, log
     self.chestnut, self.cable, self.present = chestnut, cable, present
-    device = params.get(ja.DEVICE_KEY)
-    self.device = device if device in ja.DEVICES else 'none'
+    self.device = known(params.get(DEVICE_KEY))
     self.cable_ts = self.probe_ts = self.absent_ts = None
     self.probed = False
     self._link(LINK[self.device])  # boot straight into the remembered mode
@@ -43,7 +43,7 @@ class AccelDetect:
       if self.log is not None:
         self.log.warning(f"accel: {self.device} -> {device}")
       self.device = device
-      self.params.put(ja.DEVICE_KEY, device)
+      self.params.put(DEVICE_KEY, device)
 
   def _end_probe(self) -> None:
     if self.probe_ts is not None:

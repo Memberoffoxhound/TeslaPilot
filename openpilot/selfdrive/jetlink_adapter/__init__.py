@@ -83,17 +83,14 @@ def link_on() -> bool:
     return False
 
 
-# the last accelerator seen, kept across boots (hardwared's AccelDetect writes it)
-DEVICE_KEY = 'AcceleratorDevice'
-DEVICES = ('none', 'chestnut', 'jetlink-usb', 'jetlink-ios')
-
-
 def remembered() -> str:
+  # the last accelerator AccelDetect saw
+  from openpilot.selfdrive.modeld.accel_keys import DEVICE_KEY, known
   try:
     device = (_params_dir() / DEVICE_KEY).read_text().strip()
   except OSError:
     return 'none'
-  return device if device in DEVICES else 'none'
+  return known(device)
 
 
 def accel_mode(chestnut: bool | None = None) -> str:
@@ -101,7 +98,8 @@ def accel_mode(chestnut: bool | None = None) -> str:
   if chestnut is None:
     from openpilot.selfdrive.modeld.helpers import chestnut_present
     chestnut = chestnut_present()
-  return 'chestnut' if chestnut else remembered().split('-')[0]
+  from openpilot.selfdrive.modeld.accel_keys import mode_of
+  return 'chestnut' if chestnut else mode_of(remembered())
 
 
 def chestnut_cable(connected: bool | None = None) -> bool:

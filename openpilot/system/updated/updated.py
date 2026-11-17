@@ -19,6 +19,7 @@ from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.common.hardware import AGNOS, HARDWARE
 from openpilot.common.version import get_build_metadata
+from openpilot.selfdrive.modeld.accel_keys import DEVICE_KEY
 
 LOCK_FILE = os.getenv("UPDATER_LOCK_FILE", "/tmp/safe_staging_overlay.lock")
 STAGING_ROOT = os.getenv("UPDATER_STAGING_ROOT", "/data/safe_staging")
@@ -178,7 +179,7 @@ BIG_MODEL = "openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl"
 
 def lfs_exclude(params) -> list[str]:
   # the big model downloads only once an accelerator has been seen (launch's fetch_big_model)
-  dev = params.get("AcceleratorDevice") or "none"
+  dev = params.get(DEVICE_KEY) or "none"
   return [] if dev == "chestnut" or dev.startswith("jetlink") else ["--exclude", BIG_MODEL]
 
 

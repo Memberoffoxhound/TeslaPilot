@@ -1,10 +1,11 @@
 # one-time card when a chestnut or Jetlink is first seen offroad; none on unplug
 import time
 
+from openpilot.selfdrive.modeld.accel_keys import DEVICE_KEY, mode_of
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import gui_app
 
-DEVICE, ACK = "AcceleratorDevice", "AcceleratorAck"
+ACK = "AcceleratorAck"
 MODEL_LINE = "You can see progress and change your model in Settings, Models."
 CARDS = {
   'chestnut': ("Chestnut connected", "Settings have been updated to manage your chestnut."),
@@ -25,7 +26,7 @@ def card(mode: str, big_model_ready: bool = True) -> tuple[str, list[str]] | Non
 
 def due(params) -> str | None:
   # the mode to announce; an unplug is acked quietly
-  mode = (params.get(DEVICE) or 'none').split('-')[0]
+  mode = mode_of(params.get(DEVICE_KEY))
   if mode == (params.get(ACK) or 'none'):
     return None
   if mode not in CARDS:
