@@ -173,6 +173,15 @@ def init_overlay() -> None:
   cloudlog.info(f"git diff output:\n{git_diff}")
 
 
+BIG_MODEL = "openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl"
+
+
+def lfs_exclude(params) -> list[str]:
+  # the big model downloads only once an accelerator has been seen (launch's fetch_big_model)
+  dev = params.get("AcceleratorDevice") or "none"
+  return [] if dev == "chestnut" or dev.startswith("jetlink") else ["--exclude", BIG_MODEL]
+
+
 def finalize_update() -> None:
   """Take the current OverlayFS merged view and finalize a copy outside of
   OverlayFS, ready to be swapped-in at BASEDIR. Copy using shutil.copytree"""
@@ -410,7 +419,7 @@ class Updater:
     # Only checkouts with LFS files need a client, so release updates don't depend on git-lfs
     if run(["git", "ls-files", ":(attr:filter=lfs)"], OVERLAY_MERGED):
       lfs = os.path.join(OVERLAY_MERGED, "tools/lfs.sh")
-      run([lfs, "pull"] if os.path.isfile(lfs) else ["git", "lfs", "pull"], OVERLAY_MERGED)
+      run([lfs, "pull", *lfs_exclude(self.params)] if os.path.isfile(lfs) else ["git", "lfs", "pull"], OVERLAY_MERGED)
 
     # TODO: show agnos download progress
     if AGNOS:

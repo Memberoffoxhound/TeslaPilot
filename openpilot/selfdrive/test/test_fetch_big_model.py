@@ -104,3 +104,10 @@ def test_ui_reads_the_partial(store, tmp_path):
   fbm.partial(OID).parent.mkdir(parents=True)
   fbm.partial(OID).write_bytes(DATA[:SIZE // 2])
   assert 0.4 < bundled_download(pkl, store) < 0.8
+
+
+@pytest.mark.parametrize('dev,pulled', [(None, False), ('none', False), ('chestnut', True), ('jetlink-usb', True), ('jetlink-ios', True)])
+def test_updates_skip_the_big_model_without_an_accelerator(dev, pulled):
+  from openpilot.system.updated.updated import BIG_MODEL, lfs_exclude
+  assert BIG_MODEL == fbm.PKL
+  assert lfs_exclude({'AcceleratorDevice': dev}) == ([] if pulled else ['--exclude', BIG_MODEL])
