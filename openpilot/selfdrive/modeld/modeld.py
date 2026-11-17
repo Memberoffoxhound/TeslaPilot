@@ -263,9 +263,9 @@ def load_chestnut(params, cam_w, cam_h, model_state=None):
 def main(demo=False):
   cloudlog.warning("modeld init")
 
-  # a cable is a chestnut on its way, unless a USB host is on it or Jetlink owns the port
-  # zoompilot: chestnut_cable() alone; Highland also excludes a USB host (stock USB gadget)
-  CHESTNUT = chestnut_compiled() and (chestnut_present() or (jetlink_adapter.chestnut_cable() and not usb_host_connected()))
+  # a remembered chestnut on the cable may still be enumerating; a random cable is not one
+  CHESTNUT = chestnut_compiled() and (chestnut_present() or (jetlink_adapter.accel_mode(False) == 'chestnut'
+                                                             and jetlink_adapter.chestnut_cable() and not usb_host_connected()))
   if CHESTNUT:
     from tinygrad.runtime.ops_amd import AMDDevice
     AMDDevice.wait_timeout_ms = 3000

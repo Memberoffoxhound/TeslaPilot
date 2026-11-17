@@ -89,8 +89,9 @@ def test_model_info():
   assert al.model_info(object(), 'active', False, small, big)[0] == 'built-in'   # never raises
 
 
-def test_ui_chestnut_guess_matches_modeld():
+def test_ui_does_not_guess_a_chestnut_from_a_cable():
   ui = (UI / 'ui_state.py').read_text()
   modeld = (UI.parent / 'modeld/modeld.py').read_text()
-  assert 'jetlink_adapter.chestnut_cable(self.usb_connected)' in ui
+  assert 'chestnut_cable(self.usb_connected)' not in ui
+  assert "accel_mode(False) == 'chestnut'" in modeld
   assert 'jetlink_adapter.chestnut_cable()' in modeld
