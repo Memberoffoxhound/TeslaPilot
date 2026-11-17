@@ -57,7 +57,9 @@ class AccelCard:
       from openpilot.selfdrive.ui.mici.widgets.dialog import SettingDescriptionDialog
       ui_state.params.put(ACK, mode)
       title, pages = card(mode, chestnut_compiled())
-      self.page = SettingDescriptionDialog(title, "\n".join(pages), gui_app.texture("icons_mici/offroad_alerts/orange_warning.png", 64, 64))
+      # a card per sentence: two don't fit on one
+      icon = gui_app.texture("icons_mici/offroad_alerts/orange_warning.png", 64, 64)
+      self.page = SettingDescriptionDialog(title, "\n".join(pages).replace(". ", ".\n"), icon)
       self.page._scroller.items[0].set_value("settings updated")
       gui_app.push_widget(self.page)
     return self.active
