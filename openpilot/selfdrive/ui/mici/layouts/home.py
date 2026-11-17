@@ -363,7 +363,7 @@ class MiciHomeLayout(Widget):
     # dim rather than the solid green of a model that is driving
     waiting = chestnut_state == ChestnutState.WAITING
     # downloading fills the dimmed icon, compiling flashes it; orange only for a real failure
-    provisioning = ui_state.accel_progress is not None
+    provisioning = ui_state.accel_progress is not None and chestnut_state != ChestnutState.DISCONNECTED
     chestnut_failed = not provisioning and chestnut_state in (ChestnutState.UNCOMPILED, ChestnutState.FAILED)
     self._usb_icon.set_visible(usb_connected and usb_unknown and not chestnut_failed and not provisioning)
     self._chestnut_fill_icon.set_visible(provisioning)

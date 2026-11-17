@@ -215,6 +215,10 @@ class HudRenderer(Widget):
     # custom ui: under alerts like MAX
     top_ok = self._can_draw_top_icons or not custom
     now, progress, state = rl.get_time(), ui_state.accel_progress, ui_state.chestnut_state
+    # leftover compile/download must not flash once the device is gone
+    if state == ChestnutState.DISCONNECTED:
+      self._slot_want, self._chestnut_alpha_filter.x = False, 0.0
+      return
     loading = progress is None and state == ChestnutState.LOADING
     failed = progress is None and state in (ChestnutState.UNCOMPILED, ChestnutState.FAILED)
     if progress is not None:

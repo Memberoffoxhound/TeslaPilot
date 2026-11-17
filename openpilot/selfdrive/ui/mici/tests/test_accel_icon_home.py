@@ -15,7 +15,7 @@ PROBE = textwrap.dedent('''
   from openpilot.cereal import log
 
   params = Params()
-  CS = SimpleNamespace(NONE=0, LOADING=1, WAITING=2, READY=3, ACTIVE=4, UNCOMPILED=5, FAILED=6)
+  CS = SimpleNamespace(DISCONNECTED=0, NONE=0, LOADING=1, WAITING=2, READY=3, ACTIVE=4, UNCOMPILED=5, FAILED=6)
   class UIStatus(Enum):
     DISENGAGED = 0
   class SM(dict):
@@ -40,7 +40,7 @@ PROBE = textwrap.dedent('''
   out = {}
   cases = {"ready": (CS.READY, None), "first_download": (CS.UNCOMPILED, ("download", 0.3)),
            "compile": (CS.READY, ("compile", None)), "uncompiled": (CS.UNCOMPILED, None), "failed": (CS.FAILED, None),
-           "none": (CS.NONE, None)}
+           "none": (CS.NONE, None), "gone": (CS.DISCONNECTED, ("compile", None))}
   for name, (state, progress) in cases.items():
     ui.chestnut_state, ui.accel_progress = state, progress
     clicks = []
@@ -86,6 +86,8 @@ def test_tap_opens_models(probe):
   for name in ("ready", "first_download", "compile", "failed"):
     assert probe[name]["clicks"] == ["models"], name
   assert probe["none"]["clicks"] == []
+  assert probe["gone"]["clicks"] == []
+  assert not any(probe["gone"][k] for k in ("fill", "failed", "ready", "usb"))
 
 
 

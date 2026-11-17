@@ -122,3 +122,35 @@ def test_small_compass_on_the_personality(place):
 
 def test_custom_off_stays_stock(place):
   assert place["stock"] == [86, 195] and place["stock_failed"] == [86, 194]
+
+ABSENT = textwrap.dedent('''
+  out = {}
+  for name, custom, size in (("large", True, 1), ("small", True, 0), ("stock", False, 1)):
+    S["custom"], S["size"] = custom, size
+    frames(30, UIStatus.ENGAGED, chestnut_state=CS.DISCONNECTED, accel_progress=("compile", None))
+    out[name + "_compile"] = pos("gpu")
+    frames(30, chestnut_state=CS.DISCONNECTED, accel_progress=("download", 0.4))
+    out[name + "_download"] = pos("gpu")
+  S["custom"], S["size"] = True, 0
+  r = {}
+  for _ in range(30):
+    r = frames(1, top=True, slot=True, status=UIStatus.ENGAGED, chestnut_state=CS.DISCONNECTED,
+               accel_progress=("compile", None))
+  out["small_pers"] = r.get("pers", 0)
+  print("RESULT" + json.dumps(out))
+''')
+
+
+@pytest.fixture(scope="module")
+def absent(tmp_path_factory):
+  return run_probe(tmp_path_factory, ABSENT)
+
+
+def test_no_icon_when_disconnected_even_with_stale_progress(absent):
+  for name in ("large_compile", "large_download", "small_compile", "small_download", "stock_compile", "stock_download"):
+    assert absent[name] is None, name
+
+
+def test_small_compass_keeps_the_personality_when_disconnected(absent):
+  assert absent["small_pers"] > 150
+

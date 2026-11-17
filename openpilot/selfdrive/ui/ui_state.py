@@ -13,7 +13,7 @@ from openpilot.selfdrive.ui.lib.prime_state import PrimeState
 from openpilot.selfdrive.ui.lib.notifications import Notifications
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.common.hardware import HARDWARE, PC
-from openpilot.common.hardware.usb import cable_connected, get_usb_state, is_chestnut_usb_id, usb_host_connected
+from openpilot.common.hardware.usb import cable_connected, get_usb_state, is_chestnut_usb_id
 from openpilot.selfdrive.modeld.helpers import chestnut_compiled
 from openpilot.selfdrive.ui import accel_progress, model_picker
 from openpilot.selfdrive.car import tesla_step_aside, park_offroad
@@ -228,8 +228,7 @@ class UIState:
       if self.started:
         self.started_frame = self.sm.frame
         self.started_time = time.monotonic()
-        self.chestnut_present = self.sm["deviceState"].chestnutPresent or (self.chestnut_compiled and jetlink_adapter.chestnut_cable(self.usb_connected)
-                                                                           and not usb_host_connected())
+        self.chestnut_present = self.sm["deviceState"].chestnutPresent
 
       for callback in self._offroad_transition_callbacks:
         callback()
@@ -262,6 +261,9 @@ class UIState:
 
   def _update_accel_progress(self) -> None:
     try:
+      if not (self.chestnut_present or getattr(self.jetlink, 'present', False)):
+        self.accel_progress = None
+        return
       mode = jetlink_adapter.accel_mode(self.chestnut_present)
       bundled = accel_progress.bundled_download() if mode == 'chestnut' and not self.chestnut_compiled else None
       # one mode read; only a chestnut uses its compile progress
