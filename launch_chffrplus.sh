@@ -4,19 +4,22 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null && pwd )"
 
 source "$DIR/launch_env.sh"
 
+BIG_MODEL="openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl"
+
 # fresh installs (git clone --depth=1) leave the updater an LFS pointer, pull it before the flash loop
 function fetch_updater {
   local u="$DIR/openpilot/common/hardware/comma/updater" t=0
   until [ "$(head -c 4 "$u" 2>/dev/null)" = $'\x7fELF' ]; do
     sleep $t; t=10
     echo "AGNOS updater is an LFS pointer, pulling"
-    "$DIR/tools/lfs.sh" pull
+    # don't wait on the big model fetch_big_model is pulling
+    "$DIR/tools/lfs.sh" pull --exclude "$BIG_MODEL"
   done
 }
 
 # the chestnut big model ships in LFS (767 MB); a fresh clone leaves a pointer, so pull it in the background
 function fetch_big_model {
-  local m="$DIR/openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl" t=0
+  local m="$DIR/$BIG_MODEL" t=0
   while [ "$(head -c 7 "$m" 2>/dev/null)" = "version" ]; do
     sleep $t; t=60
     "$DIR/tools/lfs.sh" pull

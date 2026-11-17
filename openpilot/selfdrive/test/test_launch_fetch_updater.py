@@ -46,3 +46,11 @@ def test_guard_runs_before_the_flash_loop():
   s = LAUNCH.read_text()
   i = s.index('fetch_updater\n    while true; do')
   assert s.index('--verify "$MANIFEST"') < i < s.index('"$DIR/openpilot/common/hardware/comma/updater" "$AGNOS_PY"')
+
+
+def test_updater_pull_skips_the_big_model():
+  # the updater must not wait on fetch_big_model's 767 MB
+  s = LAUNCH.read_text()
+  assert '"$DIR/tools/lfs.sh" pull --exclude "$BIG_MODEL"' in s
+  assert 'BIG_MODEL="openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl"' in s
+  assert s.index('fetch_big_model &') < s.index('    agnos_init\n')
