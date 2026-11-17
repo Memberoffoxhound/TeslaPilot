@@ -28,6 +28,7 @@ SET_SPEED_PERSISTENCE = 2.5  # seconds
 COMPASS_FULL_ALPHA = 229.5
 COMPASS_TOP = 10  # dm icon top: 52 px centered 36 down
 COMPASS_RIGHT = 4
+SLOT_CX, SLOT_CY = 42, 50  # gpu icon center from the video's bottom right with the small compass, on the personality
 WHEEL_SIZE = 52
 WHEEL_WHITE = rl.Color(255, 255, 255, 255)
 WHEEL_GREEN = rl.Color(0, 255, 64, 255)
@@ -197,14 +198,12 @@ class HudRenderer(Widget):
 
   def _draw_model_source(self, rect: rl.Rectangle) -> None:
     custom = custom_onroad_ui()
-    # clear of the confidence ball when it's on the left
-    x = rect.x + (56 if custom else 14)
     # custom ui: under alerts like MAX
     top_ok = self._can_draw_top_icons or not custom
     if ui_state.accel_progress is not None:
       self._chestnut_icon, self._chestnut_fade_time = None, rl.get_time()
       alpha = self._chestnut_alpha_filter.update(top_ok)
-      draw_progress(self._txt_chestnut, x, rect.y + rect.height - 10 - self._txt_chestnut.height, alpha)
+      draw_progress(self._txt_chestnut, *self._model_source_pos(rect, self._txt_chestnut, custom), alpha)
       return
     loading = ui_state.chestnut_state == ChestnutState.LOADING
     if loading:
@@ -228,8 +227,18 @@ class HudRenderer(Widget):
     if alpha < 1e-2:
       return
 
-    pos = rl.Vector2(x, rect.y + rect.height - 10 - icon.height)
+    pos = rl.Vector2(*self._model_source_pos(rect, icon, custom))
     rl.draw_texture_ex(icon, pos, 0.0, 1.0, rl.Color(255, 255, 255, int(255 * opacity * alpha)))
+
+  @staticmethod
+  def _model_source_pos(rect: rl.Rectangle, icon: rl.Texture, custom: bool) -> tuple[float, float]:
+    # stock bottom left, custom bottom right clear of the ball and torque bar, small compass on the personality
+    r, b = rect.x + rect.width, rect.y + rect.height
+    if not custom:
+      return rect.x + 14, b - 10 - icon.height
+    if compass_size() != COMPASS_LARGE:
+      return r - SLOT_CX - icon.width / 2, b - SLOT_CY - icon.height / 2
+    return r - 10 - icon.width, b - 10 - icon.height
 
   def _draw_steering_wheel(self, rect: rl.Rectangle) -> None:
     # The wheel is the source of truth for engagement: green if and only if openpilot is engaged.

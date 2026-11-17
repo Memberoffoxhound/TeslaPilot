@@ -7,7 +7,7 @@ import textwrap
 
 import pytest
 
-PROBE = textwrap.dedent('''
+HEAD = textwrap.dedent('''
   import json, sys, types
   from enum import Enum
   from types import SimpleNamespace
@@ -78,6 +78,11 @@ PROBE = textwrap.dedent('''
       rl.end_drawing()
     return {k: v[0] for k, v in seen.items()}
 
+  def pos(name):
+    return seen[name][1:] if name in seen else None
+''')
+
+FADE = textwrap.dedent('''
   out = {}
   frames(120, UIStatus.ENGAGED)
   out["engaged"] = frames()
@@ -101,15 +106,19 @@ PROBE = textwrap.dedent('''
 ''')
 
 
-@pytest.fixture(scope="module")
-def probe(tmp_path_factory):
+def run_probe(tmp_path_factory, body):
   env = dict(os.environ, PARAMS_ROOT=str(tmp_path_factory.mktemp("params")))
-  p = subprocess.run([sys.executable, "-c", PROBE], capture_output=True, text=True, env=env, timeout=120)
+  p = subprocess.run([sys.executable, "-c", HEAD + body], capture_output=True, text=True, env=env, timeout=120)
   line = next((ln for ln in p.stdout.splitlines() if ln.startswith("RESULT")), None)
   if "WINDOW" not in p.stdout:
     pytest.skip(f"no raylib window here: {p.stderr[-400:]}")
   assert line, p.stderr[-2000:]
   return json.loads(line[6:])
+
+
+@pytest.fixture(scope="module")
+def probe(tmp_path_factory):
+  return run_probe(tmp_path_factory, FADE)
 
 
 def test_large_compass_fades_like_max(probe):
