@@ -5,7 +5,7 @@ import sys
 import time
 
 from openpilot.selfdrive import jetlink_adapter as ja
-from openpilot.selfdrive.modelmanager import STATUS, catalog_bundles, folder_of, short_name, slot_for
+from openpilot.selfdrive.modelmanager import CHESTNUT_FAILED, STATUS, catalog_bundles, folder_of, short_name, slot_for
 from openpilot.selfdrive.modelmanager import store
 
 DEFAULT_LABEL = "default"
@@ -86,6 +86,7 @@ def model_note(ref: str) -> str:
 
 
 def select(ref: str) -> None:
+  store.remove(CHESTNUT_FAILED)  # picking again retries a failed compile
   store.put(slot().ref, ref)
 
 

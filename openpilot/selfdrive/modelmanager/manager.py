@@ -117,11 +117,20 @@ class ModelManager:
 
 
 def main() -> None:
+  from openpilot.selfdrive.modelmanager.compiler import ChestnutCompiler
   manager = ModelManager()
+  compiler = ChestnutCompiler()
   manager.report(state="idle")
-  while True:
-    manager.step()
-    time.sleep(1.0)
+  try:
+    while True:
+      manager.step()
+      try:
+        compiler.step(manager.mode())
+      except Exception:
+        cloudlog.exception("modelmanagerd: compile step failed")
+      time.sleep(1.0)
+  finally:
+    compiler.stop()
 
 
 if __name__ == "__main__":

@@ -22,9 +22,12 @@ CHESTNUT_PICK = "ChestnutModelPick"
 CHESTNUT_CACHE = "ChestnutModelsCache"
 CHESTNUT_SYNC = "ChestnutModelsSync"
 CHESTNUT_REF = "ChestnutModelRef"
+CHESTNUT_FAILED = "ChestnutModelFailed"        # a pick that would not compile or load
+CHESTNUT_PROGRESS = "ChestnutCompileProgress"
 
 KEY_TYPES = {ACTIVE_BIG: "json", CACHE_BIG: "json", SYNC_BIG: "int", DOWNLOAD_REF: "str", STATUS: "json",
-             CHESTNUT_PICK: "json", CHESTNUT_CACHE: "json", CHESTNUT_SYNC: "int", CHESTNUT_REF: "str"}
+             CHESTNUT_PICK: "json", CHESTNUT_CACHE: "json", CHESTNUT_SYNC: "int", CHESTNUT_REF: "str",
+             CHESTNUT_FAILED: "str", CHESTNUT_PROGRESS: "json"}
 
 Slot = namedtuple('Slot', 'pick cache sync ref')
 SLOTS = {'jetlink': Slot(ACTIVE_BIG, CACHE_BIG, SYNC_BIG, DOWNLOAD_REF),
