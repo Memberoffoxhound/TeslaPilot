@@ -123,8 +123,8 @@ class HudRenderer(Widget):
     self._txt_compass_fan90: rl.Texture = gui_app.texture('icons_mici/onroad/driver_monitoring/dm_cone.png', 78, 78)
     self._compass_letter: str | None = None
     self._heading_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps, initialized=False)
-    self._compass_fade = FirstOrderFilter(0.0, 0.05, 1 / gui_app.target_fps)
-    self._compass_dim = FirstOrderFilter(1.0, 0.05, 1 / gui_app.target_fps)
+    # small fades like the long indicator, large like MAX
+    self._compass_fade = (FirstOrderFilter(0.0, 0.05, 1 / gui_app.target_fps), FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps))
     self._wheel_critical_filter = FirstOrderFilter(0, STATUS_FADE_RC, 1 / gui_app.target_fps)
 
     self._set_speed_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
@@ -143,7 +143,7 @@ class HudRenderer(Widget):
     self._can_draw_top_icons = can_draw_top_icons
 
   def set_speed_alpha(self) -> float:
-    return self._set_speed_alpha_filter.x
+    return self._set_speed_alpha
 
   def drawing_top_icons(self) -> bool:
     # whether we're drawing any top icons currently
@@ -196,11 +196,14 @@ class HudRenderer(Widget):
     self._draw_steering_wheel(rect)
 
   def _draw_model_source(self, rect: rl.Rectangle) -> None:
+    custom = custom_onroad_ui()
     # clear of the confidence ball when it's on the left
-    x = rect.x + (56 if custom_onroad_ui() else 14)
+    x = rect.x + (56 if custom else 14)
+    # custom ui: under alerts like MAX
+    top_ok = self._can_draw_top_icons or not custom
     if ui_state.accel_progress is not None:
       self._chestnut_icon, self._chestnut_fade_time = None, rl.get_time()
-      alpha = self._chestnut_alpha_filter.update(True)
+      alpha = self._chestnut_alpha_filter.update(top_ok)
       draw_progress(self._txt_chestnut, x, rect.y + rect.height - 10 - self._txt_chestnut.height, alpha)
       return
     loading = ui_state.chestnut_state == ChestnutState.LOADING
@@ -212,7 +215,8 @@ class HudRenderer(Widget):
       opacity = 1.0
     elif ui_state.chestnut_state == ChestnutState.ACTIVE:
       icon = self._txt_chestnut_green
-      opacity = 1.0
+      # custom ui: dims disengaged like the wheel
+      opacity = 1 - (1 - DIMMED_ICON_ALPHA) * status_fade.weight(UIStatus.DISENGAGED) if custom else 1.0
     else:
       return
 
@@ -220,7 +224,7 @@ class HudRenderer(Widget):
       self._chestnut_fade_time = rl.get_time()
       self._chestnut_icon = icon
     visible = loading or rl.get_time() - self._chestnut_fade_time < SET_SPEED_PERSISTENCE
-    alpha = self._chestnut_alpha_filter.update(visible)
+    alpha = self._chestnut_alpha_filter.update(visible and top_ok)
     if alpha < 1e-2:
       return
 
@@ -269,11 +273,11 @@ class HudRenderer(Widget):
     heading, letter = self._heading_filter.x, self._compass_letter
 
     custom = custom_onroad_ui()
-    # large sits under alerts and hides disengaged, small dims like the other panel icons
-    shown = custom and (self._can_draw_top_icons and ui_state.status != UIStatus.DISENGAGED if large else bool(panel_visible))
-    self._compass_fade.update(1.0 if shown else 0.0)
-    dim = self._compass_dim.update(1.0 if large or ui_state.status != UIStatus.DISENGAGED else DIMMED_ICON_ALPHA / 0.9)
-    a = int(255 * 0.9 * self._compass_fade.x * dim)
+    # large sits under alerts and fades out disengaged like MAX, small dims like the other panel icons
+    shown = custom and (self._can_draw_top_icons if large else bool(panel_visible))
+    disengaged = status_fade.weight(UIStatus.DISENGAGED)
+    dim = 1 - disengaged if large else 1 - (1 - DIMMED_ICON_ALPHA / 0.9) * disengaged
+    a = int(255 * 0.9 * self._compass_fade[large].update(float(shown)) * dim)
     if not custom or a < 3:
       return
     if large:
