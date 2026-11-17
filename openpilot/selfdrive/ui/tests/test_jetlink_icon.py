@@ -63,12 +63,7 @@ def test_home_uses_chestnut_icons_only():
   assert not list((UI.parent / 'assets/icons_mici').glob('jetlink_metal*'))
 
 
-def test_ios_toggle_hidden_with_chestnut(monkeypatch):
-  fake_ui = SimpleNamespace(chestnut_present=False)
-  monkeypatch.setattr(al, 'ui_state', fake_ui)
-  assert al.ios_toggle_meaningful()
-  fake_ui.chestnut_present = True
-  assert not al.ios_toggle_meaningful()
+def test_ios_key():
   assert al.IOS_KEY == 'JetlinkIos'
 
 

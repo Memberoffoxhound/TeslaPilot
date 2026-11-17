@@ -17,10 +17,6 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 IOS_KEY = "JetlinkIos"  # iPhone is manual; a Jetson over USB is auto-detected (accel_detect.py)
 
 
-def ios_toggle_meaningful() -> bool:
-  return not ui_state.chestnut_present
-
-
 def link_status(jetlink=None) -> str:
   if jetlink is None:
     jetlink = ui_state.jetlink
