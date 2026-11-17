@@ -19,6 +19,93 @@ PLACE = textwrap.dedent('''
 ''')
 
 
+SLOT = textwrap.dedent('''
+  S["custom"], S["size"] = True, 0
+  OV = [0]
+  def adv(sec, top=True, **kw):
+    r = {}
+    for i in range(max(1, round(sec * gui_app.target_fps))):
+      r = frames(1, top=top, slot=True, **(kw if i == 0 else {}))
+      OV[0] = max(OV[0], min(r.get("gpu", 0), r.get("pers", 0)))
+    return {k: r.get(k, 0) for k in ("gpu", "pers")}
+  out = {}
+  adv(0.01, status=UIStatus.ENGAGED, chestnut_state=CS.ACTIVE, accel_progress=None)
+  out["start_1"], out["start_2_8"], out["start_4"] = adv(1.0), adv(1.8), adv(1.2)
+  adv(0.01, chestnut_state=CS.READY, accel_progress=("download", 0.1))
+  out["dl_1"], out["dl_4"] = adv(1.0), adv(3.0)
+  adv(0.01, accel_progress=("download", 0.3))
+  out["peek_1"], out["peek_3"] = adv(1.0), adv(2.0)
+  adv(0.01, accel_progress=("download", 0.4))
+  out["same_step"] = adv(1.0)
+  adv(0.01, accel_progress=("compile", None))
+  adv(4.0)
+  out["compile_29"], out["compile_31"], out["compile_33"] = adv(25.0), adv(2.0), adv(2.0)
+  adv(0.01, chestnut_state=CS.FAILED, accel_progress=None)
+  out["failed_3_5"], out["failed_4_6"] = adv(3.5), adv(1.1)
+  adv(0.01, chestnut_state=CS.ACTIVE)
+  adv(1.0)
+  ss.personality = SimpleNamespace(raw=2)
+  out["pers_change"] = adv(2 / gui_app.target_fps)
+  out["pers_0_5"], out["pers_2"], out["resume_3_5"], out["resume_6"] = adv(0.5), adv(1.5), adv(1.5), adv(2.5)
+  adv(0.01, top=False, chestnut_state=CS.READY, accel_progress=("download", 0.1))
+  out["alert"] = adv(3.5, top=False)
+  out["after_alert"] = adv(0.5)
+  out["overlap"] = OV[0]
+  S["size"] = 1
+  out["large_dl_10"] = adv(10.0)
+  print("RESULT" + json.dumps(out))
+''')
+
+
+@pytest.fixture(scope="module")
+def slot(tmp_path_factory):
+  return run_probe(tmp_path_factory, SLOT)
+
+
+def up(r):
+  return r["gpu"] > 200 and r["pers"] < 5
+
+
+def down(r):
+  return r["gpu"] < 5 and r["pers"] > 150
+
+
+def test_shows_3s_at_drive_start_and_changes(slot):
+  assert up(slot["start_1"]) and up(slot["start_2_8"]) and down(slot["start_4"])
+  assert up(slot["dl_1"]) and down(slot["dl_4"])
+
+
+def test_peeks_2s_per_25pct_download(slot):
+  assert up(slot["peek_1"]) and down(slot["peek_3"]) and down(slot["same_step"])
+
+
+def test_peeks_every_30s_compiling(slot):
+  assert down(slot["compile_29"]) and up(slot["compile_31"]) and down(slot["compile_33"])
+
+
+def test_failed_shows_4s(slot):
+  assert up(slot["failed_3_5"]) and down(slot["failed_4_6"])
+
+
+def test_personality_change_wins_then_show_resumes(slot):
+  assert slot["pers_change"]["gpu"] < 5
+  assert down(slot["pers_0_5"]) and down(slot["pers_2"])
+  assert up(slot["resume_3_5"]) and down(slot["resume_6"])
+
+
+def test_alerts_hide_both_and_skip_the_show(slot):
+  assert slot["alert"] == {"gpu": 0, "pers": 0}
+  assert down(slot["after_alert"])
+
+
+def test_sequential_not_crossfade(slot):
+  assert slot["overlap"] <= 6
+
+
+def test_large_compass_keeps_progress_up(slot):
+  assert slot["large_dl_10"]["gpu"] > 200
+
+
 @pytest.fixture(scope="module")
 def place(tmp_path_factory):
   return run_probe(tmp_path_factory, PLACE)

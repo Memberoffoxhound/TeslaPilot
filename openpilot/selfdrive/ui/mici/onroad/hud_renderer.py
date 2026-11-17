@@ -29,6 +29,7 @@ COMPASS_FULL_ALPHA = 229.5
 COMPASS_TOP = 10  # dm icon top: 52 px centered 36 down
 COMPASS_RIGHT = 4
 SLOT_CX, SLOT_CY = 42, 50  # gpu icon center from the video's bottom right with the small compass, on the personality
+SLOT_SHOW, SLOT_PEEK, SLOT_FAILED, SLOT_COMPILE_EVERY = 3.0, 2.0, 4.0, 30.0  # s, how long it takes the slot
 WHEEL_SIZE = 52
 WHEEL_WHITE = rl.Color(255, 255, 255, 255)
 WHEEL_GREEN = rl.Color(0, 255, 64, 255)
@@ -131,6 +132,12 @@ class HudRenderer(Widget):
     self._set_speed_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
     self._set_speed_alpha = 0.0
     self._chestnut_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
+    # shared slot with the small compass: personality alpha and highlight, show timer
+    self._slot_partner = (0.0, False)
+    self._slot_want = False
+    self._slot_key: tuple | None = None
+    self._slot_step: int | None = None
+    self._slot_until = self._slot_last = self._slot_t = 0.0
 
   def set_wheel_critical_icon(self, critical: bool):
     """Set the wheel icon to critical or normal state."""
@@ -142,6 +149,12 @@ class HudRenderer(Widget):
   def set_can_draw_top_icons(self, can_draw_top_icons: bool):
     """Set whether to draw the top part of the HUD."""
     self._can_draw_top_icons = can_draw_top_icons
+
+  def set_slot_partner(self, alpha: float, highlight: bool) -> None:
+    self._slot_partner = (alpha, highlight)
+
+  def slot_busy(self) -> bool:
+    return self._slot_want or self._chestnut_alpha_filter.x > 1e-2
 
   def set_speed_alpha(self) -> float:
     return self._set_speed_alpha
@@ -198,37 +211,69 @@ class HudRenderer(Widget):
 
   def _draw_model_source(self, rect: rl.Rectangle) -> None:
     custom = custom_onroad_ui()
+    shared = custom and compass_size() != COMPASS_LARGE
     # custom ui: under alerts like MAX
     top_ok = self._can_draw_top_icons or not custom
-    if ui_state.accel_progress is not None:
-      self._chestnut_icon, self._chestnut_fade_time = None, rl.get_time()
-      alpha = self._chestnut_alpha_filter.update(top_ok)
-      draw_progress(self._txt_chestnut, *self._model_source_pos(rect, self._txt_chestnut, custom), alpha)
-      return
-    loading = ui_state.chestnut_state == ChestnutState.LOADING
-    if loading:
+    now, progress, state = rl.get_time(), ui_state.accel_progress, ui_state.chestnut_state
+    loading = progress is None and state == ChestnutState.LOADING
+    failed = progress is None and state in (ChestnutState.UNCOMPILED, ChestnutState.FAILED)
+    if progress is not None:
+      icon, opacity = self._txt_chestnut, 1.0
+    elif loading:
       icon = self._txt_chestnut
-      opacity = 0.35 + 0.65 * (0.5 - 0.5 * math.cos(rl.get_time() * 6.0))
-    elif ui_state.chestnut_state in (ChestnutState.UNCOMPILED, ChestnutState.FAILED):
-      icon = self._txt_chestnut_orange
-      opacity = 1.0
-    elif ui_state.chestnut_state == ChestnutState.ACTIVE:
+      opacity = 0.35 + 0.65 * (0.5 - 0.5 * math.cos(now * 6.0))
+    elif failed:
+      icon, opacity = self._txt_chestnut_orange, 1.0
+    elif state == ChestnutState.ACTIVE:
       icon = self._txt_chestnut_green
       # custom ui: dims disengaged like the wheel
       opacity = 1 - (1 - DIMMED_ICON_ALPHA) * status_fade.weight(UIStatus.DISENGAGED) if custom else 1.0
     else:
+      self._slot_want, self._chestnut_alpha_filter.x = False, 0.0
       return
 
     if icon is not self._chestnut_icon:
-      self._chestnut_fade_time = rl.get_time()
+      self._chestnut_fade_time = now
       self._chestnut_icon = icon
-    visible = loading or rl.get_time() - self._chestnut_fade_time < SET_SPEED_PERSISTENCE
-    alpha = self._chestnut_alpha_filter.update(visible and top_ok)
+    if shared:
+      visible = self._slot_visible(now, state, progress, failed, loading)
+    else:
+      visible = progress is not None or loading or now - self._chestnut_fade_time < SET_SPEED_PERSISTENCE
+    self._slot_want = shared and visible and top_ok
+    # shared: in only once the personality is out, out at once on a personality change
+    alpha = self._chestnut_alpha_filter.update(visible and top_ok and not (shared and self._slot_partner[0] > 1e-2))
+    if shared and self._slot_partner[1]:
+      alpha = self._chestnut_alpha_filter.x = 0.0
     if alpha < 1e-2:
       return
 
-    pos = rl.Vector2(*self._model_source_pos(rect, icon, custom))
-    rl.draw_texture_ex(icon, pos, 0.0, 1.0, rl.Color(255, 255, 255, int(255 * opacity * alpha)))
+    x, y = self._model_source_pos(rect, icon, custom)
+    if not draw_progress(icon, x, y, alpha):
+      rl.draw_texture_ex(icon, rl.Vector2(x, y), 0.0, 1.0, rl.Color(255, 255, 255, int(255 * opacity * alpha)))
+
+  def _slot_visible(self, now: float, state, progress, failed: bool, compiling: bool) -> bool:
+    # short shows at drive start and changes, peeks on progress, then the personality gets the slot back
+    dt, self._slot_t = min(max(now - self._slot_t, 0.0), 0.1), now
+    kind, frac = progress or (None, None)
+    step = int(frac * 4) if kind == 'download' and frac is not None else None
+    key = (ui_state.started_frame, state, kind)
+
+    def show(d: float) -> None:
+      self._slot_until, self._slot_last = max(self._slot_until, now + d), now
+
+    if key != self._slot_key:
+      show(SLOT_FAILED if failed else SLOT_SHOW)
+    elif step != self._slot_step:
+      show(SLOT_PEEK)
+    elif (compiling or kind == 'compile') and now - self._slot_last >= SLOT_COMPILE_EVERY:
+      show(SLOT_PEEK)
+    self._slot_key, self._slot_step = key, step
+    # a personality change wins, what's left of a show waits for it
+    if self._slot_partner[1]:
+      if self._slot_until > now:
+        self._slot_until += dt
+      return False
+    return now < self._slot_until
 
   @staticmethod
   def _model_source_pos(rect: rl.Rectangle, icon: rl.Texture, custom: bool) -> tuple[float, float]:

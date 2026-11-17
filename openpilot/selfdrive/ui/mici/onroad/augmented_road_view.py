@@ -277,12 +277,14 @@ class AugmentedRoadView(CameraView):
       self._confidence_ball.set_hidden(alert_to_render is not None and not not_animating_out)
       self._confidence_ball.set_left(custom_onroad_ui(), self._hud_renderer.set_speed_alpha())
       self._confidence_ball.render(self._content_rect)
-    self._hud_renderer.render(self._content_rect)
-    # with the small compass the personality moves to the video's bottom right, under alerts
+    # with the small compass the personality moves to the video's bottom right, under alerts, and shares it with the gpu icon
     small_compass = custom_onroad_ui() and compass_size() != COMPASS_LARGE
     if small_compass:
+      self._hud_renderer.set_slot_partner(self._long_indicator.shown, self._long_indicator.highlighting)
+    self._hud_renderer.render(self._content_rect)
+    if small_compass:
       c = self._content_rect
-      self._long_indicator.set_should_draw(alert_to_render is None)
+      self._long_indicator.set_should_draw(alert_to_render is None and not self._hud_renderer.slot_busy())
       self._long_indicator.render(rl.Rectangle(c.x + c.width - LONG_MARGIN - LONG_RECT_W, c.y + c.height - LONG_RECT_BOTTOM, LONG_RECT_W, c.height))
     self._alert_renderer.render(self._content_rect)
 

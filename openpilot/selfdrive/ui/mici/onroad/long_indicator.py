@@ -33,6 +33,14 @@ class LongIndicator(Widget):
   def set_should_draw(self, should_draw: bool):
     self._should_draw = should_draw
 
+  @property
+  def shown(self) -> float:
+    return self._alpha_filter.x
+
+  @property
+  def highlighting(self) -> bool:
+    return rl.get_time() - self._personality_changed_time < HIGHLIGHT_TIME
+
   def _render(self, rect: rl.Rectangle) -> None:
     sm = ui_state.sm
     # offroad shows the disengaged state

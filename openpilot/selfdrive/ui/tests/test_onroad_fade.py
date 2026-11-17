@@ -48,19 +48,23 @@ HEAD = textwrap.dedent('''
   hud._torque_bar.render = lambda r: None
   names = {hud._txt_chestnut_green.id: "gpu", hud._txt_chestnut_orange.id: "gpu", hud._txt_chestnut.id: "gpu",
            hud._txt_compass_bg90.id: "compass", hud._txt_compass_bg.id: "compass"}
+  from openpilot.selfdrive.ui.mici.onroad.long_indicator import LongIndicator
+  li = LongIndicator()
+  for t in [li._txt_lead_car[0], *(w for w, _ in li._txt_distance), *(g for _, g in li._txt_distance)]:
+    names[t.id] = "pers"
   seen = {}
   def rec(f):
     def w(tex, *a):
       n = names.get(tex.id)
-      if n and n not in seen:  # first draw of each, its alpha and position
+      if n:  # max alpha of each, first position
         pos = a[0] if isinstance(a[0], rl.Vector2) else a[1]
-        seen[n] = (a[-1].a, round(pos.x), round(pos.y))
+        seen[n] = (max(a[-1].a, seen[n][0]), *seen[n][1:]) if n in seen else (a[-1].a, round(pos.x), round(pos.y))
       return f(tex, *a)
     return w
   rl.draw_texture_ex, rl.draw_texture_pro = rec(rl.draw_texture_ex), rec(rl.draw_texture_pro)
   RECT, PANEL = rl.Rectangle(72, 0, 464, 240), rl.Rectangle(0, 0, 72, 240)
 
-  def frames(n=1, status=None, top=True, **kw):
+  def frames(n=1, status=None, top=True, slot=False, **kw):
     if status is not None:
       ui.status, ui.engaged, ss.enabled = status, status != UIStatus.DISENGAGED, status != UIStatus.DISENGAGED
     for k, v in kw.items():
@@ -71,10 +75,16 @@ HEAD = textwrap.dedent('''
       T[0] += 1 / gui_app.target_fps
       hud.set_can_draw_top_icons(top)
       hud._update_state()
-      hud._chestnut_fade_time = T[0]  # hold the transient icon up
       rl.begin_drawing()
-      hud.render(RECT)
-      hud.render_small_compass(PANEL, True)
+      if slot:  # augmented_road_view's small compass handoff
+        hud.set_slot_partner(li.shown, li.highlighting)
+        hud.render(RECT)
+        li.set_should_draw(top and not hud.slot_busy())
+        li.render(rl.Rectangle(462, 72, 64, 240))
+      else:
+        hud._chestnut_fade_time = T[0]  # hold the transient icon up
+        hud.render(RECT)
+        hud.render_small_compass(PANEL, True)
       rl.end_drawing()
     return {k: v[0] for k, v in seen.items()}
 
