@@ -53,6 +53,7 @@ ConditionPathExists=!$DIR/disable
 ExecStartPre=/bin/mkdir -p /var/lib/bluetooth
 ExecStartPre=/bin/mount --bind $DIR/bluetooth /var/lib/bluetooth
 ExecStart=$DIR/attach.sh
+ExecStartPost=-$DIR/attach.sh --addr
 ExecStopPost=-/bin/umount /var/lib/bluetooth
 Restart=on-failure
 RestartSec=5

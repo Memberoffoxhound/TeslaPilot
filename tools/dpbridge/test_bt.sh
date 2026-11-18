@@ -17,7 +17,11 @@ has_hci() { [ -e /sys/class/bluetooth/hci0 ]; }
 kconfig() { local c; c=$(zcat /proc/config.gz); for k in BT BT_BREDR BT_HCIUART_QCA MSM_BT_POWER; do grep -qx "CONFIG_$k=y" <<< "$c" || return 1; done; }
 uart_power() { [ -e /dev/ttyHS1 ] && grep -qx bt_power /sys/class/rfkill/rfkill*/name; }
 firmware() { local d; d=$(dmesg); grep -q crbtfw21 <<< "$d" && grep -q crnv21 <<< "$d" && ! grep -qi "qca.*\(fail\|error\)" <<< "$d"; }
-hci_up() { local i; i=$(btmgmt info); grep -q "current settings:.*powered" <<< "$i" && grep -q "manufacturer 29" <<< "$i" && ! grep -q "addr 00:00:00:00:00:00" <<< "$i"; }
+# the address attach.sh derives from the serial, so not the chip default 00:00:00:00:5A:AD shared by every unit
+hci_up() {
+  local i a; i=$(btmgmt info); a=$(bash "$HERE/attach.sh" --print-addr) || return 1
+  grep -q "current settings:.*powered" <<< "$i" && grep -q "manufacturer 29" <<< "$i" && grep -q "addr $a " <<< "$i"
+}
 scan() { bluetoothctl --timeout 10 scan on | grep -q "NEW.*Device"; }
 dashkit_seen() { bluetoothctl devices | grep -q DashKit; }
 bonds() { ls "$DIR"/bluetooth/*/*/info > /dev/null 2>&1 && grep -lq LinkKey "$DIR"/bluetooth/*/*/info; }

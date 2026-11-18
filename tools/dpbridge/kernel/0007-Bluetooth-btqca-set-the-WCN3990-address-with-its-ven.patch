@@ -1,0 +1,87 @@
+From cce823c2ac87282620059a8030b83c685c05a0a1 Mon Sep 17 00:00:00 2001
+From: Memberoffoxhound <Memberoffoxhound@users.noreply.github.com>
+Date: Wed, 18 Nov 2026 08:01:41 -0600
+Subject: [PATCH 7/9] Bluetooth: btqca: set the WCN3990 address with its vendor
+ command
+
+---
+ drivers/bluetooth/btqca.c   | 19 +++++++++++++++++++
+ drivers/bluetooth/btqca.h   |  7 +++++++
+ drivers/bluetooth/hci_qca.c |  2 +-
+ 3 files changed, 27 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/bluetooth/btqca.c b/drivers/bluetooth/btqca.c
+index 3b252a6a..9ba2f02e 100644
+--- a/drivers/bluetooth/btqca.c
++++ b/drivers/bluetooth/btqca.c
+@@ -410,6 +410,25 @@ int qca_set_bdaddr_rome(struct hci_dev *hdev, const bdaddr_t *bdaddr)
+ }
+ EXPORT_SYMBOL_GPL(qca_set_bdaddr_rome);
+ 
++/* WCN3990 takes the address in a vendor command, most significant byte first */
++int qca_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
++{
++	struct sk_buff *skb;
++	bdaddr_t swapped;
++
++	baswap(&swapped, (bdaddr_t *)bdaddr);
++	skb = __hci_cmd_sync_ev(hdev, EDL_WRITE_BD_ADDR_OPCODE, sizeof(swapped),
++				&swapped, HCI_VENDOR_PKT, HCI_INIT_TIMEOUT);
++	if (IS_ERR(skb)) {
++		BT_ERR("%s: Change address command failed (%ld)",
++		       hdev->name, PTR_ERR(skb));
++		return PTR_ERR(skb);
++	}
++	kfree_skb(skb);
++	return 0;
++}
++EXPORT_SYMBOL_GPL(qca_set_bdaddr);
++
+ static int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
+ 			  bool wcn3990)
+ {
+diff --git a/drivers/bluetooth/btqca.h b/drivers/bluetooth/btqca.h
+index 2112c2d6..83464e70 100644
+--- a/drivers/bluetooth/btqca.h
++++ b/drivers/bluetooth/btqca.h
+@@ -20,6 +20,7 @@
+ 
+ #define EDL_PATCH_CMD_OPCODE		(0xFC00)
+ #define EDL_NVM_ACCESS_OPCODE		(0xFC0B)
++#define EDL_WRITE_BD_ADDR_OPCODE	(0xFC14)
+ #define EDL_PATCH_CMD_LEN		(1)
+ #define EDL_PATCH_VER_REQ_CMD		(0x19)
+ #define EDL_PATCH_TLV_REQ_CMD		(0x1E)
+@@ -132,6 +133,7 @@ struct tlv_type_hdr {
+ #if IS_ENABLED(CONFIG_BT_QCA)
+ 
+ int qca_set_bdaddr_rome(struct hci_dev *hdev, const bdaddr_t *bdaddr);
++int qca_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr);
+ int qca_uart_setup_rome(struct hci_dev *hdev, uint8_t baudrate);
+ int qca_uart_setup_wcn3990(struct hci_dev *hdev, uint8_t baudrate);
+ 
+@@ -142,6 +144,11 @@ static inline int qca_set_bdaddr_rome(struct hci_dev *hdev, const bdaddr_t *bdad
+ 	return -EOPNOTSUPP;
+ }
+ 
++static inline int qca_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
++{
++	return -EOPNOTSUPP;
++}
++
+ static inline int qca_uart_setup_rome(struct hci_dev *hdev, int speed)
+ {
+ 	return -EOPNOTSUPP;
+diff --git a/drivers/bluetooth/hci_qca.c b/drivers/bluetooth/hci_qca.c
+index 4a59690a..4f5f774e 100644
+--- a/drivers/bluetooth/hci_qca.c
++++ b/drivers/bluetooth/hci_qca.c
+@@ -1023,7 +1023,7 @@ static int qca_setup(struct hci_uart *hu)
+ 	}
+ 
+ 	/* Setup bdaddr */
+-	hu->hdev->set_bdaddr = qca_set_bdaddr_rome;
++	hu->hdev->set_bdaddr = wcn3990 ? qca_set_bdaddr : qca_set_bdaddr_rome;
+ 
+ 	return ret;
+ }
