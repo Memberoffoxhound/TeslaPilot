@@ -18,6 +18,14 @@ done
 
 die() { echo "refusing: $*" >&2; exit 1; }
 run() { echo "+ $*"; if [ $YES = 1 ]; then "$@"; fi; }
+# abctl exits 0 even when it fails; success is only its "boot lun" line
+activate() {
+  echo "+ abctl --set_active $1"
+  [ $YES = 1 ] || return 0
+  local out
+  out=$($SUDO abctl --set_active "$1" 2>&1) || true
+  grep -q "as boot lun" <<< "$out" || die "abctl --set_active $1 failed: $out"
+}
 
 [ -f "$B/stock_slot" ] || die "no $B/stock_slot, flash_boot.sh never ran here"
 (cd "$B" && sha256sum -c --quiet SHA256SUMS) || die "backups in $B are damaged"
@@ -32,5 +40,5 @@ esac
 if [ $WRITE = 1 ]; then
   run $SUDO dd if="$B/boot$oth.img" of="$P/boot$oth" bs=4M conv=fsync status=none
 fi
-run $SUDO abctl --set_active $num
+activate $num
 echo "stock slot $stock active after reboot"

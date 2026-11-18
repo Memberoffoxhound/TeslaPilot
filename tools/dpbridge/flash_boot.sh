@@ -19,6 +19,14 @@ done
 
 die() { echo "refusing: $*" >&2; exit 1; }
 run() { echo "+ $*"; if [ $YES = 1 ]; then "$@"; fi; }
+# abctl exits 0 even when it fails; success is only its "boot lun" line
+activate() {
+  echo "+ abctl --set_active $1"
+  [ $YES = 1 ] || return 0
+  local out
+  out=$($SUDO abctl --set_active "$1" 2>&1) || true
+  grep -q "as boot lun" <<< "$out" || die "abctl --set_active $1 failed: $out"
+}
 sha() { $SUDO head -c "$2" "$1" | sha256sum | cut -d' ' -f1; }
 size() { $SUDO blockdev --getsize64 "$1"; }
 
@@ -81,6 +89,6 @@ run $SUDO dd if="$IMG" of="$P/boot$oth" bs=4M conv=fsync status=none
 if [ $YES = 1 ]; then
   [ "$(sha "$P/boot$oth" "$isz")" = "$(sha256sum < "$IMG" | cut -d' ' -f1)" ] || die "boot$oth readback mismatch, slot not switched"
 fi
-run $SUDO abctl --set_active $onum
+activate $onum
 
 echo "done. reboot to try it; to go back: restore_boot.sh --yes (stock slot is $cur)"

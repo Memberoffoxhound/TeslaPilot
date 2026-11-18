@@ -18,7 +18,7 @@ def dev(tmp_path):
     (parts / f'{name}_a').write_bytes(name.encode() + b'A' * (size - len(name)))
     (parts / f'{name}_b').write_bytes(b'old' + b'B' * (size - 3))
   (parts / 'userdata').write_bytes(b'u' * MB)
-  (bin_ / 'abctl').write_text(f'#!/bin/sh\n[ "$1" = --boot_slot ] && cat {tmp_path}/slot && exit 0\necho "$@" >> {tmp_path}/abctl.log\n')
+  (bin_ / 'abctl').write_text(f'#!/bin/sh\n[ "$1" = --boot_slot ] && cat {tmp_path}/slot && exit 0\necho "$@" >> {tmp_path}/abctl.log\n[ -f {tmp_path}/abctl_broken ] && echo "abctl: missing partition xbl_b" && exit 0\necho "setting /dev/disk/by-partlabel/xbl_x lun as boot lun"\n')
   (bin_ / 'blockdev').write_text('#!/bin/sh\nstat -c %s "$2"\n')
   for f in bin_.iterdir():
     f.chmod(0o755)
@@ -141,3 +141,11 @@ def test_reflash_keeps_old_backup_and_refuses_from_dpbridge_slot(dev):
   before = snapshot(parts)
   r = run('flash_boot.sh', env, '--yes')
   assert r.returncode != 0 and 'overwrite stock _a' in r.stderr and snapshot(parts) == before
+
+
+def test_flash_catches_abctl_failure(dev):
+  # abctl exits 0 on failure, the script must read its output
+  tmp, parts, data, img, env = dev
+  (tmp / 'abctl_broken').touch()
+  r = run('flash_boot.sh', env, '--yes')
+  assert r.returncode != 0 and 'set_active 1 failed' in r.stderr
