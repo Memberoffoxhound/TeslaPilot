@@ -12,6 +12,7 @@ fsha() { sha256sum < "$1" | cut -d' ' -f1; }
 
 # sha256 of the first $2 bytes, read with O_DIRECT so it comes from flash and not the page cache
 dsha() {
+  # head closes the pipe early so dd may die of SIGPIPE; a failed read still gives a wrong hash
   { $SUDO dd if="$1" bs=1M count=$((($2 + 1048575) / 1048576)) iflag=direct status=none || true; } |
     head -c "$2" | sha256sum | cut -d' ' -f1
 }
