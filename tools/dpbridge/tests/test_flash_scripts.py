@@ -113,3 +113,18 @@ def test_install_refuses_on_stock_kernel(dev):
     pytest.skip('host has the dpbridge kernel')
   r = run('install_userspace.sh', dev[4], '--yes')
   assert r.returncode != 0 and 'flash the dpbridge boot.img' in r.stderr
+
+
+def test_dk_unpack_reads_only_dashkit_messages():
+  import importlib.util
+  from types import SimpleNamespace
+  from openpilot.system.dpbridge.dkwire import pack
+  spec = importlib.util.spec_from_file_location('dk_unpack', HERE / 'dk_unpack.py')
+  mod = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(mod)
+  dk = SimpleNamespace(which=lambda: 'customReservedRawData0', logMonoTime=5,
+                       customReservedRawData0=pack([(1, 0, 0x257, b'\x01'), (2, 1, 0x249, b'')]))
+  other = SimpleNamespace(which=lambda: 'carState', logMonoTime=6)
+  bad = SimpleNamespace(which=lambda: 'customReservedRawData0', logMonoTime=7, customReservedRawData0=b'\x09')
+  rows = list(mod.unpack([dk, other, bad]))
+  assert [(r[2], r[3]) for r in rows] == [(0, 0x257), (1, 0x249)] and rows[0][4] == b'\x01'
