@@ -34,8 +34,9 @@ scan() { bluetoothctl --timeout 10 scan on | grep -q "NEW.*Device"; }
 dashkit_seen() { bluetoothctl devices | grep -q DashKit; }
 bonds() { ls "$DIR"/bluetooth/*/*/info > /dev/null 2>&1 && grep -lq LinkKey "$DIR"/bluetooth/*/*/info; }
 a2dp_sink() { bluetoothctl show | grep -qi 0000110b; }
-a2dp_running() { grep -q RUNNING /proc/asound/card0/pcm1p/sub0/status; }
-soundd_ok() { a2dp_running && grep -q RUNNING /proc/asound/card0/pcm0p/sub0/status; }
+# soundd and A2DP share MultiMedia1 (pcm0p) through dmix; music has its own softvol control
+a2dp_running() { bluealsa-cli list-pcms 2> /dev/null | grep -q a2dpsnk && amixer -c0 cget name='dpbridge A2DP Playback Volume'; }
+soundd_ok() { pgrep -f selfdrive.ui.soundd && grep -q RUNNING /proc/asound/card0/pcm0p/sub0/status; }
 dtb_ok() {
   local d; d=$(dtc -I dtb -O dts "${DPB_KOUT:?}/arch/arm64/boot/dts/qcom/comma_mici.dtb" 2> /dev/null)
   grep -q 'hsuart1 = "/soc/qcom,qup_uart@0x898000"' <<< "$d" && grep -q 'hsuart0 = "/soc/qcom,qup_uart@0x88c000"' <<< "$d" &&
@@ -59,7 +60,7 @@ if on_device; then
     check 7 "A2DP sink UUID registered" a2dp_sink
     if a2dp_running; then say MANUAL 8 "A2DP PCM running, confirm you hear it"; else say MANUAL 8 "connect the phone and play music, rerun"; fi
     say MANUAL 9 "play music, trigger an alert: music drops, alert audible, music returns"
-    if a2dp_running; then check 10 "soundd stream running during A2DP" soundd_ok; else say SKIP 10 "needs A2DP playing"; fi
+    check 10 "soundd stream running through dmix" soundd_ok
     check 11 "dashkitd --probe: version + 10 packets in 5 s" env PYTHONPATH="${DPB_OPENPILOT:-/data/openpilot}" "$PY" -m openpilot.system.dpbridge.dashkitd --probe
     if [ -n "${DPB_ROUTE:-}" ]; then
       check 12 "DashKit frames in the route" "$PY" "$HERE/dk_unpack.py" --check "$DPB_ROUTE"
