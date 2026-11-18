@@ -37,6 +37,21 @@ class Ducker:
     self.level = level
 
 
+def run(ducker, levels, log, sleep=time.sleep):
+  # one log line per new error and a calm retry, so a missing mixer can't flood the log or spin amixer
+  err, backoff = None, 1
+  for level in levels:
+    try:
+      ducker.update(level)
+      err, backoff = None, 1
+    except Exception as e:
+      if repr(e) != err:
+        err = repr(e)
+        log(f"dpb a2dp: {err}, retrying")
+      sleep(backoff)
+      backoff = min(backoff * 2, 30)
+
+
 def main():
   import openpilot.cereal.messaging as messaging
   from openpilot.common.params import Params
@@ -44,15 +59,13 @@ def main():
 
   params = Params()
   sm = messaging.SubMaster(['deviceState', 'selfdriveState'])
-  ducker = Ducker()
-  while True:
-    sm.update(200)
-    level = target(sm['deviceState'].started, params.get_bool("DpbA2dpOnroad"), sm['selfdriveState'].alertSound.raw != 0)
-    try:
-      ducker.update(level)
-    except Exception:
-      cloudlog.exception("dpb a2dp")
-      time.sleep(1)
+
+  def levels():
+    while True:
+      sm.update(200)
+      yield target(sm['deviceState'].started, params.get_bool("DpbA2dpOnroad"), sm['selfdriveState'].alertSound.raw != 0)
+
+  run(Ducker(), levels(), cloudlog.warning)
 
 
 if __name__ == "__main__":

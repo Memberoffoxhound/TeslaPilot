@@ -1,6 +1,6 @@
 import pytest
 
-from openpilot.system.dpbridge.a2dp import DUCK, FULL, MUTE, Ducker, target
+from openpilot.system.dpbridge.a2dp import DUCK, FULL, MUTE, Ducker, run, target
 
 
 class Mixer(list):
@@ -49,3 +49,14 @@ def test_full_failure_does_not_mute():
   with pytest.raises(TimeoutError):
     d.update(FULL)
   assert m == []
+
+
+def test_run_logs_each_error_once_and_backs_off():
+  m = Mixer(broken={FULL})
+  logs, sleeps = [], []
+  run(Ducker(m), [FULL] * 8, logs.append, sleeps.append)
+  assert len(logs) == 1 and sleeps == [1, 2, 4, 8, 16, 30, 30, 30]
+  m.broken.clear()
+  sleeps.clear()
+  run(Ducker(m), [FULL, DUCK], logs.append, sleeps.append)
+  assert sleeps == [] and m == [FULL, DUCK]
