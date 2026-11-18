@@ -1,3 +1,15 @@
+> **WARNING: this branch needs a custom kernel.**
+>
+> **dpbridge turns on the comma 4's Bluetooth. That only works after you build and flash a custom AGNOS boot image. Flashing a custom kernel can brick your device. Recovery may need QDL mode and a full reflash that wipes your data.**
+>
+> **Every AGNOS update removes the custom kernel, and Bluetooth stops working until you flash it again.**
+>
+> **This is an experiment. It is not supported by comma or by me. Use it at your own risk. I am not responsible for a bricked device, lost data, a voided warranty, or anything that happens in your car.**
+>
+> **dpbridge only logs data. It never sends anything to the car, and panda safety is unchanged.**
+>
+> Steps: [tools/dpbridge/README.md](tools/dpbridge/README.md)
+
 # TeslaPilot
 
 TeslaPilot is a hobby fork of [comma.ai openpilot](https://github.com/commaai/openpilot). It should work on any car comma supports, but it's built to give you a great experience on Tesla. You get Tesla-friendly controls, a Tesla-style theme, drive stats that stay on your device, and a small web page hosted on your comma.
