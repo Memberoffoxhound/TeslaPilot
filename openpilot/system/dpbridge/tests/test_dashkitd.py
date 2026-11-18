@@ -55,10 +55,26 @@ def test_returns_after_silence():
 
 
 def test_log_only():
+  # parsed, not grepped: every publisher in dpbridge only ever sends the log-only raw channel
+  import ast
   from pathlib import Path
-  src = (Path(__file__).parents[1] / 'dashkitd.py').read_text()
-  assert "PubMaster(['customReservedRawData0'])" in src
-  assert not any(w in src for w in ('sendcan', 'panda', 'carControl', 'SubMaster'))
+  pubs, sends, subs, imports = set(), set(), set(), set()
+  for path in (Path(__file__).parents[1]).glob('*.py'):
+    for n in ast.walk(ast.parse(path.read_text())):
+      if isinstance(n, ast.Call) and n.args:
+        name = n.func.attr if isinstance(n.func, ast.Attribute) else getattr(n.func, 'id', '')
+        lit = n.args[0]
+        if name in ('PubMaster', 'SubMaster'):
+          (pubs if name == 'PubMaster' else subs).update(ast.literal_eval(lit))
+        elif name in ('send', 'pub_sock') and isinstance(lit, ast.Constant) and isinstance(lit.value, str):
+          sends.add(lit.value)
+      elif isinstance(n, ast.Import):
+        imports.update(a.name for a in n.names)
+      elif isinstance(n, ast.ImportFrom):
+        imports.add(n.module or '')
+  assert pubs == sends == {'customReservedRawData0'}
+  assert subs == {'deviceState', 'selfdriveState'}  # a2dp reads only
+  assert not [m for m in imports if any(w in m for w in ('panda', 'opendbc', 'car', 'controls'))]
 
 
 def run_probe(script, ver='0.3.2'):
