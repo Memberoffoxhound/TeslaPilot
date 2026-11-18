@@ -101,9 +101,17 @@ case $CMD in
         r "pgrep -f [f]lash_boot.sh" > /dev/null && die "a flash is already running"
         dev "rm -f $REMOTE/flash.rc; setsid nohup bash -c 'bash $REMOTE/flash_boot.sh --yes > $REMOTE/flash.log 2>&1; \
           echo \$? > $REMOTE/flash.rc' < /dev/null > /dev/null 2>&1 &"
+        # until flash.rc appears; stop if the job is gone without one (reboot, power cut) or after an hour
+        end=$((SECONDS + ${DPB_FLASH_MAX_S:-3600}))
         while ! r "test -f $REMOTE/flash.rc" 2> /dev/null; do
-          sleep 5
-          r "tail -n 1 $REMOTE/flash.log" 2> /dev/null || echo "(no answer, still waiting)"
+          [ $SECONDS -lt $end ] || die "no result after $(( ${DPB_FLASH_MAX_S:-3600} / 60 )) min, see $REMOTE/flash.log"
+          sleep "${DPB_POLL_S:-5}"
+          if out=$(r "pgrep -f [f]lash_boot.sh > /dev/null || test -f $REMOTE/flash.rc || echo gone; tail -n 1 $REMOTE/flash.log" 2> /dev/null); then
+            grep -qx gone <<< "$out" && die "flash stopped without a result, see $REMOTE/flash.log (the slot switch is its last step)"
+            echo "$out"
+          else
+            echo "(no answer, still waiting)"
+          fi
         done
         r "cat $REMOTE/flash.log"
         [ "$(r "cat $REMOTE/flash.rc")" = 0 ] || die "flash failed, see above"

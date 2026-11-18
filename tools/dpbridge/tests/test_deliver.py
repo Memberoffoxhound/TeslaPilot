@@ -95,3 +95,27 @@ def test_unknown_command_prints_usage(dev):
   env, _, _ = setup_env(dev)
   r = deliver(env, 'frobnicate')
   assert r.returncode == 2 and 'backup-pull' in r.stdout
+
+
+def stub_flash(remote, body):
+  (remote / 'flash_boot.sh').write_text(f'#!/bin/bash\n{body}\n')
+
+
+def test_flash_poll_stops_when_the_job_dies_without_a_result(dev):
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  stub_flash(remote, 'kill -9 $PPID')  # like a reboot: the wrapper never writes flash.rc
+  r = deliver(dict(env, DPB_POLL_S='0.2', DPB_FLASH_MAX_S='5'), 'flash', '--yes')
+  assert r.returncode != 0 and 'stopped without a result' in r.stderr
+  assert not (remote / 'flash.rc').exists() and not (home / 'dpbridge-backup').exists()
+
+
+def test_flash_poll_gives_up_after_the_cap(dev):
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  stub_flash(remote, 'sleep 20')
+  try:
+    r = deliver(dict(env, DPB_POLL_S='0.2', DPB_FLASH_MAX_S='2'), 'flash', '--yes')
+    assert r.returncode != 0 and 'no result after' in r.stderr
+  finally:
+    subprocess.run(['pkill', '-f', str(remote / 'flash_boot.sh')])
