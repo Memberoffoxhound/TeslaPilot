@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
+import subprocess
 import time
 
 from jeepney import DBusAddress, Properties, new_method_call
 
 # Keeps phone music out of the way: muted while driving unless DpbA2dpOnroad, down to 10% during alerts.
-# Works on bluealsa's A2DP PCM Volume, so soundd and its alerts are never touched.
+# Mute cuts bluealsa's own ALSA route (MultiMedia2), so soundd and its alerts are never touched. Ducking lowers the
+# A2DP PCM Volume, and any failure on the way down cuts the route: music is never left loud by mistake.
+ROUTE = 'SEC_MI2S_RX Audio Mixer MultiMedia2'
 BLUEALSA = 'org.bluealsa'
 PCM_IF = 'org.bluealsa.PCM1'
 FULL, DUCK, MUTE = 127, 13, 0  # A2DP volume is 0..127 per channel
@@ -31,24 +34,39 @@ class BlueAlsa:
     self.conn.send_and_get_reply(Properties(DBusAddress(pcm, BLUEALSA, PCM_IF)).set('Volume', 'q', word), timeout=2)
 
 
+def set_route(on: bool):
+  subprocess.run(['amixer', '-c0', '-q', 'cset', f'name={ROUTE}', '1' if on else '0'], check=True, timeout=2)
+
+
 class Ducker:
-  def __init__(self, ba):
-    self.ba, self.level, self.pcms = ba, FULL, set()
+  def __init__(self, ba, route=set_route):
+    self.ba, self.route, self.level, self.pcms = ba, route, None, set()
     self.saved: dict[str, int] = {}  # the listener's own volume while we hold it down
 
   def update(self, level: int):
-    pcms = set(self.ba.pcms())
-    if level == self.level and pcms == self.pcms:
-      return
-    for pcm in pcms:
-      if level == FULL:
-        if pcm in self.saved:
-          self.ba.set_volume(pcm, self.saved[pcm])
-      else:
-        self.saved.setdefault(pcm, self.ba.volume(pcm))
-        self.ba.set_volume(pcm, level << 8 | level)
-    self.saved = {} if level == FULL else {p: v for p, v in self.saved.items() if p in pcms}
+    try:
+      pcms = set(self.ba.pcms())
+      if level == self.level and pcms == self.pcms:
+        return
+      self.level = None  # unknown until this update finishes
+      if level == DUCK:
+        for pcm in pcms:
+          self.saved.setdefault(pcm, self.ba.volume(pcm))
+          self.ba.set_volume(pcm, level << 8 | level)
+      elif level == FULL:
+        self.restore(pcms)
+      self.route(level != MUTE)
+    except Exception:
+      if level != FULL:
+        self.route(False)  # fail closed
+      raise
+    self.saved = {p: v for p, v in self.saved.items() if p in pcms}
     self.level, self.pcms = level, pcms
+
+  def restore(self, pcms):
+    for pcm in pcms & self.saved.keys():
+      self.ba.set_volume(pcm, self.saved[pcm])
+    self.saved = {}
 
 
 def main():
@@ -70,7 +88,7 @@ def main():
         cloudlog.exception("dpb a2dp")  # bluealsa not up yet or a PCM vanished; retry next tick
         time.sleep(1)
   finally:
-    ducker.update(FULL)
+    ducker.restore(set(ducker.ba.pcms()))  # the route stays as it was, so a crash onroad leaves music muted
 
 
 if __name__ == "__main__":

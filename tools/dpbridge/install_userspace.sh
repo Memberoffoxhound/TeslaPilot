@@ -69,10 +69,9 @@ ExecStart=
 ExecStart=/usr/bin/bluealsa -p a2dp-sink
 UNIT
 
-# A2DP goes out on its own front end so it never fights soundd for MultiMedia1
+# A2DP goes out on its own front end so it never fights soundd for MultiMedia1; dpb_a2dp owns its route
 put /etc/systemd/system/bluealsa-aplay.service.d/dpbridge.conf <<UNIT
 [Service]
-ExecStartPre=/usr/bin/amixer -c0 cset name='SEC_MI2S_RX Audio Mixer MultiMedia2' 1
 ExecStart=
 ExecStart=/usr/bin/bluealsa-aplay -D plughw:0,1
 UNIT
