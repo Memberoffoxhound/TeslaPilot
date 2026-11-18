@@ -21,6 +21,8 @@ run $SUDO /usr/comma/apt_setup.sh
 
 # WCN3990 firmware (the comma 4 has no bluetooth partition). btqca loads qca/crbtfw<rev>.tlv and qca/crnv<rev>.bin
 # for the chip's rom revision: linux-firmware for rev 21, comma's own files from agnos-builder bluetooth.img for 11 and 20
+# comma's rev 21 pair is in the image too (other builds); to use it, add crbtfw21.tlv crnv21.bin to the list below and
+# put their hashes (2a428590..., 18cc38ff..., see README) in qca.sha256 in place of linux-firmware's
 comma_fw() {
   local f src
   for f in crbtfw11.tlv crnv11.bin crbtfw20.tlv crnv20.bin; do
