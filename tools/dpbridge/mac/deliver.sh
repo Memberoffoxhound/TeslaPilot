@@ -5,18 +5,21 @@
 # usage: deliver.sh [-i key] [-h user@host] [-p port] <command> [--yes] [--write]
 #   probe        read-only probe, output saved to ~/dpbridge-backup/<date>/probe.txt
 #   push         copy boot.img and the scripts to /data/dpbridge, check sha256 on both ends
-#   flash        flash_boot.sh as a dry run; with --yes it flashes, then pulls the boot backups
+#   qdl-check    read-only QDL test on the Mac: proves the rescue path works on this comma before any flash
+#   flash        flash_boot.sh as a dry run; with --yes it flashes detached from SSH, then pulls the boot backups
 #   backup-pull  copy /data/dpbridge/backup to ~/dpbridge-backup/<date>/ and check sha256
 #   install      install_userspace.sh (dry run unless --yes), after rebooting into the new kernel
+#   attach       one manual chip bring-up for 20 s, output saved to ~/dpbridge-backup/<date>/attach.txt
+#   enable       start Bluetooth on every boot (after attach looked good); disable turns it off again
 #   restore      restore_boot.sh (dry run unless --yes; --write also rewrites the boot slot)
 #   test         test_bt.sh, output saved to ~/dpbridge-backup/<date>/test_bt.txt
 #   reboot       sudo reboot on the comma
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
-HOST=${COMMA_HOST:-comma@192.168.68.67}
+HOST=${COMMA_HOST:-comma@192.168.68.67}  # this comma's LAN address, override with -h
 PORT=${COMMA_PORT:-22}
-KEY=${COMMA_KEY:-$HOME/.ssh/comma_bruce_ed25519}
+KEY=${COMMA_KEY:-$HOME/.ssh/comma_ed25519}
 REMOTE=${DPB_REMOTE:-/data/dpbridge}
 OUT=$HOME/dpbridge-backup/$(date +%Y-%m-%d)
 if [ -f "$HERE/dpbridge/flash_boot.sh" ]; then SRC=$HERE/dpbridge; else SRC=$(cd "$HERE/.." && pwd); fi
@@ -27,7 +30,7 @@ while getopts "i:h:p:" o; do
     i) KEY=$OPTARG ;;
     h) HOST=$OPTARG ;;
     p) PORT=$OPTARG ;;
-    *) sed -n '2,16p' "$0"; exit 2 ;;
+    *) sed -n '2,19p' "$0"; exit 2 ;;
   esac
 done
 shift $((OPTIND - 1))
@@ -35,10 +38,11 @@ CMD=${1:-}
 [ $# -gt 0 ] && shift
 ARGS="${*:-}"
 
-SSH_OPTS="-i $KEY -o BatchMode=yes -o ConnectTimeout=8 -o ServerAliveInterval=15"
-r() { ssh $SSH_OPTS -p "$PORT" "$HOST" "$@"; }
-put() { scp -q $SSH_OPTS -P "$PORT" "$@"; }
-get() { scp -q $SSH_OPTS -P "$PORT" "$@"; }
+SSH_OPTS=(-i "$KEY" -o BatchMode=yes -o ConnectTimeout=8 -o ServerAliveInterval=15)
+r() { ssh "${SSH_OPTS[@]}" -p "$PORT" "$HOST" "$@"; }
+dev() { r "export DPB_DIR=$REMOTE; $*"; }  # a device script, told where it lives
+put() { scp -q "${SSH_OPTS[@]}" -P "$PORT" "$@"; }
+get() { scp -q "${SSH_OPTS[@]}" -P "$PORT" "$@"; }
 die() { echo "error: $*" >&2; exit 1; }
 local_sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 remote_sha() { r "sha256sum $1" | cut -d' ' -f1; }
@@ -74,29 +78,59 @@ case $CMD in
   push)
     reach
     [ -f "$BOOT" ] || die "no boot.img at $BOOT (set BOOT=...)"
+    [ -f "$BOOT.sha256" ] || die "no $BOOT.sha256"
+    [ "$(cut -d' ' -f1 "$BOOT.sha256")" = "$(local_sha "$BOOT")" ] || die "boot.img does not match boot.img.sha256"
     r "mkdir -p $REMOTE"
     push_file "$BOOT"
-    if [ -f "$BOOT.sha256" ]; then push_file "$BOOT.sha256"; fi
+    push_file "$BOOT.sha256"
     for f in "$SRC"/*.sh "$SRC"/*.py; do push_file "$f"; done
     r "chmod +x $REMOTE/*.sh $REMOTE/*.py"
     if [ -f "$HERE/dpbridge.bundle" ]; then push_file "$HERE/dpbridge.bundle"; fi
     ;;
+  qdl-check)
+    # comma in QDL mode on this Mac, see HOWTO; reads the active slot, then reboots it normally
+    command -v bunx > /dev/null || die "install bun first, see HOWTO"
+    bunx --bun commaai/qdl.js getactiveslot
+    bunx --bun commaai/qdl.js reset
+    ;;
   flash)
     reach
     case " $ARGS " in
-      *" --yes "*) r "bash $REMOTE/flash_boot.sh --yes" && backup_pull ;;
-      *) r "bash $REMOTE/flash_boot.sh" ;;
+      *" --yes "*)
+        # detached, so a dropped SSH session can't stop it halfway
+        r "pgrep -f [f]lash_boot.sh" > /dev/null && die "a flash is already running"
+        dev "rm -f $REMOTE/flash.rc; setsid nohup bash -c 'bash $REMOTE/flash_boot.sh --yes > $REMOTE/flash.log 2>&1; \
+          echo \$? > $REMOTE/flash.rc' < /dev/null > /dev/null 2>&1 &"
+        while ! r "test -f $REMOTE/flash.rc" 2> /dev/null; do
+          sleep 5
+          r "tail -n 1 $REMOTE/flash.log" 2> /dev/null || echo "(no answer, still waiting)"
+        done
+        r "cat $REMOTE/flash.log"
+        [ "$(r "cat $REMOTE/flash.rc")" = 0 ] || die "flash failed, see above"
+        backup_pull
+        ;;
+      *) dev "bash $REMOTE/flash_boot.sh" ;;
     esac
     ;;
   backup-pull) reach; backup_pull ;;
-  install) reach; r "bash $REMOTE/install_userspace.sh $ARGS" ;;
-  restore) reach; r "bash $REMOTE/restore_boot.sh $ARGS" ;;
+  install) reach; dev "bash $REMOTE/install_userspace.sh $ARGS" ;;
+  attach)
+    reach
+    mkdir -p "$OUT"
+    # if this hangs or SSH dies: reboot, nothing runs on its own at boot yet
+    r "sudo timeout 20 $REMOTE/attach.sh & sleep 15; ls /sys/class/bluetooth; btmgmt info | head -5; \
+      dmesg | grep -iE 'qca|bluetooth' | tail -20; ip -br addr show wlan0; wait" 2>&1 | tee "$OUT/attach.txt" || true
+    echo "saved $OUT/attach.txt. hci0 listed and wlan0 UP: run enable"
+    ;;
+  enable) reach; r "rm -f $REMOTE/disable && sudo systemctl enable --now dpbridge-bt bluetooth bluealsa bluealsa-aplay" ;;
+  disable) reach; r "touch $REMOTE/disable && sudo systemctl disable dpbridge-bt bluetooth bluealsa bluealsa-aplay" ;;
+  restore) reach; dev "bash $REMOTE/restore_boot.sh $ARGS" ;;
   test)
     reach
     mkdir -p "$OUT"
-    r "bash $REMOTE/test_bt.sh" 2>&1 | tee "$OUT/test_bt.txt" || true
+    dev "bash $REMOTE/test_bt.sh" 2>&1 | tee "$OUT/test_bt.txt" || true
     echo "saved $OUT/test_bt.txt"
     ;;
   reboot) reach; r "sudo reboot" || true ;;
-  *) sed -n '2,16p' "$0"; exit 2 ;;
+  *) sed -n '2,19p' "$0"; exit 2 ;;
 esac
