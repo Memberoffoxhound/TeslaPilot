@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the Bluetooth userspace on a comma 4 running the dpbridge kernel: firmware, bluez, bluez-alsa, dmix,
+# Install the Bluetooth userspace on a comma 4 running the dpbridge kernel: firmware, bluez, bluez-alsa,
 # bonds kept on /data, and the services that attach the chip and play A2DP on the speaker.
 # Changes the read-only rootfs of the running slot (an AGNOS update undoes it). Prints the plan only unless --yes.
 set -euo pipefail
@@ -65,9 +65,6 @@ put /etc/systemd/system/bluealsa.service.d/dpbridge.conf <<UNIT
 ExecStart=
 ExecStart=/usr/bin/bluealsa -p a2dp-sink
 UNIT
-
-# shared dmix for soundd and A2DP, see asound.conf
-run $SUDO cp "$DIR/asound.conf" /etc/asound.conf
 
 # opening dpb_a2dp once creates its volume control before any music plays
 put /etc/systemd/system/bluealsa-aplay.service.d/dpbridge.conf <<UNIT

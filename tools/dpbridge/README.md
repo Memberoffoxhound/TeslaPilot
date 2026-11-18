@@ -18,8 +18,10 @@ Nothing here talks to the car or changes panda safety.
 | `probe_ro.sh` | comma | read-only probe: kernel config, UART node, rfkill, firmware, A/B sizes, modules, audio |
 | `flash_boot.sh` | comma | comma 4 on AGNOS 20.6 only. Backs up both boot slots, marks the other slot unbootable, mirrors the partitions AGNOS updates (xbl xbl_config abl aop devcfg system) into it, writes `boot.img` there, reads everything back from flash, switches to it. Dry run unless `--yes` |
 | `restore_boot.sh` | comma | switches back to the stock slot (`--write` also puts the stock kernel on the other slot) |
-| `install_userspace.sh` | comma | pinned BT firmware, bluez, bluez-alsa, `/etc/asound.conf` (dmix), services (installed, not enabled). Dry run unless `--yes` |
+| `install_userspace.sh` | comma | pinned BT firmware, bluez, bluez-alsa, services (installed, not enabled). Leaves audio alone. Dry run unless `--yes` |
 | `firmware/firmware.sha256` | both | sha256 of `qca/crbtfw21.tlv` and `qca/crnv21.bin` from linux-firmware f859d9f; `mac/make_bundle.sh` fetches and checks them |
+| `audio.sh` | comma | `on` links `asound.conf` to `/etc/asound.conf`, `off` removes the link. Offroad only |
+| `asound.conf` | comma | shared dmix for soundd and music, capture unchanged |
 | `lib.sh` | comma | helpers shared by the scripts above |
 | `attach.sh` | comma | started by `dpbridge-bt.service`: power on, `btattach` on /dev/ttyHS1, then this unit's own address |
 | `test_bt.sh` | both | the 16 acceptance checks; device rows skip without hci0 |
@@ -30,10 +32,13 @@ openpilot side: `openpilot/system/dpbridge/` (dashkitd, btagentd, a2dp ducking),
 `DashKitAddr`, `DashKitVersion`, `DpbA2dpOnroad`, `DpbCmd`, `DpbStatus`, and Settings > bluetooth.
 All of it stays off when `/sys/class/bluetooth/hci0` is missing.
 
-Audio: the mici sound card exposes one playback PCM (MultiMedia1). `/etc/asound.conf` puts soundd (the
-default device) and `bluealsa-aplay` on one dmix. Music alone passes a softvol control
+Audio: the mici sound card exposes one playback PCM (MultiMedia1). `asound.conf` puts soundd's playback (the
+default device) and `bluealsa-aplay` on one dmix; capture stays on sysdefault, so micd is unchanged. It lives in
+`/data/dpbridge` and is only active while `mac/deliver.sh enable` has linked it to `/etc/asound.conf`
+(`disable` removes the link). Both refuse while soundd or micd runs: the manager does not restart a process
+it lost, so they pick the change up at their next start (offroad, after a reboot or ignition cycle). Music alone passes a softvol control
 (`dpbridge A2DP Playback Volume`), which dpb_a2dp sets to 100% (normal), 60% (about -20 dB, during alerts) or 0 (muted
-onroad). Alerts never pass it. The file is on the dpbridge slot only, so the stock slot keeps plain soundd.
+onroad). Alerts never pass it. The link is on the dpbridge slot only, so the stock slot keeps plain soundd.
 
 ## Steps
 
@@ -47,10 +52,11 @@ onroad). Alerts never pass it. The file is on the dpbridge slot only, so the sto
 7. `mac/deliver.sh reboot`, wait a minute, then `mac/deliver.sh probe` again: kernel config shows BT, UART node `ok`.
 8. Userspace: `mac/deliver.sh install`, then `mac/deliver.sh install --yes`. Nothing starts on its own yet.
 9. First chip bring-up by hand: `mac/deliver.sh attach`. If it hangs or SSH dies, reboot: nothing runs at boot.
-   Only if hci0 came up and wlan0 is still UP: `mac/deliver.sh enable`, then `mac/deliver.sh reboot`.
+   Only if hci0 came up and wlan0 is still UP: offroad, `mac/deliver.sh enable`, then `mac/deliver.sh reboot`.
 10. Test: `mac/deliver.sh test`. Pair in Settings > bluetooth, then rerun for the manual rows.
 
-Kill switch: `touch /data/dpbridge/disable` (or `mac/deliver.sh disable`) keeps the chip off from the next boot.
+Kill switch: `touch /data/dpbridge/disable` keeps the chip off from the next boot. `mac/deliver.sh disable` (offroad)
+also stops the services and takes the audio link out.
 
 ## Recovery
 

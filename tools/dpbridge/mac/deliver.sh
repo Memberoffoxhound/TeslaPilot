@@ -10,7 +10,8 @@
 #   backup-pull  copy /data/dpbridge/backup to ~/dpbridge-backup/<date>/ and check sha256
 #   install      install_userspace.sh (dry run unless --yes), after rebooting into the new kernel
 #   attach       one manual chip bring-up for 20 s, output saved to ~/dpbridge-backup/<date>/attach.txt
-#   enable       start Bluetooth on every boot (after attach looked good); disable turns it off again
+#   enable       offroad: share the speaker with A2DP and start Bluetooth on every boot (after attach looked good);
+#                disable turns both off again (audio sharing only offroad)
 #   restore      restore_boot.sh (dry run unless --yes; --write also rewrites the boot slot)
 #   test         test_bt.sh, output saved to ~/dpbridge-backup/<date>/test_bt.txt
 #   reboot       sudo reboot on the comma
@@ -31,7 +32,7 @@ while getopts "i:h:p:" o; do
     i) KEY=$OPTARG ;;
     h) HOST=$OPTARG ;;
     p) PORT=$OPTARG ;;
-    *) sed -n '2,18p' "$0"; exit 2 ;;
+    *) sed -n '/^set /q;2,$p' "$0"; exit 2 ;;
   esac
 done
 shift $((OPTIND - 1))
@@ -133,8 +134,16 @@ case $CMD in
       dmesg | grep -iE 'qca|bluetooth' | tail -20; ip -br addr show wlan0; wait" 2>&1 | tee "$OUT/attach.txt" || true
     echo "saved $OUT/attach.txt. hci0 listed and wlan0 UP: run enable"
     ;;
-  enable) reach; r "rm -f $REMOTE/disable && sudo systemctl enable --now dpbridge-bt bluetooth bluealsa bluealsa-aplay" ;;
-  disable) reach; r "touch $REMOTE/disable && sudo systemctl disable dpbridge-bt bluetooth bluealsa bluealsa-aplay" ;;
+  enable)
+    reach
+    dev "bash $REMOTE/audio.sh on"  # offroad only; soundd and micd pick it up when they next start
+    r "rm -f $REMOTE/disable && sudo systemctl enable --now dpbridge-bt bluetooth bluealsa bluealsa-aplay"
+    ;;
+  disable)
+    reach
+    r "touch $REMOTE/disable && sudo systemctl disable --now dpbridge-bt bluetooth bluealsa bluealsa-aplay"
+    dev "bash $REMOTE/audio.sh off"
+    ;;
   restore) reach; dev "bash $REMOTE/restore_boot.sh $ARGS" ;;
   test)
     reach
@@ -143,5 +152,5 @@ case $CMD in
     echo "saved $OUT/test_bt.txt"
     ;;
   reboot) reach; r "sudo reboot" || true ;;
-  *) sed -n '2,18p' "$0"; exit 2 ;;
+  *) sed -n '/^set /q;2,$p' "$0"; exit 2 ;;
 esac
