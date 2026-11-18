@@ -56,7 +56,54 @@ def test_run_logs_each_error_once_and_backs_off():
   logs, sleeps = [], []
   run(Ducker(m), [FULL] * 8, logs.append, sleeps.append)
   assert len(logs) == 1 and sleeps == [1, 2, 4, 8, 16, 30, 30, 30]
-  m.broken.clear()
-  sleeps.clear()
+  assert m == [MUTE]  # ended unsure of the level: muted
+  m, sleeps = Mixer(), []
   run(Ducker(m), [FULL, DUCK], logs.append, sleeps.append)
-  assert sleeps == [] and m == [FULL, DUCK]
+  assert sleeps == [] and m == [FULL, DUCK, MUTE]  # the list ran out while ducked
+
+
+def crash_after(*levels):
+  yield from levels
+  raise KeyboardInterrupt  # manager stops processes with SIGINT
+
+
+def test_dying_while_ducked_mutes():
+  m = Mixer()
+  with pytest.raises(KeyboardInterrupt):
+    run(Ducker(m), crash_after(FULL, DUCK), print)
+  assert m == [FULL, DUCK, MUTE]
+
+
+def test_dying_at_full_leaves_it():
+  m = Mixer()
+  with pytest.raises(KeyboardInterrupt):
+    run(Ducker(m), crash_after(FULL), print)
+  assert m == [FULL]
+
+
+def test_sigterm_while_ducked_mutes(tmp_path):
+  import signal
+  import subprocess
+  import sys
+  import time
+  out = tmp_path / 'mixer'
+  script = f"""
+import itertools
+from openpilot.system.dpbridge import a2dp
+a2dp.exit_on_sigterm()
+def mixer(pct):
+  open({str(out)!r}, 'a').write(f'{{pct}}\\n')
+def levels():
+  for _ in itertools.count():
+    a2dp.time.sleep(0.05)
+    yield a2dp.DUCK
+a2dp.run(a2dp.Ducker(mixer), levels(), print)
+"""
+  p = subprocess.Popen([sys.executable, '-c', script])
+  for _ in range(100):
+    if out.exists():
+      break
+    time.sleep(0.05)
+  p.send_signal(signal.SIGTERM)
+  assert p.wait(5) == 0
+  assert out.read_text().split() == [str(DUCK), str(MUTE)]
