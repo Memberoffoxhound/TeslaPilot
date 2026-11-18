@@ -10,8 +10,8 @@
 #   backup-pull  copy /data/dpbridge/backup to ~/dpbridge-backup/<date>/ and check sha256
 #   install      install_userspace.sh (dry run unless --yes), after rebooting into the new kernel
 #   attach       one manual chip bring-up for 20 s, output saved to ~/dpbridge-backup/<date>/attach.txt
-#   enable       offroad: share the speaker with A2DP and start Bluetooth on every boot (after attach looked good);
-#                disable turns both off again (audio sharing only offroad)
+#   enable       car off: share the speaker with A2DP and start Bluetooth on every boot (after attach looked good);
+#                disable turns both off again (audio sharing only with the car off)
 #   restore      restore_boot.sh (dry run unless --yes; --write also rewrites the boot slot)
 #   test         test_bt.sh, output saved to ~/dpbridge-backup/<date>/test_bt.txt
 #   reboot       sudo reboot on the comma
@@ -141,13 +141,14 @@ case $CMD in
     ;;
   enable)
     reach
-    dev "bash $REMOTE/audio.sh on"  # offroad only; soundd and micd pick it up when they next start
+    dev "bash $REMOTE/audio.sh on"  # car off only; soundd and micd pick it up when they next start
     r "rm -f $REMOTE/disable && sudo systemctl enable --now dpbridge-bt bluetooth bluealsa bluealsa-aplay"
     ;;
   disable)
     reach
-    r "touch $REMOTE/disable && sudo systemctl disable --now dpbridge-bt bluetooth bluealsa bluealsa-aplay"
+    # audio first: if it refuses (car on), Bluetooth stays up rather than leaving soundd on dmix without it
     dev "bash $REMOTE/audio.sh off"
+    r "touch $REMOTE/disable && sudo systemctl disable --now dpbridge-bt bluetooth bluealsa bluealsa-aplay"
     ;;
   restore) reach; dev "bash $REMOTE/restore_boot.sh $ARGS" ;;
   test)

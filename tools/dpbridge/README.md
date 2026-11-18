@@ -36,8 +36,8 @@ All of it stays off when `/sys/class/bluetooth/hci0` is missing.
 Audio: the mici sound card exposes one playback PCM (MultiMedia1). `asound.conf` puts soundd's playback (the
 default device) and `bluealsa-aplay` on one dmix; capture stays on sysdefault, so micd is unchanged. It lives in
 `/data/dpbridge` and is only active while `mac/deliver.sh enable` has linked it to `/etc/asound.conf`
-(`disable` removes the link). Both refuse while soundd or micd runs: the manager does not restart a process
-it lost, so they pick the change up at their next start (offroad, after a reboot or ignition cycle). Music alone passes a softvol control
+(`disable` removes the link). Both refuse to change the link while soundd or micd runs (a no-op is fine): the manager does not restart a process
+it lost, so they pick the change up at their next start (car off, after a reboot or ignition cycle). Music alone passes a softvol control
 (`dpbridge A2DP Playback Volume`), which dpb_a2dp sets to 100% (normal), 60% (about -20 dB, during alerts) or 0 (muted
 onroad). Alerts never pass it. The link is on the dpbridge slot only, so the stock slot keeps plain soundd.
 
@@ -53,10 +53,10 @@ onroad). Alerts never pass it. The link is on the dpbridge slot only, so the sto
 7. `mac/deliver.sh reboot`, wait a minute, then `mac/deliver.sh probe` again: kernel config shows BT, UART node `ok`.
 8. Userspace: `mac/deliver.sh install`, then `mac/deliver.sh install --yes`. Nothing starts on its own yet.
 9. First chip bring-up by hand: `mac/deliver.sh attach`. If it hangs or SSH dies, reboot: nothing runs at boot.
-   Only if hci0 came up and wlan0 is still UP: offroad, `mac/deliver.sh enable`, then `mac/deliver.sh reboot`.
+   Only if hci0 came up and wlan0 is still UP: with the car off, `mac/deliver.sh enable`, then `mac/deliver.sh reboot`.
 10. Test: `mac/deliver.sh test`. Pair in Settings > bluetooth, then rerun for the manual rows.
 
-Kill switch: `touch /data/dpbridge/disable` keeps the chip off from the next boot. `mac/deliver.sh disable` (offroad)
+Kill switch: `touch /data/dpbridge/disable` keeps the chip off from the next boot. `mac/deliver.sh disable` (car off)
 also stops the services and takes the audio link out.
 
 ## Recovery

@@ -29,14 +29,14 @@ shasum -a 256 -c boot.img.sha256        # boot.img: OK
 ./deliver.sh install --yes               # firmware, bluez, bluez-alsa; nothing enabled, audio untouched
 ./deliver.sh attach                      # first chip bring-up by hand, 20 s. Hang or SSH lost: reboot,
                                          # nothing runs at boot yet. Saved to ~/dpbridge-backup/<date>/attach.txt
-./deliver.sh enable                      # offroad, only if attach listed hci0 and wlan0 is still UP: links the
+./deliver.sh enable                      # car off, only if attach listed hci0 and wlan0 is still UP: links the
                                          # shared dmix to /etc/asound.conf and enables the services
 ./deliver.sh reboot
 ./deliver.sh test                        # saved to ~/dpbridge-backup/<date>/test_bt.txt; then onroad, with music
                                          # playing, make sure alerts still play
 ```
 
-`./deliver.sh disable` (offroad) stops Bluetooth, keeps it off from the next boot and removes the audio link.
+`./deliver.sh disable` (car off) stops Bluetooth, keeps it off from the next boot and removes the audio link.
 `touch /data/dpbridge/disable` on the comma keeps the chip off from the next boot.
 
 Settings page and daemons need the dpbridge openpilot branch on the comma. The git bundle is

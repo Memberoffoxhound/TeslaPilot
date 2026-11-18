@@ -3,6 +3,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 HERE = Path(__file__).resolve().parents[1]
 
 
@@ -33,14 +35,20 @@ def test_refuses_without_config_and_leaves_foreign_files(tmp_path):
   assert audio(tmp_path, 'off').returncode == 0 and etc.read_text() == 'someone else'
 
 
-def test_refuses_while_soundd_runs(tmp_path):
+@pytest.mark.parametrize('title', ['python -m openpilot.selfdrive.ui.soundd', 'python -m openpilot.system.micd'])
+def test_refuses_changes_while_soundd_or_micd_runs(tmp_path, title):
   (tmp_path / 'asound.conf').write_text('x')
-  # a stand-in process whose command line matches soundd's
-  p = subprocess.Popen(['bash', '-c', 'exec -a "python -m openpilot.selfdrive.ui.soundd" sleep 30'])
+  etc = tmp_path / 'etc_asound.conf'
+  # a stand-in process with the daemon's command line
+  p = subprocess.Popen(['bash', '-c', f'exec -a "{title}" sleep 30'])
   try:
+    assert audio(tmp_path, 'off').returncode == 0  # already off: nothing to change, no refusal
     r = audio(tmp_path, 'on')
-    assert r.returncode != 0 and 'run this offroad' in r.stderr
-    assert not (tmp_path / 'etc_asound.conf').exists()
+    assert r.returncode != 0 and 'turn the car off' in r.stderr and not etc.exists()
+    etc.symlink_to(tmp_path / 'asound.conf')
+    assert audio(tmp_path, 'on').returncode == 0  # already on
+    r = audio(tmp_path, 'off')
+    assert r.returncode != 0 and 'turn the car off' in r.stderr and etc.is_symlink()
   finally:
     p.kill()
 
