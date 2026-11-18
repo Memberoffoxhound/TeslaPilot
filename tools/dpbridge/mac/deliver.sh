@@ -4,7 +4,7 @@
 #
 # usage: deliver.sh [-i key] [-h user@host] [-p port] <command> [--yes] [--write]
 #   probe        read-only probe, output saved to ~/dpbridge-backup/<date>/probe.txt
-#   push         copy boot.img and the scripts to /data/dpbridge, check sha256 on both ends
+#   push         copy boot.img, BT firmware and the scripts to /data/dpbridge, check sha256 on both ends
 #   qdl-check    read-only QDL test on the Mac: proves the rescue path works on this comma before any flash
 #   flash        flash_boot.sh as a dry run; with --yes it flashes detached from SSH, then pulls the boot backups
 #   backup-pull  copy /data/dpbridge/backup to ~/dpbridge-backup/<date>/ and check sha256
@@ -24,6 +24,7 @@ REMOTE=${DPB_REMOTE:-/data/dpbridge}
 OUT=$HOME/dpbridge-backup/$(date +%Y-%m-%d)
 if [ -f "$HERE/dpbridge/flash_boot.sh" ]; then SRC=$HERE/dpbridge; else SRC=$(cd "$HERE/.." && pwd); fi
 BOOT=${BOOT:-$HERE/boot.img}
+FW=${DPB_FW:-$SRC/firmware}  # crbtfw21.tlv, crnv21.bin, firmware.sha256 (make_bundle.sh fetches them)
 
 while getopts "i:h:p:" o; do
   case $o in
@@ -80,8 +81,10 @@ case $CMD in
     [ -f "$BOOT" ] || die "no boot.img at $BOOT (set BOOT=...)"
     [ -f "$BOOT.sha256" ] || die "no $BOOT.sha256"
     [ "$(cut -d' ' -f1 "$BOOT.sha256")" = "$(local_sha "$BOOT")" ] || die "boot.img does not match boot.img.sha256"
+    (cd "$FW" && shasum -a 256 -c firmware.sha256) > /dev/null 2>&1 || die "BT firmware in $FW missing or not the pinned files"
     r "mkdir -p $REMOTE"
     push_file "$BOOT"
+    for f in firmware.sha256 crbtfw21.tlv crnv21.bin; do push_file "$FW/$f"; done
     push_file "$BOOT.sha256"
     for f in "$SRC"/*.sh "$SRC"/*.py; do push_file "$f"; done
     r "chmod +x $REMOTE/*.sh $REMOTE/*.py"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the Bluetooth userspace on a comma 4 running the dpbridge kernel: firmware, bluez, bluez-alsa,
+# Install the Bluetooth userspace on a comma 4 running the dpbridge kernel: firmware, bluez, bluez-alsa, dmix,
 # bonds kept on /data, and the services that attach the chip and play A2DP on the speaker.
 # Changes the read-only rootfs of the running slot (an AGNOS update undoes it). Prints the plan only unless --yes.
 set -euo pipefail
@@ -11,25 +11,15 @@ put() { echo "+ write $1"; if [ $YES = 1 ]; then $SUDO tee "$1" > /dev/null; els
 
 [ -e /sys/module/hci_uart/parameters/wcn3990 ] || die "running kernel has no WCN3990 support, flash the dpbridge boot.img first"
 [ -x "$DIR/attach.sh" ] || die "missing $DIR/attach.sh"
-slot=$(abctl --boot_slot)
-[ -e "$P/bluetooth$slot" ] || die "no bluetooth$slot partition"
+(cd "$DIR" && sha256sum -c --quiet firmware.sha256) || die "BT firmware in $DIR missing or not the pinned linux-firmware files, run deliver.sh push"
 [ $YES = 1 ] || echo "dry run: pass --yes to install"
 
-M=$(mktemp -d)
-cleanup() {
-  if mountpoint -q "$M"; then $SUDO umount "$M"; fi
-  rmdir "$M"
-  if [ $YES = 1 ]; then $SUDO /usr/comma/apt_teardown.sh; fi
-}
-trap cleanup EXIT
+trap 'if [ $YES = 1 ]; then $SUDO /usr/comma/apt_teardown.sh; fi' EXIT
 run $SUDO /usr/comma/apt_setup.sh
 
-# firmware ships on the bluetooth partition; the kernel wants lowercase names under qca/
-run $SUDO mount -o ro "$P/bluetooth$slot" "$M"
+# WCN3990 firmware from linux-firmware (the comma 4 has no bluetooth partition), checked against firmware.sha256
 run $SUDO mkdir -p /lib/firmware/qca
-run $SUDO cp "$M/image/crbtfw21.tlv" /lib/firmware/qca/crbtfw21.tlv
-run $SUDO cp "$M/image/crnv21.bin" /lib/firmware/qca/crnv21.bin
-run $SUDO umount "$M"
+run $SUDO cp "$DIR/crbtfw21.tlv" "$DIR/crnv21.bin" /lib/firmware/qca/
 
 run $SUDO apt-get update
 run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bluez bluez-alsa-utils alsa-utils

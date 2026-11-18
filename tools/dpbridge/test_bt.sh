@@ -24,7 +24,11 @@ gps_alive() {
 s = m.sub_sock('ubloxRaw', timeout=5000)
 assert m.recv_one(s) is not None"
 }
-firmware() { local d; d=$(dmesg); grep -q crbtfw21 <<< "$d" && grep -q crnv21 <<< "$d" && ! grep -qi "qca.*\(fail\|error\)" <<< "$d"; }
+firmware() {
+  local d; d=$(dmesg)
+  (cd /lib/firmware/qca && sha256sum -c --quiet "$DIR/firmware.sha256") &&
+    grep -q crbtfw21 <<< "$d" && grep -q crnv21 <<< "$d" && ! grep -qi "qca.*\(fail\|error\)" <<< "$d"
+}
 # the address attach.sh derives from the serial, so not the chip default 00:00:00:00:5A:AD shared by every unit
 hci_up() {
   local i a; i=$(btmgmt info); a=$(bash "$HERE/attach.sh" --print-addr) || return 1
@@ -51,7 +55,7 @@ if on_device; then
   check 2 "BT UART ttyHS1 + rfkill bt_power" uart_power
   check 2 "GPS still on ttyHS0, BT on ttyHS1" tty_map
   if pgrep -f ubloxd.pigeond > /dev/null; then check 2 "GPS publishing ubloxRaw" gps_alive; else say MANUAL 2 "GPS runs onroad: ignition on, rerun"; fi
-  check 3 "firmware downloaded" firmware
+  check 3 "pinned firmware installed and downloaded" firmware
   if has_hci; then
     check 4 "hci0 powered, Qualcomm, real address" hci_up
     if ! scan; then say FAIL 5 "scan finds devices"; elif dashkit_seen; then say PASS 5 "scan finds DashKit"

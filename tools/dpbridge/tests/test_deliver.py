@@ -34,7 +34,12 @@ def setup_env(dev):
   home = tmp / 'home'
   home.mkdir()
   remote = tmp / 'remote'
-  return dict(env, KEYFILE=str(key), HOME=str(home), DPB_REMOTE=str(remote), BOOT=str(img)), remote, home
+  fw = tmp / 'fw'
+  fw.mkdir()
+  for f in ('crbtfw21.tlv', 'crnv21.bin'):
+    (fw / f).write_bytes(f.encode())
+  subprocess.run('sha256sum crbtfw21.tlv crnv21.bin > firmware.sha256', shell=True, cwd=fw, check=True)
+  return dict(env, KEYFILE=str(key), HOME=str(home), DPB_REMOTE=str(remote), BOOT=str(img), DPB_FW=str(fw)), remote, home
 
 
 def test_push_flash_and_pull_backups(dev):
@@ -44,6 +49,7 @@ def test_push_flash_and_pull_backups(dev):
   assert r.returncode == 0, r.stderr
   assert (remote / 'boot.img').read_bytes() == img.read_bytes()
   assert (remote / 'flash_boot.sh').exists() and (remote / 'dk_unpack.py').exists()
+  assert (remote / 'crnv21.bin').read_bytes() == b'crnv21.bin' and (remote / 'firmware.sha256').exists()
 
   before = (parts / 'boot_b').read_bytes()
   r = deliver(env, 'flash')
@@ -76,6 +82,13 @@ def test_push_needs_a_matching_sha256(dev):
   sha.unlink()
   r = deliver(env, 'push')
   assert r.returncode != 0 and f'no {img}.sha256' in r.stderr
+
+
+def test_push_needs_the_pinned_firmware(dev):
+  env, remote, home = setup_env(dev)
+  (Path(env['DPB_FW']) / 'crnv21.bin').write_bytes(b'other nvm')
+  r = deliver(env, 'push')
+  assert r.returncode != 0 and 'BT firmware' in r.stderr and not (remote / 'boot.img').exists()
 
 
 def test_failed_flash_is_reported_and_backups_not_pulled(dev):
