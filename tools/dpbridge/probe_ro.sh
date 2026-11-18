@@ -25,7 +25,7 @@ for p in bluetooth_a bluetooth_b; do
   h=$(sudo -n head -c 1048576 "$d" 2>/dev/null | sha256sum | cut -d' ' -f1)
   echo "$p first 1MiB sha256=$h $([ "$h" = "$BTIMG_SHA" ] && echo MATCH agnos-builder bluetooth.img)"
 done
-s firmware files on rootfs; ls /lib/firmware/qca 2>/dev/null | grep -iE "crbt|crnv" || echo none
+s firmware files on rootfs; ls /lib/firmware/qca/crbtfw* /lib/firmware/qca/crnv* 2>/dev/null || echo none
 s "gpio 45-48, hint only"
 sudo -n cat /sys/kernel/debug/gpio 2>/dev/null | grep -E "gpio(45|46|47|48)[^0-9]" || echo "no debugfs view"
 s "A/B partitions (flash_boot.sh mirrors these)"
@@ -40,4 +40,4 @@ aplay -l 2>/dev/null
 amixer -D hw:0 controls 2>/dev/null | grep -E "SEC_MI2S_RX Audio Mixer MultiMedia[0-9]+'" | head
 s userspace; for b in bluetoothd btattach bluetoothctl btmgmt bluealsad bluealsa bluealsa-aplay; do printf "%s: %s\n" $b "$(command -v $b || echo missing)"; done
 s usb; cat /sys/bus/usb/devices/*/product 2>/dev/null
-s done
+s "done"
