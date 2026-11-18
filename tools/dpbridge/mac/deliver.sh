@@ -30,7 +30,7 @@ while getopts "i:h:p:" o; do
     i) KEY=$OPTARG ;;
     h) HOST=$OPTARG ;;
     p) PORT=$OPTARG ;;
-    *) sed -n '2,19p' "$0"; exit 2 ;;
+    *) sed -n '2,18p' "$0"; exit 2 ;;
   esac
 done
 shift $((OPTIND - 1))
@@ -132,5 +132,5 @@ case $CMD in
     echo "saved $OUT/test_bt.txt"
     ;;
   reboot) reach; r "sudo reboot" || true ;;
-  *) sed -n '2,19p' "$0"; exit 2 ;;
+  *) sed -n '2,18p' "$0"; exit 2 ;;
 esac
