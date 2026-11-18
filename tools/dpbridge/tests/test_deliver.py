@@ -120,6 +120,15 @@ def test_flash_poll_stops_when_the_job_dies_without_a_result(dev):
   assert not (remote / 'flash.rc').exists() and not (home / 'dpbridge-backup').exists()
 
 
+def test_flash_poll_rechecks_for_a_late_result(dev):
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  # the job is gone and flash.rc lands a second later, as when the poll falls between exit and the wrapper's echo
+  stub_flash(remote, 'd=$(dirname "$0"); setsid bash -c "sleep 1; echo 1 > $d/flash.rc" < /dev/null > /dev/null 2>&1 &\nkill -9 $PPID')
+  r = deliver(dict(env, DPB_POLL_S='0.2', DPB_FLASH_MAX_S='10'), 'flash', '--yes')
+  assert r.returncode != 0 and 'flash failed' in r.stderr and 'stopped without' not in r.stderr
+
+
 def test_flash_poll_gives_up_after_the_cap(dev):
   env, remote, home = setup_env(dev)
   assert deliver(env, 'push').returncode == 0

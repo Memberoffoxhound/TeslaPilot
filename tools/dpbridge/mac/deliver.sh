@@ -111,7 +111,12 @@ case $CMD in
           [ $SECONDS -lt $end ] || die "no result after $(( ${DPB_FLASH_MAX_S:-3600} / 60 )) min, see $REMOTE/flash.log"
           sleep "${DPB_POLL_S:-5}"
           if out=$(r "pgrep -f [f]lash_boot.sh > /dev/null || test -f $REMOTE/flash.rc || echo gone; tail -n 1 $REMOTE/flash.log" 2> /dev/null); then
-            grep -qx gone <<< "$out" && die "flash stopped without a result, see $REMOTE/flash.log (the slot switch is its last step)"
+            if grep -qx gone <<< "$out"; then
+              # flash_boot.sh may have just exited with the wrapper's echo still to come
+              sleep 2
+              r "test -f $REMOTE/flash.rc" 2> /dev/null && break
+              die "flash stopped without a result, see $REMOTE/flash.log (the slot switch is its last step)"
+            fi
             echo "$out"
           else
             echo "(no answer, still waiting)"
