@@ -15,7 +15,8 @@ put() { echo "+ write $1"; if [ $YES = 1 ]; then $SUDO tee "$1" > /dev/null; els
 [ $YES = 1 ] || echo "dry run: pass --yes to install"
 
 MNT=/tmp/dpbridge-btimg
-trap 'if [ $YES = 1 ]; then $SUDO umount "$MNT" 2> /dev/null; $SUDO /usr/comma/apt_teardown.sh; fi' EXIT
+# umount fails once the success path has unmounted; it must not stop the teardown or the exit status
+trap 'if [ $YES = 1 ]; then $SUDO umount "$MNT" 2> /dev/null || true; $SUDO /usr/comma/apt_teardown.sh; fi' EXIT
 run $SUDO /usr/comma/apt_setup.sh
 
 # WCN3990 firmware (the comma 4 has no bluetooth partition). btqca loads qca/crbtfw<rev>.tlv and qca/crnv<rev>.bin
