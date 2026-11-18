@@ -31,6 +31,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CompassSize", {PERSISTENT, INT, "0"}},  // 0 = small (60px left); 1 = large (90px top-right)
     {"CurrentBootlog", {PERSISTENT, STRING}},
     {"CurrentRoute", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, STRING}},
+    {"DashKitAddr", {PERSISTENT, STRING}},  // dpbridge: paired DashKit MAC
+    {"DashKitBridge", {PERSISTENT, BOOL, "0"}},  // dpbridge: log DashKit frames onroad
+    {"DashKitVersion", {PERSISTENT, STRING}},
     {"DisableDriverCameraIR", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL}},
     {"DisableLogging", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL}},
     {"DisablePowerDown", {PERSISTENT, BOOL}},
@@ -40,6 +43,9 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"DoReboot", {CLEAR_ON_MANAGER_START, BOOL}},
     {"DoShutdown", {CLEAR_ON_MANAGER_START, BOOL}},
     {"DoUninstall", {CLEAR_ON_MANAGER_START, BOOL}},
+    {"DpbA2dpOnroad", {PERSISTENT, BOOL, "0"}},  // dpbridge: allow phone music while driving
+    {"DpbCmd", {CLEAR_ON_MANAGER_START, STRING}},  // dpbridge: settings page -> btagentd
+    {"DpbStatus", {CLEAR_ON_MANAGER_START, JSON}},  // dpbridge: btagentd -> settings page
     {"DriverTooDistracted", {CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_ON, BOOL}},
     {"DriverLockoutCount", {CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_ON, INT, "0"}},
     {"AlphaLongitudinalEnabled", {PERSISTENT | DEVELOPMENT_ONLY, BOOL}},

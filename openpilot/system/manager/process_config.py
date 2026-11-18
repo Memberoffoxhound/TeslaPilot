@@ -70,6 +70,13 @@ def livestream(started: bool, params: Params, CP: car.CarParams) -> bool:
 def livestream_encoder(started: bool, params: Params, CP: car.CarParams) -> bool:
   return ((not started) and params.get_bool("IsLiveStreaming")) or (started and CP.notCar)
 
+# dpbridge: only on a comma running the dpbridge kernel; no hci0 means Bluetooth is off, not an error
+def bluetooth(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return os.path.exists("/sys/class/bluetooth/hci0")
+
+def dashkit(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return started and params.get_bool("DashKitBridge") and bool(params.get("DashKitAddr")) and bluetooth(started, params, CP)
+
 def or_(*fns):
   return lambda *args: operator.or_(*(fn(*args) for fn in fns))
 
@@ -130,6 +137,11 @@ procs = [
   RestartingPythonProcess("parkd", "openpilot.selfdrive.car.park_offroad", park_offroad.should_run, enabled=not PC),
   # the big-model catalog and pick (from sunnypilot's model manager); offroad only
   RestartingPythonProcess("modelmanagerd", "openpilot.selfdrive.modelmanager.manager", only_offroad, enabled=not PC),
+
+  # dpbridge: pairing, music ducking, and log-only DashKit capture
+  RestartingPythonProcess("btagentd", "openpilot.system.dpbridge.btagentd", bluetooth, enabled=not PC),
+  RestartingPythonProcess("dpb_a2dp", "openpilot.system.dpbridge.a2dp", bluetooth, enabled=not PC),
+  PythonProcess("dashkitd", "openpilot.system.dpbridge.dashkitd", dashkit, enabled=not PC),
 
   # debug procs
   PythonProcess("webrtcd", "openpilot.system.webrtc.webrtcd", or_(livestream, notcar)),
