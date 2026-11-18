@@ -3,15 +3,10 @@
 # bonds kept on /data, and the services that attach the chip and play A2DP on the speaker.
 # Changes the read-only rootfs of the running slot (an AGNOS update undoes it). Prints the plan only unless --yes.
 set -euo pipefail
-
-DIR=${DPB_DIR:-/data/dpbridge}
-P=/dev/disk/by-partlabel
-SUDO=${SUDO-sudo}
 YES=0
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
 [ "${1:-}" = --yes ] && YES=1
-
-die() { echo "refusing: $*" >&2; exit 1; }
-run() { echo "+ $*"; if [ $YES = 1 ]; then "$@"; fi; }
 put() { echo "+ write $1"; if [ $YES = 1 ]; then $SUDO tee "$1" > /dev/null; else cat > /dev/null; fi; }
 
 [ -e /sys/module/hci_uart/parameters/wcn3990 ] || die "running kernel has no WCN3990 support, flash the dpbridge boot.img first"
@@ -20,11 +15,16 @@ slot=$(abctl --boot_slot)
 [ -e "$P/bluetooth$slot" ] || die "no bluetooth$slot partition"
 [ $YES = 1 ] || echo "dry run: pass --yes to install"
 
+M=$(mktemp -d)
+cleanup() {
+  if mountpoint -q "$M"; then $SUDO umount "$M"; fi
+  rmdir "$M"
+  if [ $YES = 1 ]; then $SUDO /usr/comma/apt_teardown.sh; fi
+}
+trap cleanup EXIT
 run $SUDO /usr/comma/apt_setup.sh
-[ $YES = 1 ] && trap '$SUDO /usr/comma/apt_teardown.sh' EXIT
 
 # firmware ships on the bluetooth partition; the kernel wants lowercase names under qca/
-M=$(mktemp -d)
 run $SUDO mount -o ro "$P/bluetooth$slot" "$M"
 run $SUDO mkdir -p /lib/firmware/qca
 run $SUDO cp "$M/image/crbtfw21.tlv" /lib/firmware/qca/crbtfw21.tlv
@@ -37,11 +37,17 @@ run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-rec
 # /var is tmpfs, keep bonds on /data
 run $SUDO mkdir -p "$DIR/bluetooth"
 
+# shows up on phones as car audio
+run $SUDO sed -i 's/^#\? *Class *=.*/Class = 0x240414/' /etc/bluetooth/main.conf
+if [ $YES = 1 ]; then grep -q '^Class = 0x240414' /etc/bluetooth/main.conf || die "Class not set in main.conf"; fi
+
 put /etc/systemd/system/dpbridge-bt.service <<UNIT
 [Unit]
 Description=dpbridge: attach the WCN3990 as hci0
 Before=bluetooth.service
 ConditionPathExists=/sys/module/hci_uart/parameters/wcn3990
+# touch this file to keep the chip off on the next boot
+ConditionPathExists=!$DIR/disable
 
 [Service]
 ExecStartPre=/bin/mkdir -p /var/lib/bluetooth
@@ -77,5 +83,7 @@ ExecStart=/usr/bin/bluealsa-aplay -D plughw:0,1
 UNIT
 
 run $SUDO systemctl daemon-reload
-run $SUDO systemctl enable dpbridge-bt.service bluetooth.service bluealsa.service bluealsa-aplay.service
-echo "installed. sudo reboot, then run test_bt.sh"
+# apt enables these on install and they pull in dpbridge-bt, so they stay off until deliver.sh enable
+run $SUDO systemctl disable bluetooth.service bluealsa.service bluealsa-aplay.service
+# nothing is enabled: the first chip bring-up is done by hand, so a hang there can't loop every boot
+echo "installed, not enabled. next: deliver.sh attach; if hci0 came up and SSH still works: deliver.sh enable"
