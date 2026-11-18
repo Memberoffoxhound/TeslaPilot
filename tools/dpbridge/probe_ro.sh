@@ -28,6 +28,13 @@ done
 s firmware files on rootfs; ls /lib/firmware/qca 2>/dev/null | grep -iE "crbt|crnv" || echo none
 s "gpio 45-48, hint only"
 sudo -n cat /sys/kernel/debug/gpio 2>/dev/null | grep -E "gpio(45|46|47|48)[^0-9]" || echo "no debugfs view"
+s "A/B partitions (flash_boot.sh mirrors these)"
+sz() { echo $(( $(cat /sys/class/block/"$(basename "$(readlink -f "$1")")"/size) * 512 )); }
+for p in /dev/disk/by-partlabel/*_a; do
+  n=$(basename "$p" _a); b=/dev/disk/by-partlabel/${n}_b
+  [ -e "$b" ] || continue
+  echo "$n a=$(sz "$p") b=$(sz "$b")"
+done
 s sound
 aplay -l 2>/dev/null
 amixer -D hw:0 controls 2>/dev/null | grep -E "SEC_MI2S_RX Audio Mixer MultiMedia[0-9]+'" | head
