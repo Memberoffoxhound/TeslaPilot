@@ -1,0 +1,23 @@
+From 331eb7220a6e8514114e3047df64e48643c41aa3 Mon Sep 17 00:00:00 2001
+From: Memberoffoxhound <Memberoffoxhound@users.noreply.github.com>
+Date: Wed, 18 Nov 2026 08:07:13 -0600
+Subject: [PATCH 9/9] arm64: tici_defconfig: drop RFCOMM, A2DP and AVRCP only
+ need L2CAP
+
+---
+ arch/arm64/configs/tici_defconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/configs/tici_defconfig b/arch/arm64/configs/tici_defconfig
+index a4db7a87..9fb129cc 100644
+--- a/arch/arm64/configs/tici_defconfig
++++ b/arch/arm64/configs/tici_defconfig
+@@ -1151,7 +1151,7 @@ CONFIG_CAN_MCP25XXFD=y
+ # CONFIG_IRDA is not set
+ CONFIG_BT=y
+ CONFIG_BT_BREDR=y
+-CONFIG_BT_RFCOMM=y
++# CONFIG_BT_RFCOMM is not set
+ # CONFIG_BT_BNEP is not set
+ # CONFIG_BT_HIDP is not set
+ CONFIG_BT_HS=n
