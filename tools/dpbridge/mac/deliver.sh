@@ -136,8 +136,8 @@ case $CMD in
     mkdir -p "$OUT"
     # if this hangs or SSH dies: reboot, nothing runs on its own at boot yet
     r "sudo timeout 20 $REMOTE/attach.sh & sleep 15; ls /sys/class/bluetooth; btmgmt info | head -5; \
-      dmesg | grep -iE 'qca|bluetooth' | tail -20; ip -br addr show wlan0; wait" 2>&1 | tee "$OUT/attach.txt" || true
-    echo "saved $OUT/attach.txt. hci0 listed and wlan0 UP: run enable"
+      dmesg | grep -iE 'qca|bluetooth' | tail -20; dmesg | grep -i 'controller version'; ip -br addr show wlan0; wait" 2>&1 | tee "$OUT/attach.txt" || true
+    echo "saved $OUT/attach.txt. hci0 listed and wlan0 UP: run enable (controller version: the rom rev picks the firmware)"
     ;;
   enable)
     reach

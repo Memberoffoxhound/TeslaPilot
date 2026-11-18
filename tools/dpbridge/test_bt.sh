@@ -66,7 +66,7 @@ if on_device; then
     else say MANUAL 5 "scan works, DashKit not seen: is the car awake?"; fi
     if bonds; then say PASS 6 "a bond with LinkKey on /data"; else say MANUAL 6 "pair the phone in settings, reboot, rerun"; fi
     check 7 "A2DP sink UUID registered" a2dp_sink
-    if a2dp_running; then say MANUAL 8 "A2DP PCM running, confirm you hear it"; else say MANUAL 8 "connect the phone and play music, rerun"; fi
+    if a2dp_running; then say MANUAL 8 "A2DP sink PCM and volume control exist, confirm you hear it"; else say MANUAL 8 "connect the phone and play music, rerun"; fi
     say MANUAL 9 "play music, trigger an alert: music drops, alert audible, music returns"
     if pgrep -f '[s]elfdrive.ui.soundd' > /dev/null; then check 10 "audio linked, soundd and micd up, playback PCM running" audio_ok
     else say MANUAL 10 "soundd runs onroad or in driver view: rerun there"; fi
