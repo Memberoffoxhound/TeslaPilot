@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 # Go back to the stock kernel: re-activate the slot that was running before flash_boot.sh.
-# --write also copies the backed up boot image over the dpbridge slot. Prints the plan only unless --yes.
+# --write also copies the stock kernel over the dpbridge slot, which matches the system mirrored there.
+# Prints the plan only unless --yes.
 set -euo pipefail
-
-DIR=${DPB_DIR:-/data/dpbridge}
-P=${DPB_PARTS:-/dev/disk/by-partlabel}
-SUDO=${SUDO-sudo}
-B=$DIR/backup
 YES=0; WRITE=0
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
 for a in "$@"; do
   case $a in
     --yes) YES=1 ;;
@@ -16,29 +14,18 @@ for a in "$@"; do
   esac
 done
 
-die() { echo "refusing: $*" >&2; exit 1; }
-run() { echo "+ $*"; if [ $YES = 1 ]; then "$@"; fi; }
-# abctl exits 0 even when it fails; success is only its "boot lun" line
-activate() {
-  echo "+ abctl --set_active $1"
-  [ $YES = 1 ] || return 0
-  local out
-  out=$($SUDO abctl --set_active "$1" 2>&1) || true
-  grep -q "as boot lun" <<< "$out" || die "abctl --set_active $1 failed: $out"
-}
-
 [ -f "$B/stock_slot" ] || die "no $B/stock_slot, flash_boot.sh never ran here"
 (cd "$B" && sha256sum -c --quiet SHA256SUMS) || die "backups in $B are damaged"
 stock=$(cat "$B/stock_slot")
-case $stock in
-  _a) num=0; oth=_b ;;
-  _b) num=1; oth=_a ;;
-  *) die "bad stock slot '$stock'" ;;
-esac
+oth=$(other "$stock")
 
 [ $YES = 1 ] || echo "dry run: pass --yes to execute"
 if [ $WRITE = 1 ]; then
-  run $SUDO dd if="$B/boot$oth.img" of="$P/boot$oth" bs=4M conv=fsync status=none
+  img=$B/boot$stock.img
+  run $SUDO dd if="$img" of="$P/boot$oth" bs=4M conv=fsync status=none
+  if [ $YES = 1 ]; then
+    [ "$(dsha "$P/boot$oth" "$(stat -c %s "$img")")" = "$(fsha "$img")" ] || die "boot$oth readback mismatch"
+  fi
 fi
-activate $num
+activate "$(slot_num "$stock")"
 echo "stock slot $stock active after reboot"
