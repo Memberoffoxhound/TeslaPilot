@@ -1,0 +1,29 @@
+From 604c83df79a061bac4dde3f8c7aef49465666f15 Mon Sep 17 00:00:00 2001
+From: Memberoffoxhound <Memberoffoxhound@users.noreply.github.com>
+Date: Wed, 18 Nov 2026 08:01:41 -0600
+Subject: [PATCH 8/9] Bluetooth: hci_qca: bound the txq drain before the
+ WCN3990 baud switch
+
+---
+ drivers/bluetooth/hci_qca.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/bluetooth/hci_qca.c b/drivers/bluetooth/hci_qca.c
+index 4f5f774e..52213c65 100644
+--- a/drivers/bluetooth/hci_qca.c
++++ b/drivers/bluetooth/hci_qca.c
+@@ -914,8 +914,13 @@ static int qca_set_baudrate(struct hci_dev *hdev, uint8_t baudrate)
+ 
+ 	/* WCN3990 switches right away, so the host must follow quickly */
+ 	if (wcn3990) {
+-		while (!skb_queue_empty(&qca->txq))
++		int tries = 100;
++
++		while (!skb_queue_empty(&qca->txq)) {
++			if (!tries--)
++				return -ETIMEDOUT;
+ 			usleep_range(100, 200);
++		}
+ 		tty_wait_until_sent(hu->tty, msecs_to_jiffies(100));
+ 		msleep(10);
+ 		return 0;
