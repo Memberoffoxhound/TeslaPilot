@@ -66,26 +66,8 @@ ExecStart=
 ExecStart=/usr/bin/bluealsa -p a2dp-sink
 UNIT
 
-# the mici card has one playback PCM (MultiMedia1): soundd (default) and A2DP share it through dmix.
-# Music alone goes through a softvol control that dpb_a2dp uses to mute and duck; alerts never pass it.
-put /etc/asound.conf <<CONF
-pcm.dpb_mix {
-  type dmix
-  ipc_key 5791
-  ipc_perm 0666
-  slave { pcm "hw:0,0" rate 48000 channels 2 period_size 1024 buffer_size 4096 }
-}
-pcm.!default { type plug slave.pcm "dpb_mix" }
-ctl.!default { type hw card 0 }
-pcm.dpb_a2dp_vol {
-  type softvol
-  slave.pcm "dpb_mix"
-  control { name "dpbridge A2DP Playback Volume" card 0 }
-  min_dB -51.0
-  max_dB 0.0
-}
-pcm.dpb_a2dp { type plug slave.pcm "dpb_a2dp_vol" }
-CONF
+# shared dmix for soundd and A2DP, see asound.conf
+run $SUDO cp "$DIR/asound.conf" /etc/asound.conf
 
 # opening dpb_a2dp once creates its volume control before any music plays
 put /etc/systemd/system/bluealsa-aplay.service.d/dpbridge.conf <<UNIT

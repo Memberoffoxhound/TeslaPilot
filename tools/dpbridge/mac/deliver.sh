@@ -86,7 +86,7 @@ case $CMD in
     push_file "$BOOT"
     for f in firmware.sha256 crbtfw21.tlv crnv21.bin; do push_file "$FW/$f"; done
     push_file "$BOOT.sha256"
-    for f in "$SRC"/*.sh "$SRC"/*.py; do push_file "$f"; done
+    for f in "$SRC"/*.sh "$SRC"/*.py "$SRC/asound.conf"; do push_file "$f"; done
     r "chmod +x $REMOTE/*.sh $REMOTE/*.py"
     if [ -f "$HERE/dpbridge.bundle" ]; then push_file "$HERE/dpbridge.bundle"; fi
     ;;

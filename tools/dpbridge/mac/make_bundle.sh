@@ -13,7 +13,7 @@ BASE=${BASE:-e9155c2a7}
 rm -rf "$OUT"
 mkdir -p "$OUT/dpbridge"
 cp "$HERE/deliver.sh" "$HERE/HOWTO.md" "$OUT/"
-cp "$D"/*.sh "$D"/*.py "$D/README.md" "$OUT/dpbridge/"
+cp "$D"/*.sh "$D"/*.py "$D/README.md" "$D/asound.conf" "$OUT/dpbridge/"
 if [ -n "${BOOT:-}" ]; then
   cp "$BOOT" "$OUT/boot.img"
   (cd "$OUT" && sha256sum boot.img > boot.img.sha256)
