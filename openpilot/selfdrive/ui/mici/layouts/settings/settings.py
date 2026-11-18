@@ -9,6 +9,7 @@ from openpilot.selfdrive.ui.mici.layouts.settings.software import SoftwareLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.firehose import FirehoseLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.stats import StatsLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.models import ModelsLayoutMici
+from openpilot.selfdrive.ui.mici.layouts.settings.bluetooth import BluetoothLayoutMici, bt_available
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 
 
@@ -42,6 +43,12 @@ class SettingsLayout(NavScroller):
     network_btn = SettingsBigButton("network", "", gui_app.texture("icons_mici/settings/network/wifi_strength_full.png", 76, 56))
     network_btn.set_click_callback(lambda: gui_app.push_widget(network_panel))
 
+    # dpbridge: label only, shown once the dpbridge kernel brings up hci0
+    bluetooth_panel = BluetoothLayoutMici()
+    bluetooth_btn = SettingsBigButton("bluetooth", "")
+    bluetooth_btn.set_click_callback(lambda: gui_app.push_widget(bluetooth_panel))
+    bluetooth_btn.set_visible(bt_available)
+
     self._device_panel = DeviceLayoutMici()
     self._device_button = SettingsBigButton("device", "", gui_app.texture("icons_mici/settings/device_icon.png", 72, 58))
     self._device_button.set_click_callback(lambda: gui_app.push_widget(self._device_panel))
@@ -64,6 +71,7 @@ class SettingsLayout(NavScroller):
       stats_btn,
       models_btn,
       network_btn,
+      bluetooth_btn,
       self._device_button,
       software_btn,
       firehose_btn,
