@@ -19,7 +19,8 @@ Nothing here talks to the car or changes panda safety.
 | `flash_boot.sh` | comma | comma 4 on AGNOS 20.6 only. Backs up both boot slots, marks the other slot unbootable, mirrors the partitions AGNOS updates (xbl xbl_config abl aop devcfg system) into it, writes `boot.img` there, reads everything back from flash, switches to it. Dry run unless `--yes` |
 | `restore_boot.sh` | comma | switches back to the stock slot (`--write` also puts the stock kernel on the other slot) |
 | `install_userspace.sh` | comma | pinned BT firmware, bluez, bluez-alsa, services (installed, not enabled). Leaves audio alone. Dry run unless `--yes` |
-| `firmware/firmware.sha256` | both | sha256 of `qca/crbtfw21.tlv` and `qca/crnv21.bin` from linux-firmware f859d9f; `mac/make_bundle.sh` fetches and checks them |
+| `firmware/firmware.sha256` | both | sha256 of `qca/crbtfw21.tlv`, `qca/crnv21.bin` and its license from linux-firmware f859d9f, and of comma's `firmware/bluetooth.img` from agnos-builder 140ed0c (not committed: that repo has no license file); `mac/make_bundle.sh` fetches and checks them |
+| `firmware/qca.sha256` | comma | the six files installed in `/lib/firmware/qca`: rev 21 from linux-firmware, revs 11 and 20 from `bluetooth.img`. btqca picks by the chip's revision |
 | `audio.sh` | comma | `on` links `asound.conf` to `/etc/asound.conf`, `off` removes the link. Offroad only |
 | `asound.conf` | comma | shared dmix for soundd and music, capture unchanged |
 | `lib.sh` | comma | helpers shared by the scripts above |

@@ -36,9 +36,11 @@ def setup_env(dev):
   remote = tmp / 'remote'
   fw = tmp / 'fw'
   fw.mkdir()
-  for f in ('crbtfw21.tlv', 'crnv21.bin'):
+  names = ('crbtfw21.tlv', 'crnv21.bin', 'LICENSE.QualcommAtheros_ath10k', 'bluetooth.img')
+  for f in names:
     (fw / f).write_bytes(f.encode())
-  subprocess.run('sha256sum crbtfw21.tlv crnv21.bin > firmware.sha256', shell=True, cwd=fw, check=True)
+  subprocess.run(f'sha256sum {" ".join(names)} > firmware.sha256', shell=True, cwd=fw, check=True)
+  (fw / 'qca.sha256').write_text('x  crbtfw21.tlv\n')
   return dict(env, KEYFILE=str(key), HOME=str(home), DPB_REMOTE=str(remote), BOOT=str(img), DPB_FW=str(fw)), remote, home
 
 
@@ -50,6 +52,7 @@ def test_push_flash_and_pull_backups(dev):
   assert (remote / 'boot.img').read_bytes() == img.read_bytes()
   assert (remote / 'flash_boot.sh').exists() and (remote / 'dk_unpack.py').exists()
   assert (remote / 'crnv21.bin').read_bytes() == b'crnv21.bin' and (remote / 'firmware.sha256').exists()
+  assert (remote / 'bluetooth.img').exists() and (remote / 'qca.sha256').exists() and (remote / 'asound.conf').exists()
 
   before = (parts / 'boot_b').read_bytes()
   r = deliver(env, 'flash')

@@ -11,15 +11,29 @@ put() { echo "+ write $1"; if [ $YES = 1 ]; then $SUDO tee "$1" > /dev/null; els
 
 [ -e /sys/module/hci_uart/parameters/wcn3990 ] || die "running kernel has no WCN3990 support, flash the dpbridge boot.img first"
 [ -x "$DIR/attach.sh" ] || die "missing $DIR/attach.sh"
-(cd "$DIR" && sha256sum -c --quiet firmware.sha256) || die "BT firmware in $DIR missing or not the pinned linux-firmware files, run deliver.sh push"
+(cd "$DIR" && sha256sum -c --quiet firmware.sha256) || die "BT firmware in $DIR missing or not the pinned files, run deliver.sh push"
 [ $YES = 1 ] || echo "dry run: pass --yes to install"
 
-trap 'if [ $YES = 1 ]; then $SUDO /usr/comma/apt_teardown.sh; fi' EXIT
+MNT=/tmp/dpbridge-btimg
+trap 'if [ $YES = 1 ]; then $SUDO umount "$MNT" 2> /dev/null; $SUDO /usr/comma/apt_teardown.sh; fi' EXIT
 run $SUDO /usr/comma/apt_setup.sh
 
-# WCN3990 firmware from linux-firmware (the comma 4 has no bluetooth partition), checked against firmware.sha256
-run $SUDO mkdir -p /lib/firmware/qca
+# WCN3990 firmware (the comma 4 has no bluetooth partition). btqca loads qca/crbtfw<rev>.tlv and qca/crnv<rev>.bin
+# for the chip's rom revision: linux-firmware for rev 21, comma's own files from agnos-builder bluetooth.img for 11 and 20
+comma_fw() {
+  local f src
+  for f in crbtfw11.tlv crnv11.bin crbtfw20.tlv crnv20.bin; do
+    src=$(find "$MNT" -iname "$f" | head -n 1)
+    [ -n "$src" ] || die "$f not in bluetooth.img"
+    $SUDO cp "$src" "/lib/firmware/qca/$f"
+  done
+}
+run $SUDO mkdir -p /lib/firmware/qca "$MNT"
 run $SUDO cp "$DIR/crbtfw21.tlv" "$DIR/crnv21.bin" /lib/firmware/qca/
+run $SUDO mount -o loop,ro,shortname=lower "$DIR/bluetooth.img" "$MNT"
+run comma_fw
+run $SUDO umount "$MNT"
+if [ $YES = 1 ]; then (cd /lib/firmware/qca && sha256sum -c --quiet "$DIR/qca.sha256") || die "installed BT firmware does not match qca.sha256"; fi
 
 run $SUDO apt-get update
 run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bluez bluez-alsa-utils alsa-utils

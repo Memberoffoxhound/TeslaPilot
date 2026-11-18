@@ -26,8 +26,8 @@ assert m.recv_one(s) is not None"
 }
 firmware() {
   local d; d=$(dmesg)
-  (cd /lib/firmware/qca && sha256sum -c --quiet "$DIR/firmware.sha256") &&
-    grep -q crbtfw21 <<< "$d" && grep -q crnv21 <<< "$d" && ! grep -qi "qca.*\(fail\|error\)" <<< "$d"
+  (cd /lib/firmware/qca && sha256sum -c --quiet "$DIR/qca.sha256") &&
+    grep -q "crbtfw[0-9a-f][0-9a-f]" <<< "$d" && grep -q "crnv[0-9a-f][0-9a-f]" <<< "$d" && ! grep -qi "qca.*\(fail\|error\)" <<< "$d"
 }
 # the address attach.sh derives from the serial, so not the chip default 00:00:00:00:5A:AD shared by every unit
 hci_up() {
