@@ -34,6 +34,10 @@ case $cur in
   _b) oth=_a; onum=0 ;;
   *) die "unknown boot slot '$cur'" ;;
 esac
+B=$DIR/backup
+if [ -f "$B/stock_slot" ] && [ "$(cat "$B/stock_slot")" != "$cur" ]; then
+  die "running the dpbridge slot $cur, flashing would overwrite stock $(cat "$B/stock_slot"). run restore_boot.sh --yes and reboot first"
+fi
 isz=$(stat -c %s "$IMG")
 [ "$isz" -le "$(size "$P/boot$oth")" ] || die "image is larger than boot$oth"
 
@@ -50,8 +54,10 @@ done
 echo "current slot $cur, writing slot $oth, image $(sha256sum "$IMG" | cut -d' ' -f1)"
 [ $YES = 1 ] || echo "dry run: nothing below is executed, pass --yes to flash"
 
-# 1. back up both boot slots and prove the copies match the partitions
-B=$DIR/backup
+# 1. back up both boot slots and prove the copies match the partitions; an older backup is kept aside
+if [ -d "$B" ]; then
+  run mv "$B" "$B.$(date +%Y%m%d-%H%M%S)"
+fi
 run mkdir -p "$B"
 for s in _a _b; do
   run $SUDO dd if="$P/boot$s" of="$B/boot$s.img" bs=4M status=none

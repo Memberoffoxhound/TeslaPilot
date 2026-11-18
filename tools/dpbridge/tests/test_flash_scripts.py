@@ -128,3 +128,16 @@ def test_dk_unpack_reads_only_dashkit_messages():
   bad = SimpleNamespace(which=lambda: 'customReservedRawData0', logMonoTime=7, customReservedRawData0=b'\x09')
   rows = list(mod.unpack([dk, other, bad]))
   assert [(r[2], r[3]) for r in rows] == [(0, 0x257), (1, 0x249)] and rows[0][4] == b'\x01'
+
+
+def test_reflash_keeps_old_backup_and_refuses_from_dpbridge_slot(dev):
+  tmp, parts, data, img, env = dev
+  orig_b = (parts / 'boot_b').read_bytes()
+  assert run('flash_boot.sh', env, '--yes').returncode == 0
+  assert run('flash_boot.sh', env, '--yes').returncode == 0  # again from stock slot a
+  old = [p for p in data.iterdir() if p.name.startswith('backup.')]
+  assert len(old) == 1 and (old[0] / 'boot_b.img').read_bytes() == orig_b
+  (tmp / 'slot').write_text('_b\n')  # now booted into the dpbridge slot
+  before = snapshot(parts)
+  r = run('flash_boot.sh', env, '--yes')
+  assert r.returncode != 0 and 'overwrite stock _a' in r.stderr and snapshot(parts) == before
