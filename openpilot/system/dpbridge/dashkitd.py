@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 import time
 from contextlib import ExitStack
 
@@ -70,6 +71,18 @@ def stream(link, publish, mono=time.monotonic):
       publish(b)
 
 
+def probe(link, seconds=5.0, need=10, mono=time.monotonic) -> bool:
+  # one-shot check for test_bt.sh; run with DashKitBridge off, DashKit serves one link at a time
+  ver = link.open()
+  link.ping()
+  n, end = 0, mono() + seconds
+  while mono() < end:
+    b = link.recv(0.5)
+    n += bool(b and frames(b))
+  print(f"DashKit {ver or '?'}: {n} valid packets in {seconds:.0f} s")
+  return ver.startswith('0.3') and n >= need
+
+
 def main():
   from jeepney.io.blocking import open_dbus_connection
   import cereal.messaging as messaging
@@ -79,7 +92,13 @@ def main():
   params = Params()
   mac = params.get("DashKitAddr")
   if not mac:
-    return
+    sys.exit("no DashKitAddr, pair DashKit in settings first")
+  if '--probe' in sys.argv:
+    link = BleLink(Bluez(open_dbus_connection(bus='SYSTEM')), mac)
+    try:
+      sys.exit(0 if probe(link) else 1)
+    finally:
+      link.close()
   pm = messaging.PubMaster(['customReservedRawData0'])
   bz = Bluez(open_dbus_connection(bus='SYSTEM'))
   backoff = 2
