@@ -19,6 +19,7 @@ from openpilot.common.gps import get_gps_location_service
 from openpilot.selfdrive.car.car_events import CarEvents
 from openpilot.selfdrive.car import tesla_step_aside
 from openpilot.selfdrive.selfdrived.jetlink_events import JetlinkEvents
+from openpilot.system.dpbridge import PROCESSES as DPBRIDGE_PROCESSES
 from openpilot.selfdrive.locationd.helpers import PoseCalibrator, Pose
 from openpilot.selfdrive.selfdrived.events import Events, ET
 from openpilot.selfdrive.selfdrived.helpers import ExcessiveActuationCheck
@@ -367,8 +368,9 @@ class SelfdriveD:
       self.events.add(EventName.bigModelFailed)
 
     # jetlinkd and modelmanagerd are optional: without them the small model drives, so they never block engagement
+    # dpbridge Bluetooth daemons are optional too
     not_running = {p.name for p in self.sm['managerState'].processes
-                   if not p.running and p.shouldBeRunning and p.name not in {'modelmanagerd', *JetlinkEvents.OPTIONAL_PROCESSES}}
+                   if not p.running and p.shouldBeRunning and p.name not in {'modelmanagerd', *JetlinkEvents.OPTIONAL_PROCESSES, *DPBRIDGE_PROCESSES}}
     if self.sm.recv_frame['managerState'] and len(not_running):
       if not_running != self.not_running_prev:
         cloudlog.event("process_not_running", not_running=not_running, error=True)
