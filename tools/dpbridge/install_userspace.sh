@@ -108,5 +108,6 @@ UNIT
 run $SUDO systemctl daemon-reload
 # apt enables these on install and they pull in dpbridge-bt, so they stay off until deliver.sh enable
 run $SUDO systemctl disable bluetooth.service bluealsa.service bluealsa-aplay.service
+run $SUDO systemctl stop bluetooth.service bluealsa.service bluealsa-aplay.service
 # nothing is enabled: the first chip bring-up is done by hand, so a hang there can't loop every boot
 echo "installed, not enabled. next: deliver.sh attach; if hci0 came up and SSH still works: deliver.sh enable"
