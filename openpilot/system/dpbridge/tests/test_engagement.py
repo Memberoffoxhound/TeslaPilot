@@ -38,3 +38,10 @@ def test_selfdrived_skips_dpbridge_processes():
   env = {'self': type('S', (), {'sm': {'managerState': type('M', (), {'processes': procs})}})(),
          'JetlinkEvents': type('J', (), {'OPTIONAL_PROCESSES': frozenset()}), 'DPBRIDGE_PROCESSES': PROCESSES}
   assert eval(compile(ast.Expression(comp), 'selfdrived', 'eval'), env) == {'controlsd'}
+
+
+def test_dpbridge_processes_restart_after_a_crash():
+  tree = ast.parse((ROOT / 'openpilot/system/manager/process_config.py').read_text())
+  kinds = {c.args[0].value: c.func.id for c in ast.walk(tree) if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+           and c.args and isinstance(c.args[0], ast.Constant) and c.args[0].value in PROCESSES}
+  assert kinds == dict.fromkeys(PROCESSES, 'RestartingPythonProcess')
