@@ -54,6 +54,7 @@ class Pairing:
         self.params.remove("DashKitAddr")
         self.params.remove("DashKitVersion")
     elif verb == 'discoverable':
+      self.bz.set(ADAPTER, ADAPTER_IF, 'PairableTimeout', 'u', DISCOVERABLE_S)
       self.bz.set(ADAPTER, ADAPTER_IF, 'Pairable', 'b', True)
       self.bz.set(ADAPTER, ADAPTER_IF, 'DiscoverableTimeout', 'u', DISCOVERABLE_S)
       self.bz.set(ADAPTER, ADAPTER_IF, 'Discoverable', 'b', True)

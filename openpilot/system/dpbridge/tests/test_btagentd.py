@@ -192,3 +192,8 @@ def test_phone_code_is_published_without_the_page():
   p.publish(100.0)
   assert params['DpbStatus']['passkey'] == '000042'
 
+
+def test_discoverable_also_limits_pairable():
+  p, bz, params = setup()
+  p.command('discoverable', 0)
+  assert ('/org/bluez/hci0', 'set PairableTimeout', btagentd.DISCOVERABLE_S) in bz.calls
