@@ -15,10 +15,11 @@ Nothing here talks to the car or changes panda safety.
 |---|---|---|
 | `kernel/*.patch` | build host | 9 patches on agnos-kernel-sdm845 e88ac80: config, DT (BT UART as ttyHS1), WCN3990 setup and address in btqca/hci_qca |
 | `build_kernel.sh` | Linux | clones agnos-builder 140ed0c, applies the patches, builds and signs `boot.img` |
-| `probe_ro.sh` | comma | read-only probe: kernel config, UART node, rfkill, BT partition, A/B sizes, modules, audio |
+| `probe_ro.sh` | comma | read-only probe: kernel config, UART node, rfkill, firmware, A/B sizes, modules, audio |
 | `flash_boot.sh` | comma | comma 4 on AGNOS 20.6 only. Backs up both boot slots, marks the other slot unbootable, mirrors the partitions AGNOS updates (xbl xbl_config abl aop devcfg system) into it, writes `boot.img` there, reads everything back from flash, switches to it. Dry run unless `--yes` |
 | `restore_boot.sh` | comma | switches back to the stock slot (`--write` also puts the stock kernel on the other slot) |
-| `install_userspace.sh` | comma | BT firmware from the bluetooth partition, bluez, bluez-alsa, services (installed, not enabled). Dry run unless `--yes` |
+| `install_userspace.sh` | comma | pinned BT firmware, bluez, bluez-alsa, `/etc/asound.conf` (dmix), services (installed, not enabled). Dry run unless `--yes` |
+| `firmware/firmware.sha256` | both | sha256 of `qca/crbtfw21.tlv` and `qca/crnv21.bin` from linux-firmware f859d9f; `mac/make_bundle.sh` fetches and checks them |
 | `lib.sh` | comma | helpers shared by the scripts above |
 | `attach.sh` | comma | started by `dpbridge-bt.service`: power on, `btattach` on /dev/ttyHS1, then this unit's own address |
 | `test_bt.sh` | both | the 16 acceptance checks; device rows skip without hci0 |
@@ -29,10 +30,15 @@ openpilot side: `openpilot/system/dpbridge/` (dashkitd, btagentd, a2dp ducking),
 `DashKitAddr`, `DashKitVersion`, `DpbA2dpOnroad`, `DpbCmd`, `DpbStatus`, and Settings > bluetooth.
 All of it stays off when `/sys/class/bluetooth/hci0` is missing.
 
+Audio: the mici sound card exposes one playback PCM (MultiMedia1). `/etc/asound.conf` puts soundd (the
+default device) and `bluealsa-aplay` on one dmix. Music alone passes a softvol control
+(`dpbridge A2DP Playback Volume`), which dpb_a2dp sets to 100% (normal), 60% (about -20 dB, during alerts) or 0 (muted
+onroad). Alerts never pass it. The file is on the dpbridge slot only, so the stock slot keeps plain soundd.
+
 ## Steps
 
 1. Build: `tools/dpbridge/build_kernel.sh` (prints the boot.img sha256).
-2. Probe (read only): `mac/deliver.sh probe`. Check AGNOS 20.6 and that `bluetooth_a` MATCHes.
+2. Probe (read only): `mac/deliver.sh probe`. Check `comma mici`, AGNOS 20.6, the `bt_wcn3990` node and equal A/B sizes.
 3. Prove QDL works on this comma before anything is written: `mac/deliver.sh qdl-check` (cabling in Recovery 3).
 4. Copy: `mac/deliver.sh push`. It refuses without a matching `boot.img.sha256`.
 5. Dry run: `mac/deliver.sh flash`. Read the plan: it must write the other slot only.

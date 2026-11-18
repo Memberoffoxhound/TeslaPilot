@@ -14,10 +14,10 @@ cd dpbridge-mac-bundle
 shasum -a 256 -c boot.img.sha256        # boot.img: OK
 
 ./deliver.sh probe                       # read only, saved to ~/dpbridge-backup/<date>/probe.txt
-                                         # check: comma mici, AGNOS 20.6, bluetooth_a MATCH, equal A/B sizes
+                                         # check: comma mici, AGNOS 20.6, bt_wcn3990 node, equal A/B sizes
 ./deliver.sh qdl-check                   # comma in QDL mode (see Recovery 2), must print the active slot,
                                          # then it reboots normally. Do not flash if this fails.
-./deliver.sh push                        # boot.img + scripts to /data/dpbridge, sha256 checked on both ends
+./deliver.sh push                        # boot.img, BT firmware + scripts to /data/dpbridge, sha256 checked
 ./deliver.sh flash                       # dry run: read the plan, it must write the other slot only
 ./deliver.sh flash --yes                 # runs detached on the comma and is polled: backs up both boot slots,
                                          # marks the other slot unbootable, mirrors, flashes, reads back, switches,
@@ -26,7 +26,8 @@ shasum -a 256 -c boot.img.sha256        # boot.img: OK
 ./deliver.sh probe                       # now: CONFIG_BT=y, BT UART node status=ok, /dev/ttyHS1, rfkill bt_power
 
 ./deliver.sh install                     # dry run of the userspace install
-./deliver.sh install --yes               # firmware, bluez, bluez-alsa, services; nothing enabled yet
+./deliver.sh install --yes               # firmware, bluez, bluez-alsa, dmix for soundd + music; nothing enabled
+                                         # (soundd uses the dmix from its next start: check alerts still play)
 ./deliver.sh attach                      # first chip bring-up by hand, 20 s. Hang or SSH lost: reboot,
                                          # nothing runs at boot yet. Saved to ~/dpbridge-backup/<date>/attach.txt
 ./deliver.sh enable                      # only if attach listed hci0 and wlan0 is still UP
