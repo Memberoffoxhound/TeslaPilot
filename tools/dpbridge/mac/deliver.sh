@@ -10,6 +10,7 @@
 #   install      install_userspace.sh (dry run unless --yes), after rebooting into the new kernel
 #   restore      restore_boot.sh (dry run unless --yes; --write also rewrites the boot slot)
 #   test         test_bt.sh, output saved to ~/dpbridge-backup/<date>/test_bt.txt
+#   reboot       sudo reboot on the comma
 set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -26,7 +27,7 @@ while getopts "i:h:p:" o; do
     i) KEY=$OPTARG ;;
     h) HOST=$OPTARG ;;
     p) PORT=$OPTARG ;;
-    *) sed -n '2,15p' "$0"; exit 2 ;;
+    *) sed -n '2,16p' "$0"; exit 2 ;;
   esac
 done
 shift $((OPTIND - 1))
@@ -96,5 +97,6 @@ case $CMD in
     r "bash $REMOTE/test_bt.sh" 2>&1 | tee "$OUT/test_bt.txt" || true
     echo "saved $OUT/test_bt.txt"
     ;;
-  *) sed -n '2,15p' "$0"; exit 2 ;;
+  reboot) reach; r "sudo reboot" || true ;;
+  *) sed -n '2,16p' "$0"; exit 2 ;;
 esac
