@@ -47,7 +47,7 @@ esac
 # CC and LD set explicitly: the tree's gcc-wrapper.py needs python2
 export ARCH=arm64 CROSS_COMPILE=$T KCFLAGS=-w KBUILD_BUILD_HOST=docker
 make -s O=out tici_defconfig
-make -j"$(nproc)" O=out CC=${T}gcc LD=${T}ld.bfd HOSTCFLAGS=-fcommon
+make -j"$(nproc)" O=out CC="${T}gcc" LD="${T}ld.bfd" HOSTCFLAGS=-fcommon
 
 # same image layout and signature as agnos-builder build_kernel.sh
 cd "$OUT"
