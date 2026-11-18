@@ -8,11 +8,14 @@ from jeepney.io.blocking import open_dbus_connection
 from openpilot.system.dpbridge.bluez import ADAPTER, ADAPTER_IF, BLUEZ, DASHKIT_NAME, DEVICE_IF, Bluez, dev_path
 
 # Owns pairing for the settings page: scan, pair, forget, discoverable, and the agent that shows a phone's code.
-# UI -> DpbCmd ("scan", "pair:<mac>", "forget:<mac>", "discoverable", "confirm:1|0"); status -> DpbStatus.
+# UI -> DpbCmd ("status", "scan", "pair:<mac>", "forget:<mac>", "discoverable", "confirm:1|0"); status -> DpbStatus.
+# DpbStatus is written only on change, and only while the page is open (it sends "status" every few seconds)
+# or a phone waits for a code, so the flash isn't written while driving.
 AGENT_PATH = '/dpbridge/agent'
 SCAN_S = 10
 DISCOVERABLE_S = 120
 STATUS_S = 0.5
+WATCH_S = 15
 RETRY_S = 5
 REJECTED = 'org.bluez.Error.Rejected'
 
@@ -29,9 +32,14 @@ class Pairing:
     self.confirm = None  # RequestConfirmation waiting for the user
     self.passkey = ''
     self.error = ''
+    self.watch_until = 0.0
+    self.published, self.published_t = None, 0.0
 
   def command(self, cmd: str, now: float):
     verb, _, arg = cmd.partition(':')
+    self.watch_until = now + WATCH_S
+    if verb == 'status':
+      return
     self.error = ''
     if verb == 'scan':
       self.bz.call(ADAPTER, ADAPTER_IF, 'StartDiscovery')
@@ -95,6 +103,15 @@ class Pairing:
       self.scan_until = 0.0
       self.bz.call(ADAPTER, ADAPTER_IF, 'StopDiscovery')
 
+  def publish(self, now: float):
+    if not (now < self.watch_until or self.passkey) or now - self.published_t < STATUS_S:
+      return
+    self.published_t = now
+    st = self.status(now)
+    if st != self.published:
+      self.params.put("DpbStatus", st)
+      self.published = st
+
   def status(self, now: float) -> dict:
     return {'devices': self.bz.devices(), 'scanning': now < self.scan_until, 'pairing': sorted(self.pending.values()),
             'discoverable': bool(self.bz.get(ADAPTER, ADAPTER_IF, 'Discoverable')), 'passkey': self.passkey, 'error': self.error}
@@ -113,7 +130,6 @@ def serve(params, conn, log):
   bz.call('/org/bluez', 'org.bluez.AgentManager1', 'RegisterAgent', 'os', (AGENT_PATH, 'DisplayYesNo'))
   bz.call('/org/bluez', 'org.bluez.AgentManager1', 'RequestDefaultAgent', 'o', (AGENT_PATH,))
 
-  last_status = 0.0
   while True:
     now = time.monotonic()
     cmd = params.get("DpbCmd")
@@ -131,9 +147,7 @@ def serve(params, conn, log):
       pass
     while inbox:
       p.message(inbox.popleft())
-    if now - last_status > STATUS_S:
-      params.put("DpbStatus", p.status(now))
-      last_status = now
+    p.publish(now)
 
 
 def main():

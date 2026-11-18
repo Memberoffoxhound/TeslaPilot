@@ -167,3 +167,28 @@ def test_main_survives_bluetoothd_not_ready(monkeypatch):
   except Stop:
     pass
   assert len(attempts) == 4  # kept retrying instead of exiting
+
+
+def test_status_written_only_on_change_and_while_watched():
+  p, bz, params = setup()
+  p.publish(1.0)
+  assert 'DpbStatus' not in params  # page closed: no flash writes
+  p.command('status', 1.0)
+  p.publish(1.0)
+  first = params.pop('DpbStatus')
+  p.publish(2.0)
+  assert 'DpbStatus' not in params  # unchanged
+  bz.props['Discoverable'] = True
+  p.publish(3.0)
+  assert params.pop('DpbStatus')['discoverable']
+  bz.props['Discoverable'] = False
+  p.publish(1.0 + btagentd.WATCH_S + 1)
+  assert 'DpbStatus' not in params and first  # page gone quiet: stop
+
+
+def test_phone_code_is_published_without_the_page():
+  p, bz, params = setup()
+  p.agent(agent_call('RequestConfirmation', 'ou', (dev_path(MAC), 42)))
+  p.publish(100.0)
+  assert params['DpbStatus']['passkey'] == '000042'
+

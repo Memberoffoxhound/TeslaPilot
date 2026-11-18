@@ -58,6 +58,7 @@ class BluetoothLayoutMici(NavScroller):
     self._passkey_shown = ""
     self._dynamic: dict[str, BigButton] = {}
     self._last_read = 0.0
+    self._last_ping = 0.0
 
     self._status_btn = GreyBigButton("", "")
     self._log_toggle = BigParamControl("log DashKit", "DashKitBridge")
@@ -103,6 +104,10 @@ class BluetoothLayoutMici(NavScroller):
     if time.monotonic() - self._last_read < 0.5:
       return
     self._last_read = time.monotonic()
+    # keeps btagentd publishing DpbStatus while this page is on screen
+    if self._last_read - self._last_ping > 5 and not self._params.get("DpbCmd"):
+      self._send("status")
+      self._last_ping = self._last_read
     self._available, self._status, self._addr, version = self._read()
     st = self._status
     text = st.get("error") or status_text(self._available, st, self._addr, version)
