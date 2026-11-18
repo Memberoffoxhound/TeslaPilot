@@ -3,7 +3,6 @@
 # Car off only: soundd and micd read it when they start, and a manager process killed while driving stays dead.
 # usage: audio.sh on|off
 set -euo pipefail
-YES=1
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 ETC=${DPB_ETC:-/etc/asound.conf}
