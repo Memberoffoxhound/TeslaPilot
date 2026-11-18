@@ -13,13 +13,14 @@ Nothing here talks to the car or changes panda safety.
 
 | file | runs on | what |
 |---|---|---|
-| `kernel/*.patch` | build host | 6 patches on agnos-kernel-sdm845 e88ac80: config, DT (BT UART as ttyHS1), WCN3990 setup in btqca/hci_qca |
+| `kernel/*.patch` | build host | 9 patches on agnos-kernel-sdm845 e88ac80: config, DT (BT UART as ttyHS1), WCN3990 setup and address in btqca/hci_qca |
 | `build_kernel.sh` | Linux | clones agnos-builder 140ed0c, applies the patches, builds and signs `boot.img` |
-| `probe_ro.sh` | comma | read-only probe: kernel config, UART node, rfkill, BT partition, A/B sizes, audio |
-| `flash_boot.sh` | comma | backs up both boot slots, mirrors the current slot to the other, writes `boot.img` to the other slot only, switches to it. Dry run unless `--yes` |
-| `restore_boot.sh` | comma | switches back to the stock slot (`--write` also restores the boot backup) |
-| `install_userspace.sh` | comma | BT firmware from the bluetooth partition, bluez, bluez-alsa, services. Dry run unless `--yes` |
-| `attach.sh` | comma | started by `dpbridge-bt.service`: power on, `btattach` on /dev/ttyHS1 |
+| `probe_ro.sh` | comma | read-only probe: kernel config, UART node, rfkill, BT partition, A/B sizes, modules, audio |
+| `flash_boot.sh` | comma | comma 4 on AGNOS 20.6 only. Backs up both boot slots, marks the other slot unbootable, mirrors the partitions AGNOS updates (xbl xbl_config abl aop devcfg system) into it, writes `boot.img` there, reads everything back from flash, switches to it. Dry run unless `--yes` |
+| `restore_boot.sh` | comma | switches back to the stock slot (`--write` also puts the stock kernel on the other slot) |
+| `install_userspace.sh` | comma | BT firmware from the bluetooth partition, bluez, bluez-alsa, services (installed, not enabled). Dry run unless `--yes` |
+| `lib.sh` | comma | helpers shared by the scripts above |
+| `attach.sh` | comma | started by `dpbridge-bt.service`: power on, `btattach` on /dev/ttyHS1, then this unit's own address |
 | `test_bt.sh` | both | the 16 acceptance checks; device rows skip without hci0 |
 | `dk_unpack.py` | dev box | DashKit frames from a route as CSV, `--check` for the acceptance test |
 | `mac/deliver.sh` | Mac | copies everything over SSH and runs the steps below |
@@ -32,22 +33,29 @@ All of it stays off when `/sys/class/bluetooth/hci0` is missing.
 
 1. Build: `tools/dpbridge/build_kernel.sh` (prints the boot.img sha256).
 2. Probe (read only): `mac/deliver.sh probe`. Check AGNOS 20.6 and that `bluetooth_a` MATCHes.
-3. Copy: `mac/deliver.sh push`.
-4. Dry run: `mac/deliver.sh flash`. Read the plan: it must write `boot_<other>` only.
-5. Flash: `mac/deliver.sh flash --yes`. This also pulls the boot backups to `~/dpbridge-backup/<date>/`.
-6. `mac/deliver.sh reboot`, wait a minute, then `mac/deliver.sh probe` again: kernel config shows BT, UART node `ok`.
-7. Userspace: `mac/deliver.sh install`, then `mac/deliver.sh install --yes`, then `mac/deliver.sh reboot`.
-8. Test: `mac/deliver.sh test`. Pair in Settings > bluetooth, then rerun for the manual rows.
+3. Prove QDL works on this comma before anything is written: `mac/deliver.sh qdl-check` (cabling in Recovery 3).
+4. Copy: `mac/deliver.sh push`. It refuses without a matching `boot.img.sha256`.
+5. Dry run: `mac/deliver.sh flash`. Read the plan: it must write the other slot only.
+6. Flash: `mac/deliver.sh flash --yes`. It runs detached on the comma, so a dropped SSH session can't stop it.
+   It also pulls the boot backups to `~/dpbridge-backup/<date>/`.
+7. `mac/deliver.sh reboot`, wait a minute, then `mac/deliver.sh probe` again: kernel config shows BT, UART node `ok`.
+8. Userspace: `mac/deliver.sh install`, then `mac/deliver.sh install --yes`. Nothing starts on its own yet.
+9. First chip bring-up by hand: `mac/deliver.sh attach`. If it hangs or SSH dies, reboot: nothing runs at boot.
+   Only if hci0 came up and wlan0 is still UP: `mac/deliver.sh enable`, then `mac/deliver.sh reboot`.
+10. Test: `mac/deliver.sh test`. Pair in Settings > bluetooth, then rerun for the manual rows.
+
+Kill switch: `touch /data/dpbridge/disable` (or `mac/deliver.sh disable`) keeps the chip off from the next boot.
 
 ## Recovery
 
-From best to worst:
+From best to worst. `S` is the stock slot letter from `~/dpbridge-backup/<date>/stock_slot` (`_a` means `a`),
+`O` is the other one.
 
 1. It boots and SSH works: `mac/deliver.sh restore --yes`, then `mac/deliver.sh reboot`. The stock slot was never written.
 2. It does not boot: the bootloader should fall back to the stock slot after failed tries
    (not verified on a comma 4). Leave it powered for a few minutes.
 3. QDL, keeps your data: side USB-C to the Mac first, then power on the top port (30 W or more).
-   Then `bunx --bun commaai/qdl.js setactiveslot <stock slot>` and `bunx --bun commaai/qdl.js reset`.
-   The stock slot is in `~/dpbridge-backup/<date>/stock_slot`. To put a boot backup back:
-   `bunx --bun commaai/qdl.js flash boot_b ~/dpbridge-backup/<date>/boot_b.img`.
+   Then `bunx --bun commaai/qdl.js setactiveslot S` and `bunx --bun commaai/qdl.js reset`.
+   To also put the stock kernel on the other slot:
+   `bunx --bun commaai/qdl.js flash boot_O ~/dpbridge-backup/<date>/boot_S.img`.
 4. Full reflash, wipes data: https://flash.comma.ai in Chrome, same cabling as 3.
