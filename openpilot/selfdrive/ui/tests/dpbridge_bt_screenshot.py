@@ -33,11 +33,11 @@ class FakeParams:
 os.environ.setdefault("SCALE", "1")
 sys.modules["openpilot.common.params"] = types.SimpleNamespace(Params=FakeParams)  # no libparams needed
 
-import numpy as np  # noqa: E402
-import pyray as rl  # noqa: E402
-from openpilot.system.ui.lib.application import gui_app  # noqa: E402
-from openpilot.system.ui.lib.screenshot import write_png  # noqa: E402
-from openpilot.selfdrive.ui.mici.layouts.settings import bluetooth  # noqa: E402
+import numpy as np
+import pyray as rl
+from openpilot.system.ui.lib.application import gui_app
+from openpilot.system.ui.lib.screenshot import write_png
+from openpilot.selfdrive.ui.mici.layouts.settings import bluetooth
 
 STATES = {
   "not_paired_found": ({}, {"scanning": False, "devices": [

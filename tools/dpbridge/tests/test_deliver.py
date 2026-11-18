@@ -1,9 +1,6 @@
 # Drives mac/deliver.sh with fake ssh/scp that run locally, against the fake partitions from test_flash_scripts.
-import os
 import subprocess
 from pathlib import Path
-
-from tools.dpbridge.tests.test_flash_scripts import dev  # noqa: F401  (fixture)
 
 HERE = Path(__file__).resolve().parents[1]
 FAKE_SSH = '''#!/bin/bash
