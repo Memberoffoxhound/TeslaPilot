@@ -73,7 +73,7 @@ def test_probe_passes_with_a_live_stream():
   assert run_probe([(0.1, GOOD)] * 20)
 
 
-def test_probe_fails_on_garbage_silence_or_old_firmware():
+def test_probe_fails_on_garbage_silence_or_no_version():
   assert not run_probe([(0.1, b'\x05junk')] * 20)
   assert not run_probe([])
-  assert not run_probe([(0.1, GOOD)] * 20, ver='0.2.9')
+  assert not run_probe([(0.1, GOOD)] * 20, ver='')

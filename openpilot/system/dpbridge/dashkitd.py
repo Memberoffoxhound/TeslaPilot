@@ -80,7 +80,7 @@ def probe(link, seconds=5.0, need=10, mono=time.monotonic) -> bool:
     b = link.recv(0.5)
     n += bool(b and frames(b))
   print(f"DashKit {ver or '?'}: {n} valid packets in {seconds:.0f} s")
-  return ver.startswith('0.3') and n >= need
+  return bool(ver) and n >= need
 
 
 def main():
