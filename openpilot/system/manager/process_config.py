@@ -141,7 +141,7 @@ procs = [
   # dpbridge: pairing, music ducking, and log-only DashKit capture
   RestartingPythonProcess("btagentd", "openpilot.system.dpbridge.btagentd", bluetooth, enabled=not PC),
   RestartingPythonProcess("dpb_a2dp", "openpilot.system.dpbridge.a2dp", bluetooth, enabled=not PC),
-  PythonProcess("dashkitd", "openpilot.system.dpbridge.dashkitd", dashkit, enabled=not PC),
+  RestartingPythonProcess("dashkitd", "openpilot.system.dpbridge.dashkitd", dashkit, enabled=not PC),
 
   # debug procs
   PythonProcess("webrtcd", "openpilot.system.webrtc.webrtcd", or_(livestream, notcar)),

@@ -85,7 +85,7 @@ def probe(link, seconds=5.0, need=10, mono=time.monotonic) -> bool:
 
 def main():
   from jeepney.io.blocking import open_dbus_connection
-  import cereal.messaging as messaging
+  import openpilot.cereal.messaging as messaging
   from openpilot.common.params import Params
   from openpilot.common.swaglog import cloudlog
 
@@ -100,21 +100,25 @@ def main():
     finally:
       link.close()
   pm = messaging.PubMaster(['customReservedRawData0'])
-  bz = Bluez(open_dbus_connection(bus='SYSTEM'))
   backoff = 2
   while True:
-    link = BleLink(bz, mac)
+    # a fresh D-Bus connection each round, so a bluetoothd restart can't wedge us
+    conn = link = None
     try:
+      conn = open_dbus_connection(bus='SYSTEM')
+      link = BleLink(Bluez(conn), mac)
       params.put("DashKitVersion", link.open())
       backoff = 2
       stream(link, lambda b: pm.send('customReservedRawData0', messaging.new_message(None, customReservedRawData0=b)))
     except Exception:
       cloudlog.exception("dashkitd: link failed")
     finally:
-      link.close()
+      if link is not None:
+        link.close()
+      if conn is not None:
+        conn.close()
     time.sleep(backoff)
     backoff = min(backoff * 2, 30)
-
 
 if __name__ == "__main__":
   main()

@@ -3,6 +3,7 @@ import time
 from collections import deque
 
 from jeepney import DBusAddress, HeaderFields, MatchRule, MessageType, new_error, new_method_call, new_method_return
+from jeepney.io.blocking import open_dbus_connection
 
 from openpilot.system.dpbridge.bluez import ADAPTER, ADAPTER_IF, BLUEZ, DASHKIT_NAME, DEVICE_IF, Bluez, dev_path
 
@@ -12,6 +13,7 @@ AGENT_PATH = '/dpbridge/agent'
 SCAN_S = 10
 DISCOVERABLE_S = 120
 STATUS_S = 0.5
+RETRY_S = 5
 REJECTED = 'org.bluez.Error.Rejected'
 
 
@@ -98,13 +100,7 @@ class Pairing:
             'discoverable': bool(self.bz.get(ADAPTER, ADAPTER_IF, 'Discoverable')), 'passkey': self.passkey, 'error': self.error}
 
 
-def main():
-  from jeepney.io.blocking import open_dbus_connection
-  from openpilot.common.params import Params
-  from openpilot.common.swaglog import cloudlog
-
-  params = Params()
-  conn = open_dbus_connection(bus='SYSTEM')
+def serve(params, conn, log):
   bz = Bluez(conn)
   p = Pairing(bz, params)
 
@@ -120,25 +116,43 @@ def main():
   last_status = 0.0
   while True:
     now = time.monotonic()
-    try:
-      cmd = params.get("DpbCmd")
-      if cmd:
-        params.remove("DpbCmd")
-        p.command(cmd, now)
-      p.tick(now)
+    cmd = params.get("DpbCmd")
+    if cmd:
+      params.remove("DpbCmd")
       try:
-        conn.recv_messages(timeout=0.1)
-      except TimeoutError:
-        pass
-      while inbox:
-        p.message(inbox.popleft())
-      if now - last_status > STATUS_S:
-        params.put("DpbStatus", p.status(now))
-        last_status = now
-    except Exception as e:
-      cloudlog.exception("btagentd")
-      p.error = str(e)
-      time.sleep(1)
+        p.command(cmd, now)
+      except Exception as e:
+        log("btagentd: command failed")
+        p.error = str(e)
+    p.tick(now)
+    try:
+      conn.recv_messages(timeout=0.1)
+    except TimeoutError:
+      pass
+    while inbox:
+      p.message(inbox.popleft())
+    if now - last_status > STATUS_S:
+      params.put("DpbStatus", p.status(now))
+      last_status = now
+
+
+def main():
+  from openpilot.common.params import Params
+  from openpilot.common.swaglog import cloudlog
+
+  params = Params()
+  while True:
+    # bluetoothd may not be up yet, or may restart: start over instead of exiting
+    conn = None
+    try:
+      conn = open_dbus_connection(bus='SYSTEM')
+      serve(params, conn, cloudlog.exception)
+    except Exception:
+      cloudlog.exception("btagentd: restarting")
+    finally:
+      if conn is not None:
+        conn.close()
+    time.sleep(RETRY_S)
 
 
 if __name__ == "__main__":

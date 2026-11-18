@@ -134,3 +134,36 @@ def test_scan_stops_after_window():
   assert bz.calls[-1][1] == 'StartDiscovery'
   p.tick(btagentd.SCAN_S + 1)
   assert bz.calls[-1][1] == 'StopDiscovery' and not p.status(btagentd.SCAN_S + 1)['scanning']
+
+
+def test_main_survives_bluetoothd_not_ready(monkeypatch):
+  import sys
+  from types import SimpleNamespace
+  monkeypatch.setitem(sys.modules, 'openpilot.common.params', SimpleNamespace(Params=FakeParams))
+  monkeypatch.setitem(sys.modules, 'openpilot.common.swaglog', SimpleNamespace(cloudlog=SimpleNamespace(exception=lambda *a: None)))
+  attempts = []
+
+  def connect(bus):
+    attempts.append(bus)
+    if len(attempts) < 3:
+      raise ConnectionRefusedError  # no system bus or bluetoothd yet
+    conn = FakeConn()
+    conn.filter = lambda *a, **kw: SimpleNamespace(__enter__=lambda: None)
+    conn.close = lambda: None
+    return conn
+
+  class Stop(Exception):
+    pass
+
+  def sleep(s):
+    if len(attempts) >= 4:
+      raise Stop
+
+  monkeypatch.setattr(btagentd, 'open_dbus_connection', connect)
+  monkeypatch.setattr(btagentd.time, 'sleep', sleep)
+  monkeypatch.setattr(btagentd, 'Bluez', lambda conn: (_ for _ in ()).throw(RuntimeError('org.bluez not on the bus')))
+  try:
+    btagentd.main()
+  except Stop:
+    pass
+  assert len(attempts) == 4  # kept retrying instead of exiting
