@@ -1,0 +1,58 @@
+From 35838a6c851e05b8ce7962ed697923e5a76dd4e6 Mon Sep 17 00:00:00 2001
+From: Memberoffoxhound <Memberoffoxhound@users.noreply.github.com>
+Date: Wed, 18 Nov 2026 01:38:11 -0600
+Subject: [PATCH 3/6] Bluetooth: add __hci_cmd_send for unanswered vendor
+ commands
+
+---
+ include/net/bluetooth/hci_core.h |  2 ++
+ net/bluetooth/hci_core.c         | 23 +++++++++++++++++++++++
+ 2 files changed, 25 insertions(+)
+
+diff --git a/include/net/bluetooth/hci_core.h b/include/net/bluetooth/hci_core.h
+index 49317871..1ff0ff80 100644
+--- a/include/net/bluetooth/hci_core.h
++++ b/include/net/bluetooth/hci_core.h
+@@ -1394,6 +1394,8 @@ struct sk_buff *__hci_cmd_sync_ev(struct hci_dev *hdev, u16 opcode, u32 plen,
+ 
+ int hci_send_cmd(struct hci_dev *hdev, __u16 opcode, __u32 plen,
+ 		 const void *param);
++int __hci_cmd_send(struct hci_dev *hdev, u16 opcode, u32 plen,
++		   const void *param);
+ void hci_send_acl(struct hci_chan *chan, struct sk_buff *skb, __u16 flags);
+ void hci_send_sco(struct hci_conn *conn, struct sk_buff *skb);
+ 
+diff --git a/net/bluetooth/hci_core.c b/net/bluetooth/hci_core.c
+index 4bd72d2f..52773aef 100644
+--- a/net/bluetooth/hci_core.c
++++ b/net/bluetooth/hci_core.c
+@@ -3388,6 +3388,29 @@ int hci_send_cmd(struct hci_dev *hdev, __u16 opcode, __u32 plen,
+ 	return 0;
+ }
+ 
++/* Send a vendor command the controller does not answer, bypassing the
++ * command queue and its flow control
++ */
++int __hci_cmd_send(struct hci_dev *hdev, u16 opcode, u32 plen,
++		   const void *param)
++{
++	struct sk_buff *skb;
++
++	if (hci_opcode_ogf(opcode) != 0x3f) {
++		BT_ERR("%s unanswered command 0x%4.4x not allowed", hdev->name,
++		       opcode);
++		return -EINVAL;
++	}
++
++	skb = hci_prepare_cmd(hdev, opcode, plen, param);
++	if (!skb)
++		return -ENOMEM;
++
++	hci_send_frame(hdev, skb);
++	return 0;
++}
++EXPORT_SYMBOL(__hci_cmd_send);
++
+ /* Get data from the previously sent command */
+ void *hci_sent_cmd_data(struct hci_dev *hdev, __u16 opcode)
+ {

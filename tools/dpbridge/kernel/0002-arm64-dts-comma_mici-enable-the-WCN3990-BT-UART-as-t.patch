@@ -1,0 +1,33 @@
+From cf9da0f03a4b4b6e4e891fbc2535152c966ae47e Mon Sep 17 00:00:00 2001
+From: Memberoffoxhound <Memberoffoxhound@users.noreply.github.com>
+Date: Wed, 18 Nov 2026 01:37:35 -0600
+Subject: [PATCH 2/6] arm64: dts: comma_mici: enable the WCN3990 BT UART as
+ ttyHS1
+
+---
+ arch/arm64/boot/dts/qcom/comma_mici.dts | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/comma_mici.dts b/arch/arm64/boot/dts/qcom/comma_mici.dts
+index a7ad68fd..e846d50e 100644
+--- a/arch/arm64/boot/dts/qcom/comma_mici.dts
++++ b/arch/arm64/boot/dts/qcom/comma_mici.dts
+@@ -217,6 +217,18 @@ status = "ok";
+   status = "ok";
+ };
+ 
++/* WCN3990 BT UART. Pin the GPS UART to ttyHS0 (pigeond uses it), BT gets ttyHS1 */
++/ {
++  aliases {
++    hsuart0 = &qupv3_gps_uart;
++    hsuart1 = &qupv3_se6_4uart;
++  };
++};
++
++&qupv3_se6_4uart {
++  status = "ok";
++};
++
+ &vendor {
+ 	lcd3v3: lcd3v3 {
+     status = "ok";

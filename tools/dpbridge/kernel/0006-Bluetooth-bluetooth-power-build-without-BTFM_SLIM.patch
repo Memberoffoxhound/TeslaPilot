@@ -1,0 +1,29 @@
+From 66a0f29386f618c2db84fb2018bea7f07ad81d46 Mon Sep 17 00:00:00 2001
+From: Memberoffoxhound <Memberoffoxhound@users.noreply.github.com>
+Date: Wed, 18 Nov 2026 01:46:18 -0600
+Subject: [PATCH 6/6] Bluetooth: bluetooth-power: build without BTFM_SLIM
+
+---
+ drivers/bluetooth/bluetooth-power.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/bluetooth/bluetooth-power.c b/drivers/bluetooth/bluetooth-power.c
+index 7f7c9421..3f4c130a 100644
+--- a/drivers/bluetooth/bluetooth-power.c
++++ b/drivers/bluetooth/bluetooth-power.c
+@@ -690,6 +690,7 @@ static long bt_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 	int ret = 0, pwr_cntrl = 0;
+ 
+ 	switch (cmd) {
++#if IS_ENABLED(CONFIG_BTFM_SLIM)
+ 	case BT_CMD_SLIM_TEST:
+ 		if (!bt_power_pdata->slim_dev) {
+ 			BT_PWR_ERR("slim_dev is null\n");
+@@ -699,6 +700,7 @@ static long bt_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+ 			bt_power_pdata->slim_dev->platform_data
+ 		);
+ 		break;
++#endif
+ 	case BT_CMD_PWR_CTRL:
+ 		pwr_cntrl = (int)arg;
+ 		BT_PWR_ERR("BT_CMD_PWR_CTRL pwr_cntrl:%d", pwr_cntrl);

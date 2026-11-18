@@ -1,0 +1,176 @@
+From 52068dfd0fe32c047e7b786d9d3054648fce5433 Mon Sep 17 00:00:00 2001
+From: Memberoffoxhound <Memberoffoxhound@users.noreply.github.com>
+Date: Wed, 18 Nov 2026 01:39:35 -0600
+Subject: [PATCH 5/6] Bluetooth: hci_qca: WCN3990 power pulse and baud rate
+ change
+
+---
+ drivers/bluetooth/hci_qca.c | 87 +++++++++++++++++++++++++++++++++++--
+ 1 file changed, 84 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/bluetooth/hci_qca.c b/drivers/bluetooth/hci_qca.c
+index 74b2f4a1..4a59690a 100644
+--- a/drivers/bluetooth/hci_qca.c
++++ b/drivers/bluetooth/hci_qca.c
+@@ -30,6 +30,9 @@
+ 
+ #include <linux/kernel.h>
+ #include <linux/debugfs.h>
++#include <linux/delay.h>
++#include <linux/module.h>
++#include <linux/tty.h>
+ 
+ #include <net/bluetooth/bluetooth.h>
+ #include <net/bluetooth/hci_core.h>
+@@ -50,6 +53,15 @@
+ #define IBS_TX_IDLE_TIMEOUT_MS		2000
+ #define BAUDRATE_SETTLE_TIMEOUT_MS	300
+ 
++/* WCN3990 decodes single bytes sent at 2400 baud on its RX line */
++#define QCA_WCN3990_POWERON_PULSE	0xFC
++#define QCA_WCN3990_POWEROFF_PULSE	0xC0
++#define QCA_DROP_VENDOR_EVENT		2
++
++static bool wcn3990;
++module_param(wcn3990, bool, 0644);
++MODULE_PARM_DESC(wcn3990, "Controller is a WCN3990");
++
+ /* HCI_IBS transmit side sleep protocol states */
+ enum tx_ibs_states {
+ 	HCI_IBS_TX_ASLEEP,
+@@ -92,6 +104,7 @@ struct qca_data {
+ 	struct work_struct ws_rx_vote_off;
+ 	struct work_struct ws_tx_vote_off;
+ 	unsigned long flags;
++	struct completion drop_ev_comp;
+ 
+ 	/* For debugging purpose */
+ 	u64 ibs_sent_wacks;
+@@ -397,6 +410,7 @@ static int qca_open(struct hci_uart *hu)
+ 	skb_queue_head_init(&qca->txq);
+ 	skb_queue_head_init(&qca->tx_wait_q);
+ 	spin_lock_init(&qca->hci_ibs_lock);
++	init_completion(&qca->drop_ev_comp);
+ 	qca->workqueue = alloc_ordered_workqueue("qca_wq", 0);
+ 	if (!qca->workqueue) {
+ 		BT_ERR("QCA Workqueue not initialized properly");
+@@ -784,10 +798,30 @@ static int qca_ibs_wake_ack(struct hci_dev *hdev, struct sk_buff *skb)
+ 	.lsize = 0, \
+ 	.maxlen = HCI_MAX_IBS_SIZE
+ 
++/* WCN3990 answers the baud rate change with a vendor event at the new rate.
++ * Drop it so it is not taken as the reply to the next vendor command.
++ */
++static int qca_recv_event(struct hci_dev *hdev, struct sk_buff *skb)
++{
++	struct hci_uart *hu = hci_get_drvdata(hdev);
++	struct qca_data *qca = hu->priv;
++
++	if (test_bit(QCA_DROP_VENDOR_EVENT, &qca->flags)) {
++		struct hci_event_hdr *hdr = (void *)skb->data;
++
++		if (hdr->evt == HCI_VENDOR_PKT)
++			complete(&qca->drop_ev_comp);
++		kfree_skb(skb);
++		return 0;
++	}
++
++	return hci_recv_frame(hdev, skb);
++}
++
+ static const struct h4_recv_pkt qca_recv_pkts[] = {
+ 	{ H4_RECV_ACL,             .recv = hci_recv_frame    },
+ 	{ H4_RECV_SCO,             .recv = hci_recv_frame    },
+-	{ H4_RECV_EVENT,           .recv = hci_recv_frame    },
++	{ H4_RECV_EVENT,           .recv = qca_recv_event    },
+ 	{ QCA_IBS_WAKE_IND_EVENT,  .recv = qca_ibs_wake_ind  },
+ 	{ QCA_IBS_WAKE_ACK_EVENT,  .recv = qca_ibs_wake_ack  },
+ 	{ QCA_IBS_SLEEP_IND_EVENT, .recv = qca_ibs_sleep_ind },
+@@ -878,6 +912,15 @@ static int qca_set_baudrate(struct hci_dev *hdev, uint8_t baudrate)
+ 	skb_queue_tail(&qca->txq, skb);
+ 	hci_uart_tx_wakeup(hu);
+ 
++	/* WCN3990 switches right away, so the host must follow quickly */
++	if (wcn3990) {
++		while (!skb_queue_empty(&qca->txq))
++			usleep_range(100, 200);
++		tty_wait_until_sent(hu->tty, msecs_to_jiffies(100));
++		msleep(10);
++		return 0;
++	}
++
+ 	/* wait 300ms to change new baudrate on controller side
+ 	 * controller will come back after they receive this HCI command
+ 	 * then host can communicate with new baudrate to controller
+@@ -889,6 +932,24 @@ static int qca_set_baudrate(struct hci_dev *hdev, uint8_t baudrate)
+ 	return 0;
+ }
+ 
++static void qca_send_power_pulse(struct hci_uart *hu, u8 cmd)
++{
++	hci_uart_set_flow_control(hu, true);
++	hu->tty->ops->write(hu->tty, &cmd, 1);
++	tty_wait_until_sent(hu->tty, msecs_to_jiffies(100));
++	hci_uart_set_flow_control(hu, false);
++	msleep(cmd == QCA_WCN3990_POWERON_PULSE ? 100 : 10);
++}
++
++/* Rails are already on via msm bt_power; force the chip into boot mode */
++static void qca_wcn3990_init(struct hci_uart *hu, unsigned int init_speed)
++{
++	hci_uart_set_baudrate(hu, 2400);
++	qca_send_power_pulse(hu, QCA_WCN3990_POWEROFF_PULSE);
++	hci_uart_set_baudrate(hu, init_speed);
++	qca_send_power_pulse(hu, QCA_WCN3990_POWERON_PULSE);
++}
++
+ static int qca_setup(struct hci_uart *hu)
+ {
+ 	struct hci_dev *hdev = hu->hdev;
+@@ -911,6 +972,9 @@ static int qca_setup(struct hci_uart *hu)
+ 	if (speed)
+ 		hci_uart_set_baudrate(hu, speed);
+ 
++	if (wcn3990)
++		qca_wcn3990_init(hu, speed ? speed : 115200);
++
+ 	/* Setup user speed if needed */
+ 	speed = 0;
+ 	if (hu->oper_speed)
+@@ -922,17 +986,34 @@ static int qca_setup(struct hci_uart *hu)
+ 		qca_baudrate = qca_get_baudrate_value(speed);
+ 
+ 		BT_INFO("%s: Set UART speed to %d", hdev->name, speed);
++		if (wcn3990) {
++			/* Deassert RTS while both sides change rate */
++			hci_uart_set_flow_control(hu, true);
++			reinit_completion(&qca->drop_ev_comp);
++			set_bit(QCA_DROP_VENDOR_EVENT, &qca->flags);
++		}
+ 		ret = qca_set_baudrate(hdev, qca_baudrate);
++		if (!ret)
++			hci_uart_set_baudrate(hu, speed);
++		if (wcn3990) {
++			hci_uart_set_flow_control(hu, false);
++			if (!ret && !wait_for_completion_timeout(&qca->drop_ev_comp,
++						msecs_to_jiffies(100)))
++				ret = -ETIMEDOUT;
++			clear_bit(QCA_DROP_VENDOR_EVENT, &qca->flags);
++		}
+ 		if (ret) {
+ 			BT_ERR("%s: Failed to change the baud rate (%d)",
+ 			       hdev->name, ret);
+ 			return ret;
+ 		}
+-		hci_uart_set_baudrate(hu, speed);
+ 	}
+ 
+ 	/* Setup patch / NVM configurations */
+-	ret = qca_uart_setup_rome(hdev, qca_baudrate);
++	if (wcn3990)
++		ret = qca_uart_setup_wcn3990(hdev, qca_baudrate);
++	else
++		ret = qca_uart_setup_rome(hdev, qca_baudrate);
+ 	if (!ret) {
+ 		set_bit(STATE_IN_BAND_SLEEP_ENABLED, &qca->flags);
+ 		qca_debugfs_init(hdev);
