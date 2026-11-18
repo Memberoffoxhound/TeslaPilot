@@ -106,3 +106,10 @@ def test_restore_refuses_damaged_backup(dev):
   (data / 'backup/boot_b.img').write_bytes(b'junk')
   r = run('restore_boot.sh', env, '--yes', '--write')
   assert r.returncode != 0 and 'damaged' in r.stderr
+
+
+def test_install_refuses_on_stock_kernel(dev):
+  if os.path.exists('/sys/module/hci_uart/parameters/wcn3990'):
+    pytest.skip('host has the dpbridge kernel')
+  r = run('install_userspace.sh', dev[4], '--yes')
+  assert r.returncode != 0 and 'flash the dpbridge boot.img' in r.stderr
