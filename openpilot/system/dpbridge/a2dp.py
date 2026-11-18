@@ -6,7 +6,7 @@ import time
 
 # Keeps phone music out of the way: muted while driving unless DpbA2dpOnroad, down to about -20 dB during alerts.
 # The mici card has one playback PCM (MultiMedia1), so soundd and bluealsa-aplay share it through dmix
-# (/etc/asound.conf from install_userspace.sh). Music alone passes a softvol control; alerts never do.
+# (/data/dpbridge/asound.conf, linked by audio.sh). Music alone passes a softvol control; alerts never do.
 # Any failure on the way down tries a full mute: music is never left loud by mistake.
 CONTROL = 'dpbridge A2DP Playback Volume'
 FULL, DUCK, MUTE = 100, 60, 0  # percent of the softvol range (-51 dB..0), 0 is mute
@@ -23,11 +23,14 @@ def set_level(pct: int):
 
 
 class Ducker:
-  def __init__(self, set_level=set_level):
-    self.set, self.level = set_level, None
+  # an unchanged level is still rewritten every REFRESH_S: a bluealsa-aplay restart zeroes the control behind our back
+  REFRESH_S = 10
+
+  def __init__(self, set_level=set_level, clock=time.monotonic):
+    self.set, self.clock, self.level, self.at = set_level, clock, None, 0.0
 
   def update(self, level: int):
-    if level == self.level:
+    if level == self.level and self.clock() - self.at < self.REFRESH_S:
       return
     self.level = None  # unknown until this update finishes
     try:
@@ -36,7 +39,7 @@ class Ducker:
       if level != FULL:
         self.set(MUTE)  # fail closed
       raise
-    self.level = level
+    self.level, self.at = level, self.clock()
 
 
 def run(ducker, levels, log, sleep=time.sleep):

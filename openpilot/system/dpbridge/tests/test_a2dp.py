@@ -31,6 +31,19 @@ def test_levels_and_no_repeat_writes():
   assert m == [FULL, DUCK, MUTE, FULL]
 
 
+def test_unchanged_level_is_rewritten_after_refresh():
+  # the player restarted and zeroed the control; the same target must be written again
+  m, now = Mixer(), [0.0]
+  d = Ducker(m, clock=lambda: now[0])
+  d.update(FULL)
+  now[0] = Ducker.REFRESH_S - 1
+  d.update(FULL)
+  assert m == [FULL]
+  now[0] = Ducker.REFRESH_S + 1
+  d.update(FULL)
+  assert m == [FULL, FULL]
+
+
 def test_duck_failure_mutes():
   m = Mixer(broken={DUCK})
   d = Ducker(m)
