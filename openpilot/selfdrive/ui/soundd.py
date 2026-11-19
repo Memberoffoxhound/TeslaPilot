@@ -13,6 +13,7 @@ from openpilot.common.utils import retry
 from openpilot.common.swaglog import cloudlog
 
 from openpilot.system import micd
+from openpilot.selfdrive.ui.dpb_music import Music
 from openpilot.common.hardware import HARDWARE
 
 SAMPLE_RATE = 48000
@@ -80,6 +81,7 @@ class Soundd:
     self.pending_stop = False
 
     self.spl_filter_weighted = FirstOrderFilter(0, 2.5, FILTER_DT, initialized=False)
+    self.music = Music()
 
   def _drain_flags(self) -> None:
     try:
@@ -137,6 +139,12 @@ class Soundd:
           break
 
     out = ret * self.current_volume
+    try:  # dpbridge A2DP, silent during any alert or shutter
+      m = self.music.get(frames, self.current_alert != AudibleAlert.none or self.shutter_idx < len(self.shutter), self.current_volume)
+      if m is not None:
+        out += m
+    except Exception:
+      pass
     i = self.shutter_idx
     n = min(frames, len(self.shutter) - i)
     if n > 0:
