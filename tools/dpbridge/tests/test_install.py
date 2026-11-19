@@ -122,18 +122,17 @@ def test_btfw_env_and_layout():
   env = env_file('firmware/btfw.env')
   assert re.fullmatch(r'[0-9a-f]{64}', env['BTFW_SHA']) and env['BTFW_URL'].endswith('/' + env['BTFW_TAR'])
   assert env['BTFW_URL'].startswith('https://github.com/Memberoffoxhound/TeslaPilot/releases/download/')
-  # comma's image is fetched from comma's repo at the pinned commit, never re-hosted
-  assert env['BTIMG_URL'].startswith('https://media.githubusercontent.com/media/commaai/agnos-builder/140ed0c')
+  assert 'BTIMG_URL' not in env  # comma's image is in our tarball, not fetched from comma
   pinned = {ln.split()[1] for ln in (HERE / 'firmware/firmware.sha256').read_text().splitlines()}
   made = re.search(r'^FILES="([^"]*)"', (HERE / 'firmware/make_btfw.sh').read_text(), re.M).group(1).split()
-  assert set(made) | {'bluetooth.img'} == pinned
+  assert set(made) == pinned
   text = script_text()
   for f in ('attach.sh', 'asound.conf', 'firmware/firmware.sha256', 'firmware/qca.sha256'):
     assert f in text
   assert 'deliver.sh push' not in text
 
 
-def run_get_fw(tmp_path, files, tar_sha=None, have=None, img=None):
+def run_get_fw(tmp_path, files, tar_sha=None, have=None, pinned=None):
   import hashlib
   import io
   import os
@@ -143,8 +142,7 @@ def run_get_fw(tmp_path, files, tar_sha=None, have=None, img=None):
   fns = text[a:text.index('\n}\n', text.index('get_fw() {')) + 3]
   here = tmp_path / 'here'
   (here / 'firmware').mkdir(parents=True, exist_ok=True)
-  img = img if img is not None else b'comma img'
-  sums = ''.join(f'{hashlib.sha256(b).hexdigest()}  {n}\n' for n, b in {**files, 'bluetooth.img': b'comma img'}.items())
+  sums = ''.join(f'{hashlib.sha256(b).hexdigest()}  {n}\n' for n, b in (pinned or files).items())
   (here / 'firmware/firmware.sha256').write_text(sums)
   buf = io.BytesIO()
   with tarfile.open(fileobj=buf, mode='w') as t:
@@ -155,7 +153,6 @@ def run_get_fw(tmp_path, files, tar_sha=None, have=None, img=None):
   rel = tmp_path / 'rel'
   rel.mkdir(exist_ok=True)
   (rel / 'fw.tar').write_bytes(buf.getvalue())
-  (rel / 'bluetooth.img').write_bytes(img)
   sha = tar_sha or hashlib.sha256(buf.getvalue()).hexdigest()
   bin_ = tmp_path / 'bin'
   bin_.mkdir(exist_ok=True)
@@ -168,22 +165,23 @@ def run_get_fw(tmp_path, files, tar_sha=None, have=None, img=None):
     (data / n).write_bytes(b)
   lib = (HERE / 'lib.sh').read_text()
   script = (f'set -euo pipefail\nSUDO=\n{lib}\nDIR={data}\nHERE={here}\nBTFW_TAR=fw.tar\nBTFW_SHA={sha}\n'
-            f'BTFW_URL=file://{rel}/fw.tar\nBTIMG_URL=file://{rel}/bluetooth.img\n{fns}\nfw_ok || get_fw\nfw_ok && echo FWOK\n')
+            f'BTFW_URL=file://{rel}/fw.tar\n{fns}\nfw_ok || get_fw\nfw_ok && echo FWOK\n')
   r = subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=dict(os.environ, PATH=f'{bin_}:{os.environ["PATH"]}'))
   log = (tmp_path / 'curl.log').read_text().splitlines() if (tmp_path / 'curl.log').exists() else []
   return r, log
 
 
-FW = {'crbtfw21.tlv': b'tlv', 'crnv21.bin': b'nv', 'LICENSE.QualcommAtheros_ath10k': b'license'}
+FW = {'crbtfw21.tlv': b'tlv', 'crnv21.bin': b'nv', 'LICENSE.QualcommAtheros_ath10k': b'license', 'bluetooth.img': b'comma img'}
 
 
 def test_get_fw_fresh_device(tmp_path):
   r, log = run_get_fw(tmp_path, FW)
   assert r.returncode == 0 and 'FWOK' in r.stdout, r.stderr
-  assert len(log) == 2 and log[0].endswith('fw.tar') and log[1].endswith('bluetooth.img')
+  assert len(log) == 1 and log[0].endswith('fw.tar')  # one download, bluetooth.img included
+  assert (tmp_path / 'data/bluetooth.img').read_bytes() == b'comma img'
   # second run, as after an AGNOS update: everything is still on /data
   r, log = run_get_fw(tmp_path, FW)
-  assert r.returncode == 0 and len(log) == 2
+  assert r.returncode == 0 and len(log) == 1
 
 
 def test_get_fw_refuses_bad_downloads(tmp_path):
@@ -191,5 +189,5 @@ def test_get_fw_refuses_bad_downloads(tmp_path):
   r, _ = run_get_fw(tmp_path / 'a', FW, tar_sha='0' * 64)
   assert r.returncode != 0 and 'does not match btfw.env' in r.stderr
   (tmp_path / 'b').mkdir()
-  r, _ = run_get_fw(tmp_path / 'b', FW, img=b'not comma')
+  r, _ = run_get_fw(tmp_path / 'b', {**FW, 'bluetooth.img': b'not comma'}, pinned=FW)
   assert r.returncode != 0 and 'does not match firmware.sha256' in r.stderr

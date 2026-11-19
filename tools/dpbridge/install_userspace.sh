@@ -23,8 +23,8 @@ fi
 [ $YES = 1 ] || echo "dry run: pass --yes to install"
 
 # BT firmware and the unit scripts on /data, no Mac needed. They stay there across AGNOS updates.
-# linux-firmware files: release tarball pinned in firmware/btfw.env. comma's bluetooth.img: its own upstream
-# URL at the pinned agnos-builder commit, not re-hosted. Both checked against firmware/firmware.sha256.
+# One release tarball pinned in firmware/btfw.env (linux-firmware files and comma's bluetooth.img), each file
+# checked against firmware/firmware.sha256.
 # shellcheck source=firmware/btfw.env
 source "$HERE/firmware/btfw.env"
 fw_ok() { (cd "$DIR" && sha256sum -c --quiet "$HERE/firmware/firmware.sha256") > /dev/null 2>&1; }
@@ -36,15 +36,12 @@ get_fw() {
     $SUDO mv "$DIR/debs/$BTFW_TAR.part" "$DIR/debs/$BTFW_TAR"
   fi
   $SUDO tar -xf "$DIR/debs/$BTFW_TAR" -C "$DIR"
-  if ! (cd "$DIR" && grep ' bluetooth.img$' "$HERE/firmware/firmware.sha256" | sha256sum -c --quiet) > /dev/null 2>&1; then
-    $SUDO curl -fL --retry 5 -o "$DIR/bluetooth.img" "$BTIMG_URL" || die "bluetooth.img download failed: $BTIMG_URL"
-  fi
   fw_ok || die "BT firmware in $DIR does not match firmware.sha256"
 }
 if fw_ok; then
   echo "  BT firmware already on /data"
 else
-  echo "+ fetch BT firmware into $DIR ($BTFW_TAR, bluetooth.img)"
+  echo "+ fetch BT firmware into $DIR ($BTFW_TAR)"
   [ $YES = 1 ] && get_fw
 fi
 run $SUDO mkdir -p "$DIR"
