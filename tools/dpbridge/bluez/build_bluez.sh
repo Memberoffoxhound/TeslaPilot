@@ -17,6 +17,9 @@ TRIPLE=aarch64-linux-gnu
 grep -q 'VERSION_ID="24.04"' /etc/os-release || { echo "build on Ubuntu 24.04 so glibc matches AGNOS"; exit 1; }
 
 W=${WORK:-/tmp/bluez-build}
+# reproducible: fixed time for dpkg-deb and tar, build dir kept out of the binaries (build ids)
+export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-1735689600} LC_ALL=C TZ=UTC
+export CFLAGS="-O2 -g -ffile-prefix-map=$W=/build"
 mkdir -p "$W" "$OUT"
 cd "$W"
 TAR=bluez-$VER.tar.xz
@@ -91,13 +94,13 @@ done
 rm -f "$OUT"/*.deb
 for p in libbluetooth3 bluez-obexd bluez; do
   # fixed mtimes and owner so the same tree gives the same deb
-  find "$W/p/$p" -exec touch -h -d @"${SOURCE_DATE_EPOCH:-1735689600}" {} +
+  find "$W/p/$p" -exec touch -h -d @"$SOURCE_DATE_EPOCH" {} +
   dpkg-deb --root-owner-group -Zxz --build "$W/p/$p" "$OUT/${p}_$VER-${REV}_arm64.deb" > /dev/null
 done
 NAME=dpbridge-bluez-$VER-arm64
 (cd "$OUT" && sha256sum ./*.deb | sed 's# \./# #' > SHA256SUMS)
 # shellcheck disable=SC2046,SC2012
-tar --sort=name --mtime=@"${SOURCE_DATE_EPOCH:-1735689600}" --owner=0 --group=0 -C "$OUT" -cf "$OUT/$NAME.tar" \
+tar --format=gnu --sort=name --numeric-owner --mtime=@"$SOURCE_DATE_EPOCH" --owner=0 --group=0 -C "$OUT" -cf "$OUT/$NAME.tar" \
   SHA256SUMS $(cd "$OUT" && ls ./*.deb | sed 's#\./##')
 (cd "$OUT" && sha256sum "$NAME.tar" > "$NAME.tar.sha256")
 cat "$OUT/$NAME.tar.sha256"
