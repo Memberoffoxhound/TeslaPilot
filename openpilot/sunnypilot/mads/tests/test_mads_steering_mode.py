@@ -228,14 +228,15 @@ class TestBrandSteeringModeRestrictions(OpenpilotTestCase):
   @parameterized.expand([MadsScreenButtonType.THREE_FINGER,
                                              MadsScreenButtonType.FOUR_FINGER,
                                              MadsScreenButtonType.FIVE_FINGER], names=["screen_button"])
-  def test_tesla_with_vehicle_bus_uses_param(self, mocker, screen_button):
+  def test_tesla_with_vehicle_bus_forced_to_disengage(self, mocker, screen_button):
+    # TeslaPilot: brake ends steering on Tesla in every config (sunnypilot uses the param here)
     CP = structs.CarParams()
     CP.brand = "tesla"
     CP_SP = CarParamsSP()
     CP_SP.flags = TeslaFlagsSP.HAS_VEHICLE_BUS
     params = make_params_mock(mocker, {"TeslaMadsScreenButton": screen_button,
                                        "MadsSteeringMode": MadsSteeringModeOnBrake.REMAIN_ACTIVE})
-    assert read_steering_mode_param(CP, CP_SP, params) == MadsSteeringModeOnBrake.REMAIN_ACTIVE
+    assert read_steering_mode_param(CP, CP_SP, params) == MadsSteeringModeOnBrake.DISENGAGE
 
   def test_tesla_with_vehicle_bus_screen_button_off_forced_to_disengage(self, mocker):
     CP = structs.CarParams()
