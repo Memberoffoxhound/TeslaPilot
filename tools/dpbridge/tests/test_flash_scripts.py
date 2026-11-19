@@ -529,6 +529,28 @@ def test_kernel_pending_is_written_before_any_write(dev):
   assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'failed'
 
 
+@pytest.mark.parametrize('sig', ['TERM', 'INT', 'HUP'])
+def test_kernel_flash_is_not_stopped_by_a_signal(dev, sig):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev)
+  # the boot-time timeout signals the whole group while abctl rewrites the GPT: the flash still finishes
+  e['PATH'] = f"{tmp / 'sig'}:{e['PATH']}"
+  (tmp / 'sig').mkdir()
+  (tmp / 'sig/abctl').write_text(f'#!/bin/sh\ncase $1 in --set_unbootable) kill -{sig} 0 ;; esac\nexec {tmp}/bin/abctl "$@"\n')
+  (tmp / 'sig/abctl').chmod(0o755)
+  r = subprocess.run(['bash', str(HERE / 'kernel.sh'), 'flash', '--yes'], env=e, capture_output=True, text=True,
+                     start_new_session=True)
+  assert r.returncode == 0, r.stderr
+  assert ops(tmp)[-1] == 'abctl --set_active 1'
+  assert (parts / 'boot_b').read_bytes().startswith((tmp / 'release/boot.img').read_bytes())
+
+
+def test_kernel_signals_work_again_after_the_flash():
+  sh = (HERE / 'kernel.sh').read_text()
+  body = sh[sh.index("trap '' INT TERM HUP"):]
+  assert body.index('flash_boot.sh') < body.index('trap - INT TERM HUP') < body.index('prune\n')
+
+
 def test_kernel_dry_run_does_not_download(dev):
   tmp, parts, data, img, env = dev
   sha, e = kenv(dev)

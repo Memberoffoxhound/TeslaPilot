@@ -83,7 +83,8 @@ fetch() {
   # shellcheck disable=SC2064
   trap "kill $w 2> /dev/null || true" EXIT
   # resume a partial download; nothing is flashed until the sha matches
-  $CURL -fL --retry 5 --retry-delay 3 -C - -o "$IMG.part" "$BOOT_URL" || die "download failed: $BOOT_URL"
+  # a stalled link gives up (under 1 kB/s for 60 s), the boot-time run waits for this step without a clock
+  $CURL -fL --retry 5 --retry-delay 3 --connect-timeout 20 --speed-limit 1024 --speed-time 60 -C - -o "$IMG.part" "$BOOT_URL" || die "download failed: $BOOT_URL"
   kill "$w" 2> /dev/null || true
   wait "$w" 2> /dev/null || true
   trap - EXIT
@@ -139,11 +140,14 @@ flash() {
     echo "$(try_key) $oth" > "$K/pending"
     sync
   fi
+  # never stopped half way (abctl rewrites GPT attributes); flash_boot.sh inherits the ignore
+  trap '' INT TERM HUP
   if ! bash "$HERE/flash_boot.sh" "${fargs[@]}" "$IMG"; then
     # no automatic retry of the same thing; the slot was not switched
     if [ $YES = 1 ]; then try_key > "$K/failed"; rm -f "$K/pending"; fi
     die "flash_boot.sh failed"
   fi
+  trap - INT TERM HUP
   prune
   [ $YES = 1 ] || { echo "dry run: nothing switched"; return 0; }
   sync

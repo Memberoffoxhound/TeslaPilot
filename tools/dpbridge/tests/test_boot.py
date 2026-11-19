@@ -106,6 +106,24 @@ def test_hung_install_times_out(tmp_path, monkeypatch):
   assert not (tmp_path / 'data/stamp').exists()
 
 
+def test_kernel_step_is_never_timed_out(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, install='echo "[3/4] x"; echo "[4/4] kernel"; sleep 1.5; echo flashed')
+  m.TIMEOUT_S = 0.3
+  assert m.main(lambda: FakeSpinner()) == 0
+  log = (tmp_path / 'data/log').read_text()
+  assert 'timed out' not in log and 'flashed' in log and (tmp_path / 'data/stamp').exists()
+
+
+def test_timeout_sends_term_first(tmp_path, monkeypatch):
+  # the installer gets SIGTERM (its EXIT trap tears apt down), SIGKILL only if it ignores that
+  m = load(tmp_path, monkeypatch, install=f'trap "echo term > {tmp_path}/got; exit 143" TERM; echo "[2/4] x"; sleep 30 & wait')
+  m.TIMEOUT_S = 0.3
+  t0 = __import__('time').monotonic()
+  m.main(lambda: FakeSpinner())
+  assert (tmp_path / 'got').read_text().strip() == 'term'
+  assert __import__('time').monotonic() - t0 < 5  # did not need the 10 s SIGKILL wait
+
+
 def test_reboots_only_after_a_flash(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, install='echo "[4/4] kernel"; echo "  kernel: writing slot b 55%"', state='pending')
   sp = FakeSpinner()

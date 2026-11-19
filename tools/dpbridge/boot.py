@@ -80,9 +80,13 @@ def install(spinner, log) -> int:
   cmd = ["bash", INSTALL, "--yes"]
   spinner.update_progress(0, 100)
 
+  kernel_step = threading.Event()
+
   def pump(out):
     pct = 0
     for ln in out:
+      if ln.startswith("[4/4]"):
+        kernel_step.set()
       log.write(ln)
       pct = progress(ln.rstrip("\n"), pct)
       spinner.update_progress(pct, 100)
@@ -95,9 +99,15 @@ def install(spinner, log) -> int:
     return 1
   t = threading.Thread(target=pump, args=(p.stdout,), daemon=True)
   t.start()
-  try:
-    rc = p.wait(timeout=TIMEOUT_S)
-  except subprocess.TimeoutExpired:
+  # the clock covers steps 1-3; the kernel step is never killed (its download gives up on a stalled link itself)
+  end = time.monotonic() + TIMEOUT_S
+  rc = None
+  while rc is None and (kernel_step.is_set() or time.monotonic() < end):
+    try:
+      rc = p.wait(timeout=0.2)
+    except subprocess.TimeoutExpired:
+      pass
+  if rc is None:
     os.killpg(p.pid, signal.SIGTERM)  # lets the installer's EXIT trap tear apt down
     try:
       p.wait(timeout=10)
