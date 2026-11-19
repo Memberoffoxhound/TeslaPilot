@@ -75,9 +75,11 @@ echo "[3/4] Bluetooth packages and services"
 MNT=/tmp/dpbridge-btimg
 # obexd exits without one server plugin and transport; OPP stays, rejected with no agent
 OBEX_OFF=pcsuite,ftp,irmc,pbap,mas,mns
+# apt teardown (rootfs back to ro), once: before the kernel step, or on any exit.
 # umount fails once the success path has unmounted; it must not stop the teardown or the exit status
-trap 'if [ $YES = 1 ]; then $SUDO umount "$MNT" 2> /dev/null || true; $SUDO /usr/comma/apt_teardown.sh; fi' EXIT
-teardown() { if [ $YES = 1 ]; then $SUDO umount "$MNT" 2> /dev/null || true; $SUDO /usr/comma/apt_teardown.sh; fi; }
+TORN=0
+teardown() { if [ $YES = 1 ] && [ $TORN = 0 ]; then TORN=1; $SUDO umount "$MNT" 2> /dev/null || true; $SUDO /usr/comma/apt_teardown.sh; fi; }
+trap teardown EXIT
 run $SUDO /usr/comma/apt_setup.sh
 
 # WCN3990 firmware (the comma 4 has no bluetooth partition). btqca loads qca/crbtfw<rev>.tlv and qca/crnv<rev>.bin
@@ -285,10 +287,10 @@ if [ $YES = 1 ]; then
 fi
 
 echo "[4/4] kernel"
+# / is read-only again before the flash mirrors system into the other slot
+teardown
 if kernel_step; then
-  # the reboot is the final step, after the apt teardown
-  teardown
-  trap - EXIT
+  # the reboot is the final step
   echo "installed. rebooting into the dpbridge kernel"
   progress rebooting 100
   $SUDO "$REBOOT"
