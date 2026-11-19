@@ -1,0 +1,79 @@
+From 13dfb71462dc7f248866d883d1290238993dcd02 Mon Sep 17 00:00:00 2001
+From: Memberoffoxhound <Memberoffoxhound@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 02:27:46 -0600
+Subject: [PATCH] Bluetooth: hci_qca: WCN3990 re-checks CTS after boot and
+ retries the power pulses once
+
+---
+ drivers/bluetooth/hci_qca.c | 34 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 34 insertions(+)
+
+diff --git a/drivers/bluetooth/hci_qca.c b/drivers/bluetooth/hci_qca.c
+index 617d2231..599aab28 100644
+--- a/drivers/bluetooth/hci_qca.c
++++ b/drivers/bluetooth/hci_qca.c
+@@ -33,6 +33,7 @@
+ #include <linux/delay.h>
+ #include <linux/module.h>
+ #include <linux/tty.h>
++#include <linux/serial_core.h>
+ 
+ #include <net/bluetooth/bluetooth.h>
+ #include <net/bluetooth/hci_core.h>
+@@ -971,6 +972,29 @@ static void qca_set_rts(struct hci_uart *hu, bool on)
+ 		tty->driver->ops->tiocmset(tty, 0, TIOCM_RTS);
+ }
+ 
++/* serial_core TX gate, set when CTS was low at the last termios change */
++static bool qca_tx_stopped(struct tty_struct *tty)
++{
++	struct uart_state *state = tty->driver_data;
++
++	return state && state->uart_port && state->uart_port->hw_stopped;
++}
++
++/* msm_geni never reports CTS changes, so a CTS dip while flow control comes
++ * back on leaves TX stopped for good. Redo termios so CTS is read again.
++ */
++static void qca_wcn3990_recheck_ready(struct hci_uart *hu)
++{
++	struct tty_struct *tty = hu->tty;
++	int cts = !!(tty->driver->ops->tiocmget(tty) & TIOCM_CTS);
++	bool stopped = qca_tx_stopped(tty);
++
++	hci_uart_set_flow_control(hu, true);
++	hci_uart_set_flow_control(hu, false);
++	BT_INFO("%s: WCN3990 ready re-check: cts %d tx stopped %d -> %d",
++		hu->hdev->name, cts, stopped, qca_tx_stopped(tty));
++}
++
+ /* Rails are already on via msm bt_power; force the chip into boot mode */
+ static void qca_wcn3990_init(struct hci_uart *hu, unsigned int init_speed)
+ {
+@@ -981,6 +1005,7 @@ static void qca_wcn3990_init(struct hci_uart *hu, unsigned int init_speed)
+ 	qca_send_power_pulse(hu, QCA_WCN3990_POWEROFF_PULSE);
+ 	hci_uart_set_baudrate(hu, init_speed);
+ 	qca_send_power_pulse(hu, QCA_WCN3990_POWERON_PULSE);
++	qca_wcn3990_recheck_ready(hu);
+ 	clear_bit(QCA_DROP_RX, &qca->flags);
+ }
+ 
+@@ -1040,6 +1065,15 @@ static int qca_setup(struct hci_uart *hu)
+ 
+ 		/* Prove the chip booted before touching the baud rate */
+ 		ret = qca_read_soc_version(hdev, &ver);
++		if (ret == -ETIMEDOUT) {
++			/* First power-up after boot can miss, pulse once more */
++			BT_INFO("%s: WCN3990 silent, retrying the power pulses",
++				hdev->name);
++			tty_driver_flush_buffer(hu->tty);
++			qca_flush(hu);
++			qca_wcn3990_init(hu, speed ? speed : 115200);
++			ret = qca_read_soc_version(hdev, &ver);
++		}
+ 		if (ret) {
+ 			BT_ERR("%s: WCN3990 silent at init speed (%d)",
+ 			       hdev->name, ret);
+-- 
+2.47.3
+
