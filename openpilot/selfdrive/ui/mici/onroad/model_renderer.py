@@ -19,6 +19,8 @@ STOCK_LANE_GREEN = rl.Color(*THEME_OPENPILOT_RGB, 255)
 TESLA_LANE_BLUE = rl.Color(*THEME_TESLA_RGB, 255)
 
 SWAP_RC = 0.15  # lane/path color swap, ~0.5 s each way
+SWAP_BRIGHT = 1.5  # steering-only path alpha
+SWAP_LANE = rl.Color(242, 242, 242, 255)  # steering-only lane lines: the cruising near-white
 
 LANE_LINE_COLORS = {
   UIStatus.DISENGAGED: rl.Color(200, 200, 200, 255),
@@ -33,10 +35,12 @@ def _faded(gradient: Gradient, alpha: float) -> Gradient:
 
 
 def _tinted(gradient: Gradient, color: rl.Color, f: float) -> Gradient:
-  # same stops and alpha, rgb toward color
+  # rgb toward color and alpha up, both by f
   if f < 1e-3:
     return gradient
-  return Gradient(gradient.start, gradient.end, [lerp_color(c, rl.Color(color.r, color.g, color.b, c.a), f) for c in gradient.colors], gradient.stops)
+  k = 1 + (SWAP_BRIGHT - 1) * f
+  tint = [lerp_color(c, rl.Color(color.r, color.g, color.b, c.a), f) for c in gradient.colors]
+  return Gradient(gradient.start, gradient.end, [rl.Color(t.r, t.g, t.b, min(255, round(t.a * k))) for t in tint], gradient.stops)
 
 
 class LeadVehicle:
@@ -162,7 +166,7 @@ class ModelRenderer(BaseModelRenderer):
   def _get_ll_color(self, prob: float, adjacent: bool, left: bool):
     alpha = np.clip(prob, 0.0, 0.7) * self._visible
     if adjacent:
-      engaged = lerp_color(self._ll_engaged, self._path_color(), self._swap.x) if self._swap.x >= 1e-3 else self._ll_engaged
+      engaged = lerp_color(self._ll_engaged, SWAP_LANE, self._swap.x) if self._swap.x >= 1e-3 else self._ll_engaged
       _base_color = steer_fade.color({**LANE_LINE_COLORS, UIStatus.ENGAGED: engaged})
       color = rl.Color(_base_color.r, _base_color.g, _base_color.b, int(alpha * 255))
 
@@ -199,11 +203,6 @@ class ModelRenderer(BaseModelRenderer):
       color = self._get_ll_color(float(1.0 - self._road_edge_stds[i]), float(self._lane_line_probs[i + 1]) < 0.25, i == 0)
       draw_polygon(self._rect, road_edge.projected_points + offset, color)
 
-  def _path_color(self) -> rl.Color:
-    # the path's most opaque stop, white for the plain path
-    gradient = STOCK_PATH_GRADIENT if not self._longitudinal_control else self._path_gradient
-    return max(gradient.colors, key=lambda c: c.a) if len(gradient.colors) > 1 else rl.Color(255, 255, 255, 255)
-
   def _draw_path(self):
     if not self._path.projected_points.size:
       return
@@ -216,7 +215,7 @@ class ModelRenderer(BaseModelRenderer):
     elif len(self._path_gradient.colors) > 1:
       draw_polygon(self._rect, path_pts, gradient=_faded(_tinted(self._path_gradient, self._ll_engaged, swap), self._visible))
     else:
-      white = rl.Color(255, 255, 255, round(30 * self._visible))
+      white = rl.Color(255, 255, 255, round(30 * self._visible * (1 + (SWAP_BRIGHT - 1) * swap)))
       draw_polygon(self._rect, path_pts, lerp_color(white, rl.Color(self._ll_engaged.r, self._ll_engaged.g, self._ll_engaged.b, white.a), swap))
 
   def _draw_lead_indicator(self):

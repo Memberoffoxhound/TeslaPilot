@@ -7,6 +7,13 @@ import textwrap
 
 import pytest
 
+WHITE = [242, 242, 242]
+
+
+def brighter(path, base):
+  # alpha x1.5, within rounding of a swap still a hair under 1
+  return all(abs(p[3] - min(255, c[3] * 1.5)) <= 1 for p, c in zip(path, base, strict=True))
+
 PROBE = textwrap.dedent('''
   import json, sys, types
   from types import SimpleNamespace
@@ -103,6 +110,11 @@ PROBE = textwrap.dedent('''
   mr._path_gradient = long_grad
   out["long_grad"] = [[c.r, c.g, c.b, c.a] for c in long_grad.colors]
   out["tesla_steer"] = run(2 * fps)[-1]
+  # speeding up (green) and braking (red) paths
+  for key, rgb in (("speed_up", (164, 255, 61)), ("braking", (255, 61, 61))):
+    mr._path_gradient = mrm.Gradient(start=(0.0, 1.0), end=(0.0, 0.0), colors=[rl.Color(*rgb, 102), rl.Color(*rgb, 0)], stops=[0.0, 0.7])
+    out[key] = run(fps // 4)[-1]
+  mr._path_gradient = long_grad
   ss.enabled, ss.state = True, OP.enabled
   out["tesla_engaged"] = run(fps)[-1]
   print("RESULT" + json.dumps(out))
@@ -127,9 +139,9 @@ def test_engaged_unchanged(probe):
 
 def test_steering_only_swaps(probe):
   s, stock = probe["enter"][-1], probe["stock"]
-  assert s["lane"] == stock[0][:3]  # the path's most opaque stop
+  assert s["lane"] == WHITE  # fixed near-white, not the path color
   assert [c[:3] for c in s["path"]] == [probe["ll"]] * len(stock)  # lane color, same stops
-  assert [c[3] for c in s["path"]] == [c[3] for c in stock]  # alpha kept
+  assert brighter(s["path"], stock)
 
 
 def test_swap_fades_both_ways(probe):
@@ -142,7 +154,9 @@ def test_swap_fades_both_ways(probe):
     half = sw[fps // 2 - 1]
     assert half > 0.95 if up else half < 0.05  # about done by 0.5 s
     mid = frames[fps // 10 - 1]
-    assert mid["lane"] not in (probe["ll"], probe["stock"][0][:3])  # blended, not snapped
+    assert mid["lane"] not in (probe["ll"], WHITE)  # blended, not snapped
+    a, base = mid["path"][0][3], probe["stock"][0][3]
+    assert base < a < round(base * 1.5)  # brightness ramps with the swap
   assert probe["leave"][-1]["path"] == probe["stock"] and probe["leave"][-1]["lane"] == probe["ll"]
 
 
@@ -152,7 +166,7 @@ def test_override_stays_white(probe):
 
 def test_plain_path_takes_lane_color(probe):
   s = probe["plain"]
-  assert s["path"][0][:3] == probe["ll"] and s["lane"] == [255, 255, 255]
+  assert s["path"][0][:3] == probe["ll"] and s["path"][0][3] == 45 and s["lane"] == WHITE
 
 
 def test_override_flapping_does_not_pulse(probe):
@@ -164,7 +178,12 @@ def test_override_flapping_does_not_pulse(probe):
 def test_tesla_long_gradient_tinted(probe):
   blue, grad = [62, 140, 235], probe["long_grad"]
   s = probe["tesla_steer"]
-  assert [c[:3] for c in s["path"]] == [blue] * len(grad) and [c[3] for c in s["path"]] == [c[3] for c in grad]
-  assert s["lane"] == grad[0][:3]  # most opaque stop
+  assert [c[:3] for c in s["path"]] == [blue] * len(grad) and brighter(s["path"], grad)
+  assert s["lane"] == WHITE
   e = probe["tesla_engaged"]
   assert e["path"] == grad and e["lane"] == blue
+
+
+def test_lanes_stay_white_with_accel_colors(probe):
+  for key in ("speed_up", "braking"):
+    assert probe[key]["lane"] == WHITE and probe[key]["path"][0][:3] == [62, 140, 235]
