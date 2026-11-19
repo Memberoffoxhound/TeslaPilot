@@ -8,6 +8,18 @@ TITS_WELCOME: list = [
   "TeslaPilot will continue steering when you cancel cruise while you handle speed.",
   "Engage cruise again to get speed control back.",
 ]
+TESLA_BRAKE = "On Tesla, pressing the brake cancels both steering and speed."
+
+
+def welcome_cards(brand: str | None) -> list:
+  return TITS_WELCOME + ([TESLA_BRAKE] if brand == "tesla" else [])
+
+
+def toggle_description(brand: str | None) -> str:
+  tesla = TESLA_BRAKE + "\n" if brand == "tesla" else ""
+  return TITS_TITLE + "\nKeeps steering when you cancel cruise while you handle speed.\n" + tesla + "Change it while parked."
+
+
 STEERING_MODES = ["remain active", "pause", "disengage"]
 SCREEN_BUTTONS = ["off", "3 fingers", "4 fingers", "5 fingers"]
 

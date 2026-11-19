@@ -71,3 +71,17 @@ def test_welcome_copy():
   for card in mads.TITS_WELCOME:
     for text in (card if isinstance(card, tuple) else (card,)):
       assert "\u2014" not in text and "\u2013" not in text and "stands for" not in text
+
+
+@pytest.mark.parametrize("brand", [None, *BRANDS])
+def test_tesla_brake_copy(brand):
+  cards, desc = mads.welcome_cards(brand), mads.toggle_description(brand)
+  note = "On Tesla, pressing the brake cancels both steering and speed."
+  assert cards[:len(mads.TITS_WELCOME)] == mads.TITS_WELCOME
+  if brand == "tesla":
+    assert cards[-2:] == ["Engage cruise again to get speed control back.", note]
+    assert note in desc
+  else:
+    assert cards == mads.TITS_WELCOME and note not in desc
+  for text in (desc, *[c for c in cards if isinstance(c, str)]):
+    assert "\u2014" not in text and "\u2013" not in text

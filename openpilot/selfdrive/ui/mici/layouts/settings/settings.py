@@ -80,6 +80,10 @@ class SettingsLayout(NavScroller):
     gui_app.push_widget(self._toggles_panel)
     self._toggles_panel.set_shown_callback(self._toggles_panel.scroll_to_set_speed_assist)
 
+  def show_tits(self):
+    gui_app.push_widget(self._toggles_panel)
+    self._toggles_panel.set_shown_callback(self._toggles_panel.scroll_to_tits)
+
   def show_models(self):
     gui_app.push_widget(self._models_layout)
 
