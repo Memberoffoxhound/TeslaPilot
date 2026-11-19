@@ -190,8 +190,8 @@ put /etc/systemd/system/dpbridge-bt.service <<UNIT
 Description=dpbridge: attach the WCN3990 as hci0
 Before=bluetooth.service
 ConditionPathExists=/sys/module/hci_uart/parameters/wcn3990
-# touch this file to keep the chip off on the next boot
-ConditionPathExists=!$DIR/disable
+# Bluetooth off in Settings: the chip stays off on the next boot
+ConditionPathExists=!$DIR/bt_off
 
 [Service]
 ExecStartPre=/bin/mkdir -p /var/lib/bluetooth

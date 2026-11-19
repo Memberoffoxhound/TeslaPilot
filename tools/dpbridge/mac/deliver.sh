@@ -154,7 +154,7 @@ case $CMD in
   enable)
     reach
     dev "bash $REMOTE/audio.sh off"  # takes out the old dmix link if present; car off only
-    r "rm -f $REMOTE/disable && $(units enable)"
+    r "rm -f $REMOTE/bt_off && $(units enable)"
     # systemctl can return 0 with failed starts, and a restart loop can look active, so each unit has to be
     # active and keep its restart count over 10 s
     if ! r "for _ in \$(seq 15); do systemctl is-active --quiet $UNITS && break; sleep 2; done; \
@@ -169,7 +169,7 @@ systemctl is-active $UNITS | paste -sd' '; echo \"restarts \$a -> \$b\"; exit 1"
   disable)
     reach
     dev "bash $REMOTE/audio.sh off"
-    r "touch $REMOTE/disable && $(units disable)"
+    r "touch $REMOTE/bt_off && $(units disable)"
     ;;
   restore) reach; dev "bash $REMOTE/restore_boot.sh $ARGS" ;;
   test)

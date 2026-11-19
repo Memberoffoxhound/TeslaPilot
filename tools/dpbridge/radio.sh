@@ -13,10 +13,12 @@ INSTALL="${DPB_INSTALL:-}"
 MARK="$DIR/bt_boot"
 SETTLE_S="${DPB_SETTLE_S:-60}"
 WATCH=1
+# Bluetooth off (Settings or the marker) is $DIR/bt_off; $DIR/disable is only the install and flash kill switch
+OFF="$DIR/bt_off"
 
 seed_param() {
   if [ ! -e "$PARAM" ]; then
-    if [ -e "$HCI0" ] && [ ! -e "$DIR/disable" ]; then
+    if [ -e "$HCI0" ] && [ ! -e "$OFF" ]; then
       mkdir -p "$(dirname "$PARAM")"
       printf '1' > "$PARAM"
     else
@@ -49,7 +51,7 @@ apply() {
     printf '0' > "$PARAM"
   fi
   if want_on; then
-    rm -f "$DIR/disable"
+    rm -f "$OFF"
     if [ "$WATCH" = 1 ]; then mkdir -p "$DIR"; touch "$MARK"; fi
     if [ -n "$INSTALL" ] && [ -x "$INSTALL" ]; then
       if [ ! -e /usr/libexec/bluetooth/bluetoothd ]; then
@@ -63,12 +65,17 @@ apply() {
   else
     mkdir -p "$DIR"
     rm -f "$MARK"
-    touch "$DIR/disable"
+    touch "$OFF"
     # shellcheck disable=SC2086
     $SYSTEMCTL stop $UNITS || true
     rfkill_bt 1
   fi
 }
+
+# once: older builds wrote disable for Bluetooth off; with the toggle off that was ours, not a kill switch
+if [ -e "$DIR/disable" ] && [ ! -e "$OFF" ] && [ "$(tr -d '[:space:]' < "$PARAM" 2>/dev/null || true)" = 0 ]; then
+  mv "$DIR/disable" "$OFF"
+fi
 
 once=0
 [ "${1:-}" = --once ] && once=1
