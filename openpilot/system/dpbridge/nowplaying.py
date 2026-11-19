@@ -15,7 +15,10 @@ _SIG = re.compile(r"^[ybnqiuxtdhsovgae(){}[\]]+$")
 # calls Play/Pause/Next/Previous, debounced and ignored while engaged.
 
 STATE_PATH = "/dev/shm/dpbridge-nowplaying.json"
-ART_PATH = "/dev/shm/dpbridge-art.jpg"
+ART_PREFIX = "/dev/shm/dpbridge-art"
+ART_STAGING = "/dev/shm/dpbridge-art.d"
+OBEX = "org.bluez.obex"
+ART_RETRY_S = 15.0
 CMD_PATH = "/dev/shm/dpbridge-nowplaying.cmd"
 PLAYER_IF = "org.bluez.MediaPlayer1"
 TRANSPORT_IF = "org.bluez.MediaTransport1"
@@ -285,9 +288,38 @@ def aplay_is_running() -> bool:
   except OSError:
     pass
   return False
-def fetch_art(bz, player: str, handle: str, dest: str, log) -> str | None:
+def art_path(handle: str, prefix: str = ART_PREFIX) -> str:
+  # one file per handle so the UI reloads its texture on a new track
+  return f"{prefix}-{re.sub(r'[^0-9A-Za-z]', '', handle)[:16] or 'x'}.jpg"
+
+
+def _obex_conn():
+  from jeepney.io.blocking import open_dbus_connection
+  return open_dbus_connection(bus="SYSTEM")
+
+
+def _wait_transfer(conn, path: str, timeout: float, sleep=time.sleep, clock=time.monotonic) -> str:
+  from jeepney import DBusAddress, Properties
+  from jeepney.wrappers import unwrap_msg
+  t = Properties(DBusAddress(path, OBEX, OBEX + ".Transfer1"))
+  end = clock() + timeout
+  while True:
+    try:
+      st = unwrap_msg(conn.send_and_get_reply(t.get("Status"), timeout=2))[0][1]
+    except Exception:
+      # obexd drops the object right after it completes
+      return "complete"
+    if st in ("complete", "error"):
+      return st
+    if clock() >= end:
+      return "timeout"
+    sleep(0.1)
+
+
+def fetch_art(bz, player: str, handle: str, dest: str, log, conn_fn=_obex_conn, staging: str = ART_STAGING,
+              sleep=time.sleep) -> str | None:
   # BlueZ 5.79+: ImgHandle is only valid while a BIP session is up on ObexPort.
-  # On 5.72 this returns None immediately (no ObexPort / no Image1).
+  # obexd runs as root on the system bus (dpbridge-obex.service). 5.72 has no ObexPort: None.
   if not handle:
     return None
   try:
@@ -298,38 +330,68 @@ def fetch_art(bz, player: str, handle: str, dest: str, log) -> str | None:
     return None
   try:
     from jeepney import DBusAddress, new_method_call
-    from jeepney.io.blocking import open_dbus_connection
     from jeepney.wrappers import unwrap_msg
   except Exception as e:
-    log(f"dpb nowplaying: no jeepney session client, {e!r}")
+    log(f"dpb nowplaying: no jeepney, {e!r}")
     return None
-  conn = None
+  conn, sess = None, None
+  client = DBusAddress("/org/bluez/obex", OBEX, OBEX + ".Client1")
   try:
-    conn = open_dbus_connection(bus="SESSION")
-    addr = DBusAddress("/org/bluez/obex", "org.bluez.obex", "org.bluez.obex.Client1")
-    # Target + L2CAP PSM: BIP cover-art session as of BlueZ 5.79
+    conn = conn_fn()
     device = bz.get(player, PLAYER_IF, "Device")
     mac = str(device).rsplit("/dev_", 1)[-1].replace("_", ":")
     sess = unwrap_msg(conn.send_and_get_reply(
-      new_method_call(addr, "CreateSession", "sa{sv}", (mac, {"Target": ("s", "image"), "L2CAP": ("q", int(port))})),
+      new_method_call(client, "CreateSession", "sa{sv}", (mac, {"Target": ("s", "bip-avrcp"), "PSM": ("q", int(port))})),
       timeout=5,
     ))[0]
-    img = DBusAddress(sess, "org.bluez.obex", "org.bluez.obex.Image1")
-    tmp = dest + ".tmp"
-    unwrap_msg(conn.send_and_get_reply(
-      new_method_call(img, "Get", "ssa{sv}", (tmp, handle, {})),
-      timeout=8,
-    ))
-    os.replace(tmp, dest)
+    # obexd writes as root; stage in our own dir, then copy so the UI file is ours
+    os.makedirs(staging, exist_ok=True)
+    os.chmod(staging, 0o777)
+    tmp = os.path.join(staging, "art")
+    if os.path.exists(tmp):
+      os.unlink(tmp)
+    img = DBusAddress(sess, OBEX, OBEX + ".Image1")
+    xfer = unwrap_msg(conn.send_and_get_reply(new_method_call(img, "GetThumbnail", "ss", (tmp, handle)), timeout=8))[0]
+    st = _wait_transfer(conn, xfer, 8.0, sleep=sleep)
+    if st != "complete" or not os.path.isfile(tmp) or os.path.getsize(tmp) == 0:
+      log(f"dpb nowplaying: cover art transfer {st}")
+      return None
+    with open(tmp, "rb") as f:
+      data = f.read()
+    os.unlink(tmp)
+    part = dest + ".tmp"
+    with open(part, "wb") as f:
+      f.write(data)
+    os.replace(part, dest)
     return dest
   except Exception as e:
     log(f"dpb nowplaying: cover art skipped, {e!r}")
     return None
   finally:
     if conn is not None:
+      if sess is not None:
+        try:
+          conn.send_and_get_reply(new_method_call(client, "RemoveSession", "o", (sess,)), timeout=2)
+        except Exception:
+          pass
       try:
         conn.close()
       except Exception:
+        pass
+
+
+def prune_art(keep: str | None, prefix: str = ART_PREFIX):
+  d, base = os.path.split(prefix)
+  try:
+    names = os.listdir(d)
+  except OSError:
+    return
+  for n in names:
+    p = os.path.join(d, n)
+    if n.startswith(base + "-") and n.endswith(".jpg") and p != keep:
+      try:
+        os.unlink(p)
+      except OSError:
         pass
 
 
@@ -366,6 +428,7 @@ def publish(objects, get_pos, fetch, prev: dict, log, aplay_running=True, contro
 
 def run(bz, log, sleep=time.sleep, clock=time.monotonic, engaged_fn=lambda: False, aplay_fn=aplay_is_running):
   prev, last_cmd, last_t, control_error, control_until = {}, None, None, False, 0.0
+  failed: dict[str, float] = {}
   write_state(EMPTY)
   try:
     while True:
@@ -388,7 +451,17 @@ def run(bz, log, sleep=time.sleep, clock=time.monotonic, engaged_fn=lambda: Fals
         def get_pos(path, _bz=bz):
           return _bz.get(path, PLAYER_IF, "Position")
         def art(path, handle, _bz=bz, _log=log):
-          return fetch_art(_bz, path, handle, ART_PATH, _log)
+          # a failed handle waits ART_RETRY_S instead of blocking every poll
+          if clock() < failed.get(handle, 0.0):
+            return None
+          got = fetch_art(_bz, path, handle, art_path(handle), _log)
+          if got is None:
+            if len(failed) > 64:
+              failed.clear()
+            failed[handle] = clock() + ART_RETRY_S
+          else:
+            prune_art(got)
+          return got
         prev = publish(objects, get_pos, art, prev, log, aplay_fn(), control_error)
       except Exception as e:
         log(f"dpb nowplaying: {e!r}, retrying")

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Install the Bluetooth userspace on a comma 4 running the dpbridge kernel: firmware, bluez, bluez-obexd,
+# Install the Bluetooth userspace on a comma 4 running the dpbridge kernel: firmware, the dpbridge BlueZ build,
 # bluez-alsa, bonds kept on /data, and the services that attach the chip and play A2DP on the speaker.
-# Packages are apt-get download + dpkg --ignore-depends=udev --force-confold, skipped if their files are present.
+# Debs are kept on /data and installed with dpkg --ignore-depends=udev --force-confold, skipped if present.
 # Never apt-get install, never apt --fix-broken, never install udev. An AGNOS update undoes the rootfs changes.
 # Prints the plan only unless --yes.
 set -euo pipefail
@@ -9,6 +9,7 @@ YES=0
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 [ "${1:-}" = --yes ] && YES=1
+HERE=$(cd "$(dirname "$0")" && pwd)
 put() { echo "+ write $1"; if [ $YES = 1 ]; then $SUDO tee "$1" > /dev/null; else cat > /dev/null; fi; }
 
 [ -e /sys/module/hci_uart/parameters/wcn3990 ] || die "running kernel has no WCN3990 support, flash the dpbridge boot.img first"
@@ -17,6 +18,8 @@ put() { echo "+ write $1"; if [ $YES = 1 ]; then $SUDO tee "$1" > /dev/null; els
 [ $YES = 1 ] || echo "dry run: pass --yes to install"
 
 MNT=/tmp/dpbridge-btimg
+# obexd exits without one server plugin and transport; OPP stays, rejected with no agent
+OBEX_OFF=pcsuite,ftp,irmc,pbap,mas,mns
 # umount fails once the success path has unmounted; it must not stop the teardown or the exit status
 trap 'if [ $YES = 1 ]; then $SUDO umount "$MNT" 2> /dev/null || true; $SUDO /usr/comma/apt_teardown.sh; fi' EXIT
 run $SUDO /usr/comma/apt_setup.sh
@@ -43,28 +46,63 @@ if [ $YES = 1 ]; then (cd /lib/firmware/qca && sha256sum -c --quiet "$DIR/qca.sh
 # AGNOS has no udev package, and apt is already broken on netplan/network-manager needing udev.
 # Never apt-get install, never apt --fix-broken, never install real udev.
 # /var is tmpfs and apt_setup.sh resets the dpkg database from /usr/default, so dpkg never remembers these;
-# check the installed files instead. Same download + dpkg method and list already used on this comma.
-PKGS="bluez bluez-obexd bluez-alsa-utils libasound2-plugin-bluez libical3t64 libldacbt-abr2 libldacbt-enc2 libsbc1"
+# check the installed files instead. Every deb is kept on /data, so after an AGNOS update this reinstalls offline.
+# BlueZ is the dpbridge build pinned in bluez/bluez.env (experimental API, obexd with BIP, no Evolution libs);
+# the rest are noble debs from apt.
+# shellcheck source=bluez/bluez.env
+source "$HERE/bluez/bluez.env"
+DEBS=$DIR/debs
+BZ=$DEBS/bluez-$BLUEZ_VER
+PKGS="bluez-alsa-utils libasound2-plugin-bluez libical3t64 libldacbt-abr2 libldacbt-enc2 libsbc1"
 L=/usr/lib/aarch64-linux-gnu
 MARKS="/usr/libexec/bluetooth/bluetoothd /usr/libexec/bluetooth/obexd /usr/bin/bluealsa /usr/bin/bluealsa-aplay
 $L/alsa-lib/libasound_module_pcm_bluealsa.so $L/libical.so.3 $L/libldacBT_abr.so.2 $L/libldacBT_enc.so.2 $L/libsbc.so.1"
+
+# release tarball on /data, sha pinned in git; a copy pushed by deliver.sh skips the download
+bluez_debs() {
+  $SUDO mkdir -p "$DEBS"
+  if [ ! -f "$DEBS/$BLUEZ_TAR" ] || [ "$(fsha "$DEBS/$BLUEZ_TAR")" != "$BLUEZ_SHA" ]; then
+    $SUDO curl -fL --retry 5 --retry-delay 3 -C - -o "$DEBS/$BLUEZ_TAR.part" "$BLUEZ_URL" || die "BlueZ download failed: $BLUEZ_URL"
+    [ "$(fsha "$DEBS/$BLUEZ_TAR.part")" = "$BLUEZ_SHA" ] || { $SUDO rm -f "$DEBS/$BLUEZ_TAR.part"; die "$BLUEZ_TAR does not match bluez.env"; }
+    $SUDO mv "$DEBS/$BLUEZ_TAR.part" "$DEBS/$BLUEZ_TAR"
+  fi
+  $SUDO rm -rf "$BZ"
+  $SUDO mkdir -p "$BZ"
+  $SUDO tar -xf "$DEBS/$BLUEZ_TAR" -C "$BZ"
+  (cd "$BZ" && sha256sum -c --quiet SHA256SUMS) || die "debs in $BLUEZ_TAR are damaged"
+}
+
+# noble debs, downloaded once into $DEBS/apt
+apt_debs() {
+  local p
+  for p in $PKGS; do
+    compgen -G "$DEBS/apt/${p}_*_arm64.deb" > /dev/null || { $SUDO apt-get update && break; }
+  done
+  $SUDO mkdir -p "$DEBS/apt"
+  for p in $PKGS; do
+    compgen -G "$DEBS/apt/${p}_*_arm64.deb" > /dev/null || (cd "$DEBS/apt" && $SUDO apt-get download "$p")
+  done
+}
+
 missing=""
 for f in $MARKS; do [ -e "$f" ] || missing="$missing $f"; done
+have=$(/usr/libexec/bluetooth/bluetoothd --version 2> /dev/null || true)
+[ "$have" = "$BLUEZ_VER" ] || missing="$missing bluetoothd-$BLUEZ_VER(have ${have:-none})"
 if [ -z "$missing" ]; then
-  echo "  bluetooth packages already on the rootfs"
+  echo "  bluetooth packages already on the rootfs, BlueZ $have"
 else
   echo "  missing:$missing"
-  run $SUDO apt-get update
-  echo "+ apt-get download $PKGS"
-  echo "+ dpkg --ignore-depends=udev --force-confold -i /tmp/dpbridge-debs/*.deb"
+  echo "+ BlueZ $BLUEZ_VER from $DEBS/$BLUEZ_TAR (sha $BLUEZ_SHA)"
+  echo "+ apt-get download $PKGS into $DEBS/apt (once)"
+  echo "+ dpkg --ignore-depends=udev --force-confold -i $BZ/*.deb $DEBS/apt/*.deb"
   if [ $YES = 1 ]; then
-    $SUDO mkdir -p /tmp/dpbridge-debs
-    $SUDO rm -f /tmp/dpbridge-debs/*.deb
-    # shellcheck disable=SC2086  # PKGS is a list of package names
-    (cd /tmp/dpbridge-debs && $SUDO apt-get download $PKGS)
+    bluez_debs
+    apt_debs
     # something can remount / read-only while apt runs; make sure it is writable for dpkg
     $SUDO mount -o rw,remount /
-    $SUDO dpkg --ignore-depends=udev --force-confold -i /tmp/dpbridge-debs/*.deb
+    $SUDO dpkg --ignore-depends=udev --force-confold -i "$BZ"/*.deb "$DEBS"/apt/*.deb
+    have=$(/usr/libexec/bluetooth/bluetoothd --version 2> /dev/null || true)
+    [ "$have" = "$BLUEZ_VER" ] || die "bluetoothd is ${have:-missing} after install, wanted $BLUEZ_VER"
   fi
 fi
 
@@ -75,7 +113,7 @@ run $SUDO mkdir -p "$DIR/bluetooth"
 
 # shows up on phones as car audio
 run $SUDO sed -i 's/^#\? *Class *=.*/Class = 0x240414/' /etc/bluetooth/main.conf
-# 5.72 has no MediaPlayer1 ObexPort; Experimental + obexd still enable whatever this build exposes
+# MediaPlayer1 ObexPort and ImgHandle (cover art) are experimental; also -E in the unit below
 run $SUDO sed -i 's/^#\? *Experimental *=.*/Experimental = true/' /etc/bluetooth/main.conf
 if [ $YES = 1 ]; then
   grep -q '^Experimental = true' /etc/bluetooth/main.conf || echo 'Experimental = true' | $SUDO tee -a /etc/bluetooth/main.conf >/dev/null
@@ -111,6 +149,26 @@ put /etc/systemd/system/bluetooth.service.d/dpbridge.conf <<UNIT
 [Unit]
 After=dpbridge-bt.service
 Requires=dpbridge-bt.service
+[Service]
+ExecStart=
+ExecStart=/usr/libexec/bluetooth/bluetoothd -E
+UNIT
+
+# cover art: obexd as root on the system bus (5.83 -s) so nowplaying needs no session bus.
+# PBAP, MAP and FTP servers off; only the BIP client is used.
+put /etc/systemd/system/dpbridge-obex.service <<UNIT
+[Unit]
+Description=dpbridge: obexd for AVRCP cover art
+After=bluetooth.service
+Requires=bluetooth.service
+PartOf=bluetooth.service
+
+[Service]
+Type=dbus
+BusName=org.bluez.obex
+ExecStart=/usr/libexec/bluetooth/obexd -n -s -P $OBEX_OFF
+Restart=on-failure
+RestartSec=5
 UNIT
 
 # the comma only receives audio
@@ -140,8 +198,7 @@ ExecStart=
 ExecStart=/usr/bin/bluealsa-aplay -D dpb_a2dp
 UNIT
 
-# radio helper: the Settings toggle starts and stops the four units; no remount for start/stop
-HERE=$(dirname "$0")
+# radio helper: the Settings toggle starts and stops the units; no remount for start/stop
 if [ -x "$HERE/radio.sh" ]; then
   run $SUDO cp "$HERE/radio.sh" "$DIR/radio.sh"
   run $SUDO chmod 0755 "$DIR/radio.sh"
@@ -164,8 +221,8 @@ UNIT
 
 run $SUDO systemctl daemon-reload
 # apt enables these on install and they pull in dpbridge-bt; the helper starts them when the toggle is on
-run $SUDO systemctl disable bluetooth.service bluealsa.service bluealsa-aplay.service
-run $SUDO systemctl stop bluetooth.service bluealsa.service bluealsa-aplay.service
+run $SUDO systemctl disable bluetooth.service bluealsa.service bluealsa-aplay.service dpbridge-obex.service
+run $SUDO systemctl stop bluetooth.service bluealsa.service bluealsa-aplay.service dpbridge-obex.service
 run $SUDO systemctl enable dpbridge-radio.service
 if [ $YES = 1 ]; then
   run $SUDO systemctl restart dpbridge-radio.service || run $SUDO systemctl start dpbridge-radio.service

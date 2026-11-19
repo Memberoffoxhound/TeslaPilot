@@ -5,7 +5,7 @@ set -euo pipefail
 DIR="${DPBRIDGE_DIR:-/data/dpbridge}"
 PARAM="${DPB_BLUETOOTH_PARAM:-/data/params/d/DpbBluetooth}"
 HCI0="${DPB_HCI0:-/sys/class/bluetooth/hci0}"
-UNITS="${DPB_UNITS:-dpbridge-bt bluetooth bluealsa bluealsa-aplay}"
+UNITS="${DPB_UNITS:-dpbridge-bt bluetooth dpbridge-obex bluealsa bluealsa-aplay}"
 SYSTEMCTL="${DPB_SYSTEMCTL:-systemctl}"
 INSTALL="${DPB_INSTALL:-}"
 

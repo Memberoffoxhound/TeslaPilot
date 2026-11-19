@@ -191,3 +191,81 @@ def test_error_mapping(tmp_path, monkeypatch):
   objects = {**_player({"Title": "Song", "Duration": 1000}), **_transport()}
   assert publish(objects, None, lambda p, h: None, {}, lambda m: None, aplay_running=False)["error"] == "aplay not running"
   assert publish(objects, None, lambda p, h: None, {}, lambda m: None, control_error=True)["error"] == "control failed"
+
+
+class FakeObex:
+  # obexd on the system bus: CreateSession, GetThumbnail writes the file, Transfer1 Status, RemoveSession
+  def __init__(self, data=b"\xff\xd8jpeg", status="complete"):
+    self.calls, self.data, self.status, self.closed = [], data, status, False
+
+  def send_and_get_reply(self, msg, timeout=None):
+    from jeepney import new_method_return
+    h = msg.header.fields
+    member = h[3]
+    body = msg.body
+    self.calls.append((member, body))
+    if member == "CreateSession":
+      return new_method_return(msg, "o", ("/org/bluez/obex/client/session0",))
+    if member == "GetThumbnail":
+      if self.data is not None:
+        Path(body[0]).write_bytes(self.data)
+      return new_method_return(msg, "oa{sv}", ("/org/bluez/obex/client/session0/transfer0", {}))
+    if member == "Get":
+      return new_method_return(msg, "v", (("s", self.status),))
+    return new_method_return(msg)
+
+  def close(self):
+    self.closed = True
+
+
+class FakeBz:
+  def __init__(self, port=0x1001):
+    self.port = port
+
+  def get(self, path, iface, prop):
+    if prop == "ObexPort":
+      if self.port is None:
+        raise RuntimeError("no such property")
+      return self.port
+    if prop == "Device":
+      return "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+    raise KeyError(prop)
+
+
+def test_fetch_art_uses_bip_avrcp_psm_and_thumbnail(tmp_path):
+  from openpilot.system.dpbridge.nowplaying import fetch_art
+  obex, dest = FakeObex(), str(tmp_path / "art-1.jpg")
+  got = fetch_art(FakeBz(), "/p", "1000001", dest, lambda m: None, conn_fn=lambda: obex,
+                  staging=str(tmp_path / "st"), sleep=lambda s: None)
+  assert got == dest and Path(dest).read_bytes() == b"\xff\xd8jpeg"
+  members = [c[0] for c in obex.calls]
+  assert members == ["CreateSession", "GetThumbnail", "Get", "RemoveSession"] and obex.closed
+  mac, opts = obex.calls[0][1]
+  assert mac == "AA:BB:CC:DD:EE:FF" and opts == {"Target": ("s", "bip-avrcp"), "PSM": ("q", 0x1001)}
+  assert obex.calls[1][1][1] == "1000001"
+  assert not (tmp_path / "st" / "art").exists()
+
+
+def test_fetch_art_placeholder_without_obexport_or_on_error(tmp_path):
+  from openpilot.system.dpbridge.nowplaying import fetch_art
+  dest = str(tmp_path / "a.jpg")
+  st = str(tmp_path / "st")
+  # 5.72: no ObexPort property
+  assert fetch_art(FakeBz(port=None), "/p", "1", dest, lambda m: None, conn_fn=lambda: FakeObex(), staging=st) is None
+  assert fetch_art(FakeBz(), "/p", "", dest, lambda m: None, conn_fn=lambda: FakeObex(), staging=st) is None
+  bad = FakeObex(status="error")
+  assert fetch_art(FakeBz(), "/p", "1", dest, lambda m: None, conn_fn=lambda: bad, staging=st, sleep=lambda s: None) is None
+  assert bad.calls[-1][0] == "RemoveSession" and not Path(dest).exists()
+  empty = FakeObex(data=b"")
+  assert fetch_art(FakeBz(), "/p", "1", dest, lambda m: None, conn_fn=lambda: empty, staging=st, sleep=lambda s: None) is None
+
+
+def test_art_path_per_handle_and_prune(tmp_path):
+  from openpilot.system.dpbridge.nowplaying import art_path, prune_art
+  pre = str(tmp_path / "dpbridge-art")
+  a, b = art_path("1000001", pre), art_path("1000002", pre)
+  assert a != b and a.endswith(".jpg") and art_path("../x y", pre) == f"{pre}-xy.jpg"
+  Path(a).write_bytes(b"a")
+  Path(b).write_bytes(b"b")
+  prune_art(b, pre)
+  assert not Path(a).exists() and Path(b).exists()
