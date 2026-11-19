@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import os
 import functools
 import math
 import time
@@ -20,6 +21,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state, ChestnutState
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.widgets.trip_row import GREY, WHITE, draw_trip_row, fmt_trip
 from openpilot.selfdrive.ui.mici.widgets.nowplaying import NowPlayingCard
+from openpilot.system.dpbridge.radio_status import PATH as BT_RADIO, read as read_bt_radio
 from openpilot.selfdrive.ui.mici.widgets.vehicle_profile import MAKES, make as car_make
 from openpilot.common.version import RELEASE_BRANCHES
 
@@ -27,6 +29,7 @@ HOME_PADDING = 8
 ALERTS_ZONE_WIDTH = 180
 MICI_WORDMARK_SIZE = 80
 SSA_ICON_SIZE = 48
+BT_ICON_SIZE = (32, 48)
 
 
 def _wordmark_font() -> rl.Font:
@@ -283,6 +286,7 @@ class MiciHomeLayout(Widget):
 
     self._long_badge = LongModeBadge()
     self._tits_badge = TitsBadge()
+    self._bt_icon = IconWidget("icons_mici/bluetooth.png", BT_ICON_SIZE, opacity=0.9)
     self._usb_icon = IconWidget("icons_mici/usb.png", (62, 40))
     self._chestnut_icon = IconWidget("icons_mici/chestnut_green.png", (54, 40))
     self._chestnut_loading_icon = IconWidget("icons_mici/chestnut.png", (68, 40))
@@ -300,6 +304,7 @@ class MiciHomeLayout(Widget):
     self._status_bar_layout = HBoxLayout([
       IconWidget("icons_mici/settings.png", (48, 48), opacity=0.9),
       NetworkIcon(),
+      self._bt_icon,
       self._long_badge,
       self._tits_badge,
       self._usb_icon,
@@ -320,6 +325,9 @@ class MiciHomeLayout(Widget):
     self._week_txt = ("Week", "0mi 0%")
     self._trip_hit = rl.Rectangle(0, 0, 0, 0)
     self._on_stats_click: Callable | None = None
+    self._bt_on = False
+    self._bt_connected = False
+    self._bt_radio_mtime = None
     self._ssa_on = False
     self._ssa_hit = rl.Rectangle(0, 0, 0, 0)
     self._on_ssa_click: Callable | None = None
@@ -342,6 +350,20 @@ class MiciHomeLayout(Widget):
     self._week_txt = ("Week", fmt_trip(t["week_m"], t["week_e"], ui_state.is_metric))
     self._ssa_on = ui_state.params.get_bool("SetSpeedAssist")
     self._tits_on = ui_state.params.get_bool("Mads")
+    self._bt_on = ui_state.params.get_bool("DpbBluetooth")
+    self._refresh_bt_radio()
+
+
+  def _refresh_bt_radio(self):
+    try:
+      mtime = os.stat(BT_RADIO).st_mtime
+    except OSError:
+      self._bt_connected, self._bt_radio_mtime = False, None
+      return
+    if mtime == self._bt_radio_mtime:
+      return
+    self._bt_radio_mtime = mtime
+    self._bt_connected = read_bt_radio(BT_RADIO)["connected"]
 
   def set_callbacks(self, on_settings: Callable | None = None, on_alerts: Callable | None = None,
                     on_stats: Callable | None = None,
@@ -462,6 +484,8 @@ class MiciHomeLayout(Widget):
     self._body_icon.set_visible(bool(ui_state.is_body))
     self._ssa_icon.set_visible(self._ssa_on and bool(ui_state.has_longitudinal_control))
     self._tits_badge.set_visible(self._tits_on)
+    self._bt_icon.set_visible(self._bt_on)
+    self._bt_icon.set_opacity(0.9 if self._bt_connected else 0.5)
 
     footer_rect = rl.Rectangle(self.rect.x + HOME_PADDING, self.rect.y + self.rect.height - 48, self.rect.width - HOME_PADDING, 48)
     self._status_bar_layout.render(footer_rect)

@@ -1,6 +1,6 @@
 from openpilot.common.params import Params
 from openpilot.system.ui.widgets.scroller import NavScroller
-from openpilot.selfdrive.ui.mici.widgets.button import BigButton
+from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigParamControl
 from openpilot.selfdrive.ui.mici.layouts.settings.toggles import TogglesLayoutMici, ThemeLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.network.network_layout import NetworkLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.device.device_layout import DeviceLayoutMici
@@ -9,11 +9,17 @@ from openpilot.selfdrive.ui.mici.layouts.settings.software import SoftwareLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.firehose import FirehoseLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.stats import StatsLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.models import ModelsLayoutMici
-from openpilot.selfdrive.ui.mici.layouts.settings.bluetooth import BluetoothLayoutMici, bt_available
+from openpilot.selfdrive.ui.mici.layouts.settings.bluetooth import BluetoothUIMici, bt_supported
+from openpilot.system.dpbridge.radio_status import read as read_bt_radio
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 
 
 class SettingsBigButton(BigButton):
+  def _get_label_font_size(self):
+    return 64
+
+
+class SettingsBigParamControl(BigParamControl):
   def _get_label_font_size(self):
     return 64
 
@@ -43,11 +49,16 @@ class SettingsLayout(NavScroller):
     network_btn = SettingsBigButton("network", "", gui_app.texture("icons_mici/settings/network/wifi_strength_full.png", 76, 56))
     network_btn.set_click_callback(lambda: gui_app.push_widget(network_panel))
 
-    # dpbridge: label only, shown once the dpbridge kernel brings up hci0
-    bluetooth_panel = BluetoothLayoutMici()
-    bluetooth_btn = SettingsBigButton("bluetooth", "")
-    bluetooth_btn.set_click_callback(lambda: gui_app.push_widget(bluetooth_panel))
-    bluetooth_btn.set_visible(bt_available)
+    # dpbridge: toggle under network; devices entry only while the radio is on
+    self._bt_toggle = SettingsBigParamControl(
+      "bluetooth", "DpbBluetooth",
+      description="Use Bluetooth to pair a phone for audio, or DashKit.",
+    )
+    self._bt_toggle.set_visible(bt_supported)
+    bluetooth_panel = BluetoothUIMici()
+    self._devices_btn = SettingsBigButton("devices", "not connected")
+    self._devices_btn.set_click_callback(lambda: gui_app.push_widget(bluetooth_panel))
+    self._devices_btn.set_visible(lambda: bt_supported() and self._params.get_bool("DpbBluetooth"))
 
     self._device_panel = DeviceLayoutMici()
     self._device_button = SettingsBigButton("device", "", gui_app.texture("icons_mici/settings/device_icon.png", 72, 58))
@@ -71,7 +82,8 @@ class SettingsLayout(NavScroller):
       stats_btn,
       models_btn,
       network_btn,
-      bluetooth_btn,
+      self._bt_toggle,
+      self._devices_btn,
       self._device_button,
       software_btn,
       firehose_btn,
@@ -79,6 +91,11 @@ class SettingsLayout(NavScroller):
     ])
 
     self._font_medium = gui_app.font(FontWeight.MEDIUM)
+
+  def _update_state(self):
+    super()._update_state()
+    st = read_bt_radio()
+    self._devices_btn.set_value(st["name"] if st["connected"] and st["name"] else "not connected")
 
   @property
   def stats_layout(self):

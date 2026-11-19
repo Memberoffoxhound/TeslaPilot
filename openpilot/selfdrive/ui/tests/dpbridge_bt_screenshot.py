@@ -71,10 +71,10 @@ def shoot(name, params, status, available=True):
   FakeParams.store = dict(params, DpbStatus=status)
   bluetooth.bt_available = lambda: available
   gui_app._nav_stack.clear()
-  page = bluetooth.BluetoothLayoutMici()
+  page = bluetooth.BluetoothUIMici()
   gui_app.push_widget(page)
   if name == "pair_dialog":
-    gui_app.push_widget(bluetooth.ChoicePage(bluetooth.PAIR_NOTE, [("pair", lambda: None)]))
+    gui_app.push_widget(bluetooth.ChoicePage(["Does your phone show 482 913?"], [("pair", lambda: None), ("cancel", lambda: None)]))
   frames(60)
   top = gui_app._nav_stack[-1]  # the phone code page pushes itself on top
   scroller = top._scroller
