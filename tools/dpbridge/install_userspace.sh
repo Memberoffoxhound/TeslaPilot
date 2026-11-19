@@ -25,7 +25,7 @@ KSH=(bash "$HERE/kernel.sh")
 
 # the kernel step, last: flash the inactive slot when the stock kernel runs; 0 = rebooting needed
 kernel_step() {
-  local st a=(flash --no-reboot)
+  local st a=(flash)
   st=$($SUDO "${KSH[@]}" status | sed -n 's/^state=//p')
   case $st in
     ok) echo "  dpbridge kernel running"; return 1 ;;
@@ -290,6 +290,7 @@ if kernel_step; then
   teardown
   trap - EXIT
   echo "installed. rebooting into the dpbridge kernel"
+  progress rebooting 100
   $SUDO "$REBOOT"
   exit 0
 fi

@@ -211,7 +211,7 @@ def run_kernel_step(tmp_path, state, yes=1, reflash=0, flash_rc=0):
 
 def test_kernel_step_flashes_stock_and_reboots_last(tmp_path):
   r, log = run_kernel_step(tmp_path, 'offer')
-  assert r.returncode == 0 and r.stdout.strip().endswith('REBOOT') and log == ['status', 'flash --no-reboot --yes']
+  assert r.returncode == 0 and r.stdout.strip().endswith('REBOOT') and log == ['status', 'flash --yes']
 
 
 def test_kernel_step_leaves_a_running_or_disabled_kernel_alone(tmp_path):
@@ -228,7 +228,7 @@ def test_kernel_step_reflash_overrides_off_and_failed(tmp_path):
     d = tmp_path / st
     d.mkdir()
     r, log = run_kernel_step(d, st, reflash=1)
-    assert 'REBOOT' in r.stdout and log[-1] == 'flash --no-reboot --yes --retry'
+    assert 'REBOOT' in r.stdout and log[-1] == 'flash --yes --retry'
 
 
 def test_kernel_step_failure_stops_install_without_reboot(tmp_path):
@@ -238,7 +238,7 @@ def test_kernel_step_failure_stops_install_without_reboot(tmp_path):
 
 def test_kernel_step_dry_run_never_reboots(tmp_path):
   r, log = run_kernel_step(tmp_path, 'offer', yes=0)
-  assert 'NOREBOOT' in r.stdout and log == ['status', 'flash --no-reboot']
+  assert 'NOREBOOT' in r.stdout and log == ['status', 'flash']
 
 
 def test_install_steps_and_reboot_is_last():
@@ -247,4 +247,5 @@ def test_install_steps_and_reboot_is_last():
   assert steps == ['1', '2', '3', '4']
   tail = text[text.index('echo "[4/4] kernel"'):]
   assert tail.index('teardown') < tail.index('$SUDO "$REBOOT"')
+  assert tail.index('progress rebooting 100') < tail.index('$SUDO "$REBOOT"')  # the last progress line
   assert 'post-boot' in text[:text.index('echo "[2/4]')]

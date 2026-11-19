@@ -1,7 +1,9 @@
 # Runs flash_boot.sh and restore_boot.sh against fake partitions (plain files) with a fake abctl.
 import json
 import os
+import signal
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -278,7 +280,9 @@ def test_kernel_status_offers_on_stock(dev):
   r = run('kernel.sh', e, 'status')
   assert r.returncode == 0, r.stderr
   st = kv(r.stdout)
-  assert st['state'] == 'offer' and st['slot'] == '_a' and st['target'] == '_b' and st['image'] == 'missing' and st['sha'] == sha
+  assert st['state'] == 'offer' and st['sha'] == sha and st['agnos'] == '20.6'
+  # only what is read: no slot, image or space keys (the 47 MB image is not hashed for status)
+  assert not {'slot', 'target', 'image', 'free_mb', 'need_mb', 'last'} & set(st)
 
 
 def run_on_dpbridge(tmp, parts, same=True):
@@ -328,7 +332,7 @@ def test_kernel_running_slot_is_hashed_once_per_boot(dev):
   assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'ok'
 
 
-def test_kernel_flash_downloads_checks_and_reboots_once(dev):
+def test_kernel_flash_downloads_checks_and_never_reboots(dev):
   tmp, parts, data, img, env = dev
   boot_a = (parts / 'boot_a').read_bytes()
   sha, e = kenv(dev)
@@ -337,7 +341,7 @@ def test_kernel_flash_downloads_checks_and_reboots_once(dev):
   assert (parts / 'boot_a').read_bytes() == boot_a
   assert (parts / 'boot_b').read_bytes().startswith((tmp / 'release/boot.img').read_bytes())
   log = ops(tmp)
-  assert log.count('reboot') == 1 and log[-1] == 'reboot' and 'abctl --set_active 1' in log
+  assert 'reboot' not in log and log[-1] == 'abctl --set_active 1'  # the installer reboots, not kernel.sh
   assert (data / 'kernel/pending').read_text().split() == [sha, '20.6', '_a', '_b']
 
 
@@ -347,17 +351,36 @@ def test_kernel_flash_progress_lines(dev):
   lines = [ln.split(': ', 1)[1] for ln in r.stdout.splitlines() if ln.startswith('  kernel: ')]
   pct = [int(ln.rsplit(' ', 1)[1].rstrip('%')) for ln in lines]
   steps = {ln.rsplit(' ', 1)[0] for ln in lines}
-  assert pct == sorted(pct) and lines[-1] == 'rebooting 100%'
-  assert {'downloading', 'verifying', 'backing up', 'writing slot b', 'reading back', 'switching slot', 'rebooting'} <= steps
+  assert pct == sorted(pct) and lines[-1] == 'switching slot 98%'
+  assert {'downloading', 'verifying', 'backing up', 'writing slot b', 'reading back', 'switching slot'} <= steps
   # dry runs print no progress
   assert '  kernel: ' not in run('kernel.sh', e, 'flash').stdout
 
 
-def test_kernel_flash_no_reboot(dev):
+def test_kernel_flash_has_no_reboot_path():
+  sh = (HERE / 'kernel.sh').read_text()
+  assert 'REBOOT' not in sh and 'rebooting' not in sh and '--no-reboot' not in sh
+
+
+def test_kernel_download_watcher_dies_with_the_script(dev):
   tmp = dev[0]
   sha, e = kenv(dev)
-  r = run('kernel.sh', e, 'flash', '--yes', '--no-reboot')
-  assert r.returncode == 0 and 'reboot' not in ops(tmp) and 'abctl --set_active 1' in ops(tmp)
+  # a curl that hangs; kernel.sh is killed hard mid-download
+  (tmp / 'bin/curl').write_text('#!/bin/bash\nexec sleep 30\n')
+  p = subprocess.Popen(['bash', str(HERE / 'kernel.sh'), 'flash', '--yes'], env=e, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, start_new_session=True)
+  time.sleep(1.5)
+  pids = subprocess.run(['pgrep', '-s', str(p.pid), '-f', 'kernel.sh'], capture_output=True, text=True).stdout.split()
+  assert len(pids) >= 2  # kernel.sh and its watcher subshell
+  os.kill(p.pid, signal.SIGKILL)
+  p.wait()
+  deadline = time.monotonic() + 5
+  while time.monotonic() < deadline and subprocess.run(['pgrep', '-s', str(p.pid), '-f', 'kernel.sh']).returncode == 0:
+    time.sleep(0.2)
+  try:
+    assert subprocess.run(['pgrep', '-s', str(p.pid), '-f', 'kernel.sh']).returncode != 0
+  finally:
+    subprocess.run(['pkill', '-9', '-s', str(p.pid)])  # the hung curl
 
 
 def test_kernel_flash_from_b_writes_a(dev):
@@ -411,7 +434,7 @@ def test_kernel_retry_overrides_disable(dev):
   tmp, parts, data, img, env = dev
   sha, e = kenv(dev)
   (data / 'disable').touch()
-  assert run('kernel.sh', e, 'flash', '--yes', '--retry').returncode == 0 and ops(tmp)[-1] == 'reboot'
+  assert run('kernel.sh', e, 'flash', '--yes', '--retry').returncode == 0 and ops(tmp)[-1] == 'abctl --set_active 1'
   assert (data / 'disable').exists()  # the radio's switch, left alone
 
 
@@ -463,7 +486,7 @@ def test_kernel_post_boot(dev, booted):
   else:
     assert (data / 'kernel/failed').exists()
     st = kv(run('kernel.sh', e, 'status').stdout)
-    assert st['last'] == 'failed' and st['state'] == 'failed'
+    assert st['state'] == 'failed'
     # no loop: the same image, AGNOS and slot is not flashed again without --retry
     before = snapshot(parts)
     r = run('kernel.sh', e, 'flash', '--yes')
@@ -488,7 +511,7 @@ def test_kernel_failed_flash_is_not_repeated(dev):
   assert (data / 'kernel/failed').read_text().split() == [sha, '20.6', '_a']
   assert not (data / 'kernel/pending').exists()
   assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'failed'
-  assert run('kernel.sh', e, 'flash', '--yes', '--retry').returncode == 0 and ops(tmp)[-1] == 'reboot'
+  assert run('kernel.sh', e, 'flash', '--yes', '--retry').returncode == 0 and ops(tmp)[-1] == 'abctl --set_active 1'
 
 
 def test_kernel_pending_is_written_before_any_write(dev):

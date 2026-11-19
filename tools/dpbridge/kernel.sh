@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Kernel flash, run only by install_userspace.sh (openpilot is down). No menu: every check is here.
 #   status              key=value lines (state=ok|outdated|off|offer|failed|pending|no_space|unsupported_*)
-#   flash [--yes] [--retry] [--no-reboot]  inactive slot only, read back, then one reboot. /data/dpbridge/disable
+#   flash [--yes] [--retry]  inactive slot only, read back, switch; the installer reboots. /data/dpbridge/disable
 #                       or a failed try for this image, AGNOS and slot stop it; --retry overrides
 #   post-boot [--yes]   after the reboot: record whether the new kernel came up
 set -euo pipefail
@@ -16,7 +16,6 @@ BOOT_ID=${DPB_BOOT_ID:-/proc/sys/kernel/random/boot_id}
 K=$DIR/kernel
 IMG=$DIR/boot.img
 KEEP=${DPB_KEEP_BACKUPS:-3}
-REBOOT=${DPB_REBOOT:-reboot}
 CURL=${DPB_CURL:-curl}
 
 model_ok() { grep -q mici < <(tr -d '\0' < "${DPB_MODEL:-/sys/firmware/devicetree/base/model}"); }
@@ -48,8 +47,7 @@ need_mb() {
 
 status() {
   mkdir -p "$DIR"
-  local cur st=offer
-  cur=$(abctl --boot_slot)
+  local st=offer
   if [ -e "$WCN" ]; then st=$(running_state)
   elif is_off; then st=off
   elif ! model_ok; then st=unsupported_device
@@ -59,21 +57,16 @@ status() {
   elif [ "$(free_mb)" -lt "$(need_mb)" ]; then st=no_space
   fi
   echo "state=$st"
-  echo "slot=$cur"
-  echo "target=$(other "$cur")"
   echo "agnos=$(agnos)"
   echo "image_agnos=$BOOT_AGNOS"
   echo "sha=$BOOT_SHA"
-  # the 47 MB image is only hashed when a flash could follow
-  case $st in offer | no_space | failed | pending) echo "image=$(image_state)"; echo "free_mb=$(free_mb)"; echo "need_mb=$(need_mb)" ;; esac
-  if [ -f "$K/ok" ]; then echo "last=ok"; elif [ -f "$K/failed" ]; then echo "last=failed"; fi
   return 0
 }
 
-# download 0-40%, from the .part size; a line per 10%
+# download 0-40%, from the .part size; a line per 4%. Ends with this script ($$ is the script's pid)
 watch_dl() {
   local s p last=-1
-  while sleep 1; do
+  while sleep 1 && kill -0 $$ 2> /dev/null; do
     s=$(stat -c %s "$IMG.part" 2> /dev/null || echo 0)
     p=$((s * 40 / BOOT_SIZE / 4 * 4))
     if [ "$p" != "$last" ]; then progress downloading "$p"; last=$p; fi
@@ -87,13 +80,13 @@ fetch() {
   progress downloading 0
   local w
   watch_dl & w=$!
+  # shellcheck disable=SC2064
+  trap "kill $w 2> /dev/null || true" EXIT
   # resume a partial download; nothing is flashed until the sha matches
-  if ! $CURL -fL --retry 5 --retry-delay 3 -C - -o "$IMG.part" "$BOOT_URL"; then
-    kill "$w" 2> /dev/null || true
-    die "download failed: $BOOT_URL"
-  fi
+  $CURL -fL --retry 5 --retry-delay 3 -C - -o "$IMG.part" "$BOOT_URL" || die "download failed: $BOOT_URL"
   kill "$w" 2> /dev/null || true
   wait "$w" 2> /dev/null || true
+  trap - EXIT
   progress verifying 40
   [ "$(stat -c %s "$IMG.part")" = "$BOOT_SIZE" ] || { rm -f "$IMG.part"; die "downloaded boot.img has the wrong size"; }
   [ "$(fsha "$IMG.part")" = "$BOOT_SHA" ] || { rm -f "$IMG.part"; die "downloaded boot.img does not match the pinned sha"; }
@@ -112,12 +105,11 @@ prune() {
 }
 
 flash() {
-  local a retry=0 reboot=1
+  local a retry=0
   for a in "$@"; do
     case $a in
       --yes) YES=1 ;;
       --retry) retry=1 ;;
-      --no-reboot) reboot=0 ;;
       *) die "unknown flash arg $a" ;;
     esac
   done
@@ -153,12 +145,9 @@ flash() {
     die "flash_boot.sh failed"
   fi
   prune
-  [ $YES = 1 ] || { echo "dry run: no reboot"; return 0; }
+  [ $YES = 1 ] || { echo "dry run: nothing switched"; return 0; }
   sync
-  if [ $reboot = 0 ]; then echo "flashed $oth, reboot to use it"; return 0; fi
-  progress rebooting 100
-  echo "rebooting into $oth"
-  $REBOOT
+  echo "flashed $oth, reboot to use it"
 }
 
 post_boot() {
@@ -179,5 +168,5 @@ case ${1:-} in
   fetch) fetch ;;
   flash) shift; flash "$@" ;;
   post-boot) shift; post_boot "$@" ;;
-  *) echo "usage: kernel.sh status|fetch|flash [--yes] [--retry] [--no-reboot]|post-boot [--yes]"; exit 2 ;;
+  *) echo "usage: kernel.sh status|fetch|flash [--yes] [--retry]|post-boot [--yes]"; exit 2 ;;
 esac
