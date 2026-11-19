@@ -62,7 +62,7 @@ public:
   // Panda functionality
   cereal::PandaState::PandaType get_hw_type();
   void set_safety_model(cereal::CarParams::SafetyModel safety_model, uint16_t safety_param=0U);
-  void set_alternative_experience(uint16_t alternative_experience);
+  void set_alternative_experience(uint16_t alternative_experience, uint16_t safety_param_sp = 0U);
   std::string serial_read(int port_number = 0);
   void set_fan_speed(uint16_t fan_speed);
   uint16_t get_fan_speed();
@@ -73,7 +73,7 @@ public:
   std::optional<std::vector<uint8_t>> get_firmware_version();
   bool up_to_date();
   void set_power_saving(bool power_saving);
-  void send_heartbeat(bool engaged);
+  void send_heartbeat(bool engaged, bool engaged_mads = false);
   void set_can_fd_auto(uint16_t bus, bool enabled);
   void can_send(const capnp::List<cereal::CanData>::Reader &can_data_list);
   bool can_receive(std::vector<can_frame>& out_vec);
