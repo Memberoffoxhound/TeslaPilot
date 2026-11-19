@@ -302,8 +302,9 @@ echo "[4/4] kernel"
 # / is read-only again before the flash mirrors system into the other slot
 teardown
 if kernel_step; then
-  # slot is already switched; if the car went onroad during the flash, wait for a normal power cycle
-  if onroad; then echo "flashed, reboot when parked"; exit 0; fi
+  # slot is already switched; hold the reboot if driving or if pgrep errors. the start check is unchanged
+  pg=0; pgrep -f '(^|/)manager\.py( |$)' > /dev/null || pg=$?
+  if [ $pg != 1 ] && [ "$(cat "${DPB_PARAMS:-/data/params/d}/IsOffroad" 2> /dev/null)" != 1 ]; then echo "flashed, reboot when parked"; exit 0; fi
   echo "installed. rebooting into the dpbridge kernel"
   progress rebooting 100
   $SUDO "$REBOOT"

@@ -125,11 +125,12 @@ def after_flash_block():
   return text[start:text.index('echo "installed. the Bluetooth toggle')]
 
 
-def run_reboot_recheck(tmp_path, manager, offroad, yes=1):
+def run_reboot_recheck(tmp_path, manager, offroad, yes=1, pgrep_rc=None):
   import os
   b = tmp_path / 'bin'
   b.mkdir()
-  (b / 'pgrep').write_text(f'#!/bin/sh\nexit {0 if manager else 1}\n')
+  rc = pgrep_rc if pgrep_rc is not None else (0 if manager else 1)
+  (b / 'pgrep').write_text(f'#!/bin/sh\nexit {rc}\n')
   (b / 'pgrep').chmod(0o755)
   (tmp_path / 'p').mkdir()
   if offroad is not None:
@@ -159,7 +160,15 @@ def test_reboot_waits_if_the_car_went_onroad(tmp_path, manager, offroad, parked)
 def test_onroad_is_rechecked_before_reboot():
   text = script_text()
   tail = text[text.index('echo "[4/4] kernel"'):]
-  assert tail.index('if onroad') < tail.index('flashed, reboot when parked') < tail.index('$SUDO "$REBOOT"')
+  assert tail.index('pg != 1') < tail.index('flashed, reboot when parked') < tail.index('$SUDO "$REBOOT"')
+
+
+def test_reboot_holds_if_pgrep_errors(tmp_path):
+  # pgrep exit 2 (or any error, not "no process") must not reboot
+  r = run_reboot_recheck(tmp_path, manager=False, offroad='0', pgrep_rc=2)
+  assert r.returncode == 0 and 'flashed, reboot when parked' in r.stdout
+  assert not (tmp_path / 'reboots').exists()
+  assert 'rebooting into the dpbridge kernel' not in r.stdout
 
 
 def test_radio_helper_is_installed_and_enabled():
