@@ -97,7 +97,9 @@ class SettingsLayout(NavScroller):
     st = read_bt_radio()
     self._devices_btn.set_value(st["name"] if st["connected"] and st["name"] else "not connected")
     # why Bluetooth went off by itself, until it is switched on again
-    self._bt_toggle.set_value(off_reason() if bt_supported() else "")
+    reason = off_reason() if bt_supported() else ""
+    if reason != self._bt_toggle.get_value():  # re-layout only on change
+      self._bt_toggle.set_value(reason)
 
   @property
   def stats_layout(self):

@@ -88,7 +88,33 @@ def test_toggle_and_devices_on_main_settings():
 
 def test_settings_shows_why_bluetooth_went_off():
   src = (SETTINGS / "settings.py").read_text()
-  assert 'self._bt_toggle.set_value(off_reason() if bt_supported() else "")' in src
+  assert 'reason = off_reason() if bt_supported() else ""' in src
+
+
+def test_toggle_sub_label_set_only_on_change():
+  # run the two lines against a fake toggle: set_value (a re-layout) only when the text changes
+  src = (SETTINGS / "settings.py").read_text()
+  start = src.index('    reason = off_reason()')
+  lines = src[start:].splitlines()[:3]
+  code = "\n".join(ln[4:] for ln in lines)
+
+  class Toggle:
+    def __init__(self):
+      self.value, self.sets = "", 0
+
+    def get_value(self):
+      return self.value
+
+    def set_value(self, v):
+      self.value, self.sets = v, self.sets + 1
+
+  t = Toggle()
+  me = types.SimpleNamespace(_bt_toggle=t)
+  texts = iter(["", "", "off: did not start twice", "off: did not start twice", "off: did not start twice", ""])
+  for _ in range(6):
+    reason_now = next(texts)
+    exec(code, {"off_reason": lambda r=reason_now: r, "bt_supported": lambda: True, "self": me})
+  assert t.sets == 2 and t.value == ""
 
 
 def test_home_icon_next_to_wifi():
