@@ -115,7 +115,7 @@ flash() {
     esac
   done
   [ -e "$WCN" ] && die "a dpbridge kernel is already running ($(running_state)); restore_boot.sh --yes and reboot first to change it"
-  model_ok || die "not a comma 4 (mici)"
+  model_ok || die "this device is not a comma 4 (mici), nothing downloaded"
   [ "$(agnos)" = "$BOOT_AGNOS" ] || die "AGNOS $(agnos) but the image is for $BOOT_AGNOS"
   if [ $retry = 0 ]; then
     is_off && die "kernel flash is off ($DIR/disable), pass --reflash to install"

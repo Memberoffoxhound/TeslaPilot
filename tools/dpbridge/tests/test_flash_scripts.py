@@ -398,7 +398,7 @@ def test_kernel_flash_from_b_writes_a(dev):
 @pytest.mark.parametrize('case, msg', [('bad_download', 'does not match the pinned sha'),
                                        ('short_download', 'wrong size'),
                                        ('agnos', 'AGNOS 20.7 but the image is for 20.6'),
-                                       ('model', 'not a comma 4 (mici)'),
+                                       ('model', 'this device is not a comma 4 (mici), nothing downloaded'),
                                        ('running_dpbridge', 'a dpbridge kernel is already running'),
                                        ('space', 'not enough space'), ('no_release', 'download failed'),
                                        ('disable', 'kernel flash is off')])
@@ -428,6 +428,8 @@ def test_kernel_flash_refuses(dev, case, msg):
   assert snapshot(parts) == before
   assert not [o for o in ops(tmp) if o.startswith(('dd ', 'abctl', 'reboot'))]
   assert not (data / 'boot.img').exists() or case not in ('bad_download', 'short_download')
+  if case in ('model', 'agnos', 'running_dpbridge', 'space', 'disable'):
+    assert not [o for o in ops(tmp) if o.startswith('curl')]  # refused before any download
 
 
 def test_kernel_retry_overrides_disable(dev):
