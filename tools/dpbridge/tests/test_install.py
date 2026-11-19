@@ -230,7 +230,7 @@ def test_btfw_env_and_layout():
   assert 'deliver.sh push' not in text
 
 
-def run_get_fw(tmp_path, files, tar_sha=None, have=None, pinned=None):
+def run_get_fw(tmp_path, files, tar_sha=None, have=None, pinned=None, curl=None):
   import hashlib
   import io
   import os
@@ -256,6 +256,8 @@ def run_get_fw(tmp_path, files, tar_sha=None, have=None, pinned=None):
   bin_.mkdir(exist_ok=True)
   (bin_ / 'curl').write_text('#!/bin/bash\nfor a; do case $a in file://*) u=${a#file://} ;; esac; done\n' +
                              f'while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done\necho "curl $u" >> {tmp_path}/curl.log\ncp "$u" "$out"\n')
+  if curl:
+    (bin_ / 'curl').write_text(curl)
   (bin_ / 'curl').chmod(0o755)
   data = tmp_path / 'data'
   data.mkdir(exist_ok=True)
@@ -292,12 +294,8 @@ def test_get_fw_refuses_bad_downloads(tmp_path):
 
 
 def test_get_fw_no_network_is_a_temporary_failure(tmp_path):
-  r, _ = run_get_fw(tmp_path, FW)  # writes the fake curl
-  (tmp_path / 'data/debs/fw.tar').unlink()
-  for f in FW:
-    (tmp_path / 'data' / f).unlink(missing_ok=True)
-  (tmp_path / 'rel/fw.tar').unlink()
-  (tmp_path / 'bin/curl').write_text('#!/bin/sh\nexit 6\n')  # could not resolve host
+  r, _ = run_get_fw(tmp_path, FW, curl='#!/bin/sh\nexit 6\n')  # could not resolve host
+  assert r.returncode == 75 and 'download failed: firmware' in r.stderr
   text = (HERE / 'install_userspace.sh').read_text()
   assert text.count('dl_fail "') == 4  # btfw, BlueZ, apt-get update, apt-get download
 
