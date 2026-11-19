@@ -381,7 +381,7 @@ def test_install_steps_and_reboot_is_last():
 def test_small_downloads_are_bounded(tmp_path):
   # btfw: the real curl call gets the stall flags and a 10 min cap per try
   logcurl = ('#!/bin/bash\necho "$*" > ' + f'{tmp_path}/args\n' +
-             'for a; do case $a in file://*) u=${a#file://} ;; esac; done\n'
+             'for a; do case $a in file://*) u=${a#file://} ;; esac; done\n' +
              'while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done\ncp "$u" "$out"\n')
   r, _ = run_get_fw(tmp_path, FW, curl=logcurl)
   assert r.returncode == 0, r.stderr
