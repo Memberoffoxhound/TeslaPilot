@@ -72,7 +72,7 @@ def livestream_encoder(started: bool, params: Params, CP: car.CarParams) -> bool
 
 # dpbridge: only on a comma running the dpbridge kernel; no hci0 means Bluetooth is off, not an error
 def bluetooth(started: bool, params: Params, CP: car.CarParams) -> bool:
-  return os.path.exists("/sys/class/bluetooth/hci0")
+  return params.get_bool("DpbBluetooth") and os.path.exists("/sys/class/bluetooth/hci0")
 
 def dashkit(started: bool, params: Params, CP: car.CarParams) -> bool:
   return started and params.get_bool("DashKitBridge") and bool(params.get("DashKitAddr")) and bluetooth(started, params, CP)
