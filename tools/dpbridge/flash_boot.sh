@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 # Put the dpbridge boot.img on the OTHER slot and make it active. The current slot is left stock, so
 # going back is one abctl call (restore_boot.sh). Prints the plan only unless --yes is given.
-# usage: flash_boot.sh [--yes] [boot.img]
+# --rotate: a backup left stale by an AGNOS update is moved to backup.stale-<time> instead of refusing.
+# usage: flash_boot.sh [--yes] [--rotate] [boot.img]
 set -euo pipefail
 YES=0
+ROTATE=0
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 IMG=$DIR/boot.img
 for a in "$@"; do
   case $a in
     --yes) YES=1 ;;
+    --rotate) ROTATE=1 ;;
     -*) echo "unknown flag $a"; exit 2 ;;
     *) IMG=$a ;;
   esac
@@ -29,13 +32,19 @@ isz=$(stat -c %s "$IMG")
 
 cur=$(abctl --boot_slot)
 oth=$(other "$cur")
+stale() {
+  [ $ROTATE = 1 ] || die "$1 (AGNOS update?). move $B aside and run again"
+  echo "$1, keeping the old backup"
+  run mv "$B" "$B.stale-$(date +%Y%m%d-%H%M%S)"
+}
+# never from the dpbridge slot: the other slot is the stock fallback
+[ "$(dsha "$P/boot$cur" "$isz")" = "$(fsha "$IMG")" ] && die "running the dpbridge slot $cur. run restore_boot.sh --yes and reboot first"
 if [ -f "$B/stock_slot" ]; then
   if [ "$(cat "$B/stock_slot")" != "$cur" ]; then
-    [ "$(dsha "$P/boot$cur" "$isz")" = "$(fsha "$IMG")" ] && die "running the dpbridge slot $cur. run restore_boot.sh --yes and reboot first"
-    die "boot slot changed since the last flash (AGNOS update?). move $B aside and run again"
+    stale "boot slot changed since the last flash"
+  elif ! grep -q "^$(dsha "$P/boot$cur" "$(size "$P/boot$cur")")  boot$cur.img" "$B/SHA256SUMS"; then
+    stale "boot$cur changed since the last backup"
   fi
-  grep -q "^$(dsha "$P/boot$cur" "$(size "$P/boot$cur")")  boot$cur.img" "$B/SHA256SUMS" ||
-    die "boot$cur changed since the last backup (AGNOS update?). move $B aside and run again"
 fi
 [ "$isz" -le "$(size "$P/boot$oth")" ] || die "image is larger than boot$oth"
 for n in $MIRROR; do

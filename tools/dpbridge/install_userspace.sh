@@ -12,7 +12,14 @@ source "$(dirname "$0")/lib.sh"
 HERE=$(cd "$(dirname "$0")" && pwd)
 put() { echo "+ write $1"; if [ $YES = 1 ]; then $SUDO tee "$1" > /dev/null; else cat > /dev/null; fi; }
 
-[ -e /sys/module/hci_uart/parameters/wcn3990 ] || die "running kernel has no WCN3990 support, flash the dpbridge boot.img first"
+# stock kernel: flash the dpbridge one (inactive slot only, one reboot, parked only); kerneld runs this again after
+WCN=${DPB_WCN:-/sys/module/hci_uart/parameters/wcn3990}
+if [ ! -e "$WCN" ]; then
+  echo "running the stock kernel, flashing the dpbridge boot.img first"
+  fl=(flash)
+  [ $YES = 1 ] && fl+=(--yes)
+  exec $SUDO bash "$HERE/kernel.sh" "${fl[@]}"
+fi
 [ -x "$DIR/attach.sh" ] || die "missing $DIR/attach.sh"
 (cd "$DIR" && sha256sum -c --quiet firmware.sha256) || die "BT firmware in $DIR missing or not the pinned files, run deliver.sh push"
 [ $YES = 1 ] || echo "dry run: pass --yes to install"

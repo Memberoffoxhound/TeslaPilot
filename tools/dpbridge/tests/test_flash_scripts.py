@@ -24,6 +24,11 @@ def ops(tmp):
   return log.read_text().splitlines() if log.exists() else []
 
 
+def writes(tmp):
+  # O_DIRECT reads are harmless; anything else is a write or an abctl call
+  return [o for o in ops(tmp) if not o.startswith('direct ')]
+
+
 def test_mirror_list_is_agnos_json_minus_boot():
   line = next(ln for ln in (HERE / 'flash_boot.sh').read_text().splitlines() if ln.startswith('MIRROR='))
   agnos = json.loads((HERE.parents[1] / 'openpilot/common/hardware/comma/agnos.json').read_text())
@@ -37,7 +42,7 @@ def test_dry_run_changes_nothing(dev):
   r = run('flash_boot.sh', env)
   assert r.returncode == 0, r.stderr
   assert 'dry run' in r.stdout and 'boot_b' in r.stdout
-  assert snapshot(parts) == before and not (data / 'backup').exists() and ops(tmp) == []
+  assert snapshot(parts) == before and not (data / 'backup').exists() and writes(tmp) == []
 
 
 def test_flash_writes_other_slot_only(dev):
@@ -111,7 +116,7 @@ def test_flash_refuses(dev, breakage):
   before = snapshot(parts)
   r = run('flash_boot.sh', env, '--yes')
   assert r.returncode != 0 and 'refusing' in r.stderr
-  assert snapshot(parts) == before and ops(tmp) == []
+  assert snapshot(parts) == before and writes(tmp) == []
 
 
 @pytest.mark.parametrize('target, msg', [('boot_b', 'boot_b readback mismatch'), ('system_b', 'system_b readback mismatch'),
@@ -147,13 +152,6 @@ def test_restore_refuses_damaged_backup(dev):
   (data / 'backup/boot_b.img').write_bytes(b'junk')
   r = run('restore_boot.sh', env, '--yes', '--write')
   assert r.returncode != 0 and 'damaged' in r.stderr
-
-
-def test_install_refuses_on_stock_kernel(dev):
-  if os.path.exists('/sys/module/hci_uart/parameters/wcn3990'):
-    pytest.skip('host has the dpbridge kernel')
-  r = run('install_userspace.sh', dev[4], '--yes')
-  assert r.returncode != 0 and 'flash the dpbridge boot.img' in r.stderr
 
 
 def test_dk_unpack_reads_only_dashkit_messages():
@@ -201,3 +199,240 @@ def test_flash_catches_abctl_failure(dev):
   (tmp / 'abctl_broken').touch()
   r = run('flash_boot.sh', env, '--yes')
   assert r.returncode != 0 and 'set_active 1 failed' in r.stderr
+
+
+@pytest.mark.parametrize('slot', ['_a', '_b'])
+def test_rotate_moves_stale_backup_and_flashes_other_slot(dev, slot):
+  tmp, parts, data, img, env = dev
+  assert run('flash_boot.sh', env, '--yes').returncode == 0
+  old_stock = (data / 'backup/boot_a.img').read_bytes()
+  (tmp / 'slot').write_text(f'{slot}\n')
+  (parts / f'boot{slot}').write_bytes(b'new agnos' + bytes(4 * MB - 9))
+  running = (parts / f'boot{slot}').read_bytes()
+  open(tmp / 'ops.log', 'w').close()
+  r = run('flash_boot.sh', env, '--yes', '--rotate')
+  assert r.returncode == 0, r.stderr
+  oth = '_b' if slot == '_a' else '_a'
+  assert (parts / f'boot{slot}').read_bytes() == running  # never the running slot
+  assert (parts / f'boot{oth}').read_bytes().startswith(img.read_bytes())
+  stale = [p for p in data.iterdir() if p.name.startswith('backup.stale-')]
+  assert len(stale) == 1 and (stale[0] / 'boot_a.img').read_bytes() == old_stock
+  assert (data / 'backup/stock_slot').read_text().strip() == slot
+  assert not any(o.startswith('dd ') and o.endswith(f'/boot{slot}') for o in ops(tmp))
+
+
+def test_rotate_still_refuses_from_dpbridge_slot(dev):
+  tmp, parts, data, img, env = dev
+  assert run('flash_boot.sh', env, '--yes').returncode == 0
+  (tmp / 'slot').write_text('_b\n')
+  before = snapshot(parts)
+  r = run('flash_boot.sh', env, '--yes', '--rotate')
+  assert r.returncode != 0 and 'running the dpbridge slot _b' in r.stderr and snapshot(parts) == before
+
+
+def test_refuses_dpbridge_slot_even_without_backup(dev):
+  tmp, parts, data, img, env = dev
+  (parts / 'boot_a').write_bytes(img.read_bytes() + bytes(4 * MB - img.stat().st_size))
+  before = snapshot(parts)
+  r = run('flash_boot.sh', env, '--yes', '--rotate')
+  assert r.returncode != 0 and 'running the dpbridge slot _a' in r.stderr and snapshot(parts) == before
+
+
+# kernel.sh: the in-app flash helper
+def kenv(dev, **kw):
+  import hashlib
+  tmp, parts, data, img, env = dev
+  rel = tmp / 'release'
+  rel.mkdir(exist_ok=True)
+  (rel / 'boot.img').write_bytes(img.read_bytes())
+  sha = hashlib.sha256(img.read_bytes()).hexdigest()
+  (tmp / 'kernel.env').write_text(f'BOOT_SHA={sha}\nBOOT_SIZE={img.stat().st_size}\nBOOT_AGNOS=20.6\nBOOT_URL=file://{rel}/boot.img\n')
+  curl = tmp / 'bin/curl'
+  # fake curl: copies the file:// url to -o, logs the call
+  curl.write_text(f"""#!/bin/bash
+out=""; url=""
+while [ $# -gt 0 ]; do case $1 in -o) out=$2; shift ;; file://*) url=${{1#file://}} ;; esac; shift; done
+echo "curl $url" >> {tmp}/ops.log
+[ -f "$url" ] || exit 22
+cp "$url" "$out"
+""")
+  curl.chmod(0o755)
+  reboot = tmp / 'bin/fake-reboot'
+  reboot.write_text(f'#!/bin/sh\necho reboot >> {tmp}/ops.log\n')
+  reboot.chmod(0o755)
+  e = dict(env, DPB_KERNEL_ENV=str(tmp / 'kernel.env'), DPB_WCN=str(tmp / 'wcn3990'), DPB_REBOOT=str(reboot),
+           DPB_CURL=str(curl), DPB_FREE_MB='10000', DPB_ONROAD=str(tmp / 'onroad'))
+  e.update(kw)
+  img.unlink()
+  Path(f'{img}.sha256').unlink()
+  return sha, e
+
+
+def kv(out):
+  return dict(ln.split('=', 1) for ln in out.splitlines() if '=' in ln)
+
+
+def test_kernel_status_offers_on_stock(dev):
+  sha, e = kenv(dev)
+  r = run('kernel.sh', e, 'status')
+  assert r.returncode == 0, r.stderr
+  st = kv(r.stdout)
+  assert st['state'] == 'offer' and st['slot'] == '_a' and st['target'] == '_b' and st['image'] == 'missing' and st['sha'] == sha
+
+
+@pytest.mark.parametrize('case, state', [('wcn', 'ok'), ('agnos', 'unsupported_agnos'), ('model', 'unsupported_device'),
+                                         ('space', 'no_space'), ('onroad', 'onroad')])
+def test_kernel_status_states(dev, case, state):
+  tmp = dev[0]
+  sha, e = kenv(dev)
+  if case == 'wcn':
+    (tmp / 'wcn3990').write_text('1')
+  elif case == 'agnos':
+    (tmp / 'VERSION').write_text('20.7\n')
+  elif case == 'model':
+    (tmp / 'model').write_bytes(b'comma tizi\0')
+  elif case == 'space':
+    e['DPB_FREE_MB'] = '10'
+  elif case == 'onroad':
+    (tmp / 'onroad').write_text('1')
+  assert kv(run('kernel.sh', e, 'status').stdout)['state'] == state
+
+
+def test_kernel_flash_downloads_checks_and_reboots_once(dev):
+  tmp, parts, data, img, env = dev
+  boot_a = (parts / 'boot_a').read_bytes()
+  sha, e = kenv(dev)
+  r = run('kernel.sh', e, 'flash', '--yes')
+  assert r.returncode == 0, r.stderr
+  assert (parts / 'boot_a').read_bytes() == boot_a
+  assert (parts / 'boot_b').read_bytes().startswith((tmp / 'release/boot.img').read_bytes())
+  log = ops(tmp)
+  assert log.count('reboot') == 1 and log[-1] == 'reboot' and 'abctl --set_active 1' in log
+  assert (data / 'kernel/pending').read_text().split() == [sha, '20.6', '_a', '_b']
+
+
+def test_kernel_flash_from_b_writes_a(dev):
+  tmp, parts, data, img, env = dev
+  (tmp / 'slot').write_text('_b\n')
+  boot_b = (parts / 'boot_b').read_bytes()
+  sha, e = kenv(dev)
+  assert run('kernel.sh', e, 'flash', '--yes').returncode == 0
+  assert (parts / 'boot_b').read_bytes() == boot_b
+  assert (parts / 'boot_a').read_bytes().startswith((tmp / 'release/boot.img').read_bytes())
+  assert 'abctl --set_active 0' in ops(tmp)
+
+
+@pytest.mark.parametrize('case', ['onroad', 'bad_download', 'agnos', 'running_dpbridge', 'space', 'no_release', 'model'])
+def test_kernel_flash_refuses(dev, case):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev)
+  args = ['flash', '--yes']
+  if case == 'onroad':
+    (tmp / 'onroad').write_text('1')
+  elif case == 'model':
+    (tmp / 'model').write_bytes(b'comma tizi\0')
+  elif case == 'bad_download':
+    (tmp / 'release/boot.img').write_bytes(b'ANDROID!' + bytes(MB))
+  elif case == 'agnos':
+    (tmp / 'VERSION').write_text('20.7\n')
+  elif case == 'running_dpbridge':
+    (tmp / 'wcn3990').write_text('1')
+  elif case == 'space':
+    e['DPB_FREE_MB'] = '10'
+  elif case == 'no_release':
+    (tmp / 'release/boot.img').unlink()
+  before = snapshot(parts)
+  r = run('kernel.sh', e, *args)
+  assert r.returncode != 0 and 'refusing' in r.stderr
+  assert snapshot(parts) == before
+  assert not [o for o in ops(tmp) if o.startswith(('dd ', 'abctl', 'reboot'))]
+  assert not (data / 'boot.img').exists() or case not in ('bad_download',)
+
+
+def test_kernel_reflash_after_agnos_update_rotates(dev):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev)
+  assert run('kernel.sh', e, 'flash', '--yes').returncode == 0
+  # AGNOS update: now running stock on b, slot a has the old dpbridge kernel
+  (tmp / 'slot').write_text('_b\n')
+  (parts / 'boot_b').write_bytes(b'new agnos' + bytes(4 * MB - 9))
+  (data / 'kernel/pending').unlink()
+  assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'offer'
+  open(tmp / 'ops.log', 'w').close()
+  r = run('kernel.sh', e, 'flash', '--yes')
+  assert r.returncode == 0, r.stderr
+  assert (parts / 'boot_b').read_bytes().startswith(b'new agnos')
+  assert any(p.name.startswith('backup.stale-') for p in data.iterdir())
+  assert 'curl' not in ' '.join(ops(tmp))  # image already on /data
+
+
+def test_kernel_prunes_old_backups(dev):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev, DPB_KEEP_BACKUPS='2')
+  for i in range(4):
+    d = data / f'backup.2026010{i}-000000'
+    d.mkdir()
+    os.utime(d, (1000 + i, 1000 + i))
+  assert run('kernel.sh', e, 'flash', '--yes').returncode == 0
+  old = sorted(p.name for p in data.iterdir() if p.name.startswith('backup.'))
+  assert len(old) == 2 and (data / 'backup/stock_slot').exists()
+
+
+@pytest.mark.parametrize('booted', [True, False])
+def test_kernel_post_boot(dev, booted):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev)
+  (data / 'kernel').mkdir()
+  (data / 'kernel/pending').write_text(f'{sha} 20.6 _a _b\n')
+  if booted:
+    (tmp / 'wcn3990').write_text('1')
+  # dry run: records nothing, installs nothing
+  r = run('kernel.sh', e, 'post-boot')
+  assert r.returncode == 0 and (data / 'kernel/pending').exists()
+  assert ('install_userspace.sh --yes' in r.stdout) == booted
+  if not booted:
+    assert run('kernel.sh', e, 'post-boot', '--yes').returncode == 0
+    assert (data / 'kernel/failed').exists() and not (data / 'kernel/pending').exists()
+    st = kv(run('kernel.sh', e, 'status').stdout)
+    assert st['last'] == 'failed' and st['state'] == 'failed'
+    # no loop: the same image, AGNOS and slot is not flashed again without --retry
+    before = snapshot(parts)
+    r = run('kernel.sh', e, 'flash', '--yes')
+    assert r.returncode != 0 and '--retry' in r.stderr and snapshot(parts) == before
+    # an AGNOS update moves the running slot, so it is offered again
+    (tmp / 'slot').write_text('_b\n')
+    assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'offer'
+
+
+def test_kernel_env_matches_flash_script():
+  env = dict(ln.split('=', 1) for ln in (HERE / 'firmware/kernel.env').read_text().splitlines() if '=' in ln and not ln.startswith('#'))
+  agnos = next(ln for ln in (HERE / 'flash_boot.sh').read_text().splitlines() if ln.startswith('AGNOS='))
+  assert agnos == f"AGNOS={env['BOOT_AGNOS']}" and env['BOOT_SIZE'] == '47454208' and len(env['BOOT_SHA']) == 64
+  assert env['BOOT_URL'].startswith('https://github.com/Memberoffoxhound/TeslaPilot/releases/download/')
+
+
+def test_kernel_failed_flash_is_not_repeated(dev):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev)
+  r = run('kernel.sh', dict(e, CORRUPT='boot_b'), 'flash', '--yes')
+  assert r.returncode != 0 and 'readback mismatch' in r.stderr and 'reboot' not in ops(tmp)
+  assert (data / 'kernel/failed').read_text().split() == [sha, '20.6', '_a']
+  assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'failed'
+  assert run('kernel.sh', e, 'flash', '--yes', '--retry').returncode == 0 and ops(tmp)[-1] == 'reboot'
+
+
+def test_kernel_dry_run_does_not_download(dev):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev)
+  r = run('kernel.sh', e, 'flash')
+  assert r.returncode == 0 and 'stops before the download' in r.stdout
+  assert 'curl' not in ' '.join(ops(tmp)) and not (data / 'boot.img').exists()
+
+
+def test_install_flashes_on_stock_kernel(dev):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev)
+  r = run('install_userspace.sh', e, '--yes')
+  assert r.returncode == 0, r.stderr
+  assert 'flashing the dpbridge boot.img first' in r.stdout and ops(tmp)[-1] == 'reboot'
+  assert (parts / 'boot_b').read_bytes().startswith((tmp / 'release/boot.img').read_bytes())
