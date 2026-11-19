@@ -106,7 +106,8 @@ class ModelRenderer(BaseModelRenderer):
     # lane lines and path fade out while disengaged
     self._visible = 1 - steer_fade.weight(UIStatus.DISENGAGED)
     # TITS steering alone: lane lines and path trade colors
-    self._swap.update(float(ui_state.steer_status == UIStatus.ENGAGED and ui_state.status != UIStatus.ENGAGED))
+    # TITS override keeps it, so override flapping does not pulse the path
+    self._swap.update(float(ui_state.steer_status != UIStatus.DISENGAGED and ui_state.status == UIStatus.DISENGAGED))
     if self._visible > 1e-2:
       self._ll_engaged = TESLA_LANE_BLUE if custom_onroad_ui() and tesla_theme() else STOCK_LANE_GREEN
       self._draw_lane_lines()

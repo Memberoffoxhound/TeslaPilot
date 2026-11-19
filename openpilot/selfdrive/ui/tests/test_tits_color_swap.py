@@ -89,6 +89,22 @@ PROBE = textwrap.dedent('''
   mr._longitudinal_control = True
   ss.enabled, ss.state = False, OP.disabled
   out["plain"] = run(fps)[-1]
+  # driver torque near the threshold: TITS override flaps 2 of every 6 frames
+  flap = []
+  for i in range(fps):
+    mads.state = MS.overriding if i % 6 < 2 else MS.enabled
+    flap.append(frame())
+  out["flap"] = flap
+  mads.state = MS.enabled
+  # Tesla theme, openpilot long gradient
+  mrm.custom_onroad_ui, mrm.tesla_theme = (lambda: True), (lambda: True)
+  long_grad = mrm.Gradient(start=(0.0, 1.0), end=(0.0, 0.0), colors=[rl.Color(242, 242, 242, 102), rl.Color(200, 230, 120, 60),
+                                                                     rl.Color(164, 255, 61, 0)], stops=[0.0, 0.4, 0.7])
+  mr._path_gradient = long_grad
+  out["long_grad"] = [[c.r, c.g, c.b, c.a] for c in long_grad.colors]
+  out["tesla_steer"] = run(2 * fps)[-1]
+  ss.enabled, ss.state = True, OP.enabled
+  out["tesla_engaged"] = run(fps)[-1]
   print("RESULT" + json.dumps(out))
 ''')
 
@@ -137,3 +153,18 @@ def test_override_stays_white(probe):
 def test_plain_path_takes_lane_color(probe):
   s = probe["plain"]
   assert s["path"][0][:3] == probe["ll"] and s["lane"] == [255, 255, 255]
+
+
+def test_override_flapping_does_not_pulse(probe):
+  flap = probe["flap"]
+  assert min(f["swap"] for f in flap) > 0.99
+  assert all(f["path"] == flap[0]["path"] for f in flap)  # path color steady
+
+
+def test_tesla_long_gradient_tinted(probe):
+  blue, grad = [62, 140, 235], probe["long_grad"]
+  s = probe["tesla_steer"]
+  assert [c[:3] for c in s["path"]] == [blue] * len(grad) and [c[3] for c in s["path"]] == [c[3] for c in grad]
+  assert s["lane"] == grad[0][:3]  # most opaque stop
+  e = probe["tesla_engaged"]
+  assert e["path"] == grad and e["lane"] == blue
