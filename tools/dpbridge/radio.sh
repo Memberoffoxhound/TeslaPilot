@@ -8,6 +8,11 @@ HCI0="${DPB_HCI0:-/sys/class/bluetooth/hci0}"
 UNITS="${DPB_UNITS:-dpbridge-bt bluetooth dpbridge-obex bluealsa bluealsa-aplay}"
 SYSTEMCTL="${DPB_SYSTEMCTL:-systemctl}"
 INSTALL="${DPB_INSTALL:-}"
+# set while a start has not settled (hci0 up for SETTLE_S); still there at the next start means the last
+# one crashed the comma, so Bluetooth is switched off instead of panicking on every boot
+MARK="$DIR/bt_boot"
+SETTLE_S="${DPB_SETTLE_S:-60}"
+WATCH=1
 
 seed_param() {
   if [ ! -e "$PARAM" ]; then
@@ -38,8 +43,14 @@ rfkill_bt() {
 }
 
 apply() {
+  if want_on && [ "$WATCH" = 1 ] && [ -e "$MARK" ]; then
+    echo "last Bluetooth start never settled, switching it off"
+    rm -f "$MARK"
+    printf '0' > "$PARAM"
+  fi
   if want_on; then
     rm -f "$DIR/disable"
+    if [ "$WATCH" = 1 ]; then mkdir -p "$DIR"; touch "$MARK"; fi
     if [ -n "$INSTALL" ] && [ -x "$INSTALL" ]; then
       if [ ! -e /usr/libexec/bluetooth/bluetoothd ]; then
         "$INSTALL" --yes || true
@@ -51,6 +62,7 @@ apply() {
     $SYSTEMCTL start $UNITS || true
   else
     mkdir -p "$DIR"
+    rm -f "$MARK"
     touch "$DIR/disable"
     # shellcheck disable=SC2086
     $SYSTEMCTL stop $UNITS || true
@@ -61,16 +73,23 @@ apply() {
 once=0
 [ "${1:-}" = --once ] && once=1
 if [ "$once" = 1 ]; then
+  WATCH=0
   apply
   exit 0
 fi
 # --watch (default)
 prev=""
+up=0
 while true; do
   cur=$(tr -d '[:space:]' < "$PARAM" 2>/dev/null || echo missing)
   if [ "$cur" != "$prev" ]; then
     apply
-    prev=$cur
+    prev=$(tr -d '[:space:]' < "$PARAM" 2>/dev/null || echo missing)
+    up=0
   fi
-  sleep 1
+  if [ -e "$MARK" ] && [ -e "$HCI0" ]; then
+    up=$((up + 1))
+    [ "$up" -lt "$SETTLE_S" ] || rm -f "$MARK"
+  fi
+  sleep "${DPB_TICK_S:-1}"
 done
