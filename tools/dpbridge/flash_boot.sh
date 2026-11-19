@@ -32,6 +32,14 @@ isz=$(stat -c %s "$IMG")
 
 cur=$(abctl --boot_slot)
 oth=$(other "$cur")
+# every partition this touches is a block device, checked before anything is written (tests use files)
+for n in $MIRROR boot; do
+  for s in "$cur" "$oth"; do
+    test "${DPB_BLK:--b}" "$P/$n$s" || die "$P/$n$s is not a block device"
+  done
+done
+# --rotate replaces a backup; on any dpbridge kernel the live backup may be the only stock copy
+[ $ROTATE = 1 ] && [ -e "${DPB_WCN:-/sys/module/hci_uart/parameters/wcn3990}" ] && die "a dpbridge kernel is running, restore_boot.sh --yes and reboot first"
 stale() {
   [ $ROTATE = 1 ] || die "$1 (AGNOS update?). move $B aside and run again"
   echo "$1, keeping the old backup"
@@ -54,6 +62,7 @@ done
 echo "current slot $cur, writing slot $oth, image $(fsha "$IMG")"
 [ $YES = 1 ] || echo "dry run: nothing below is executed, pass --yes to flash"
 
+progress "backing up" 45
 # 1. back up both boot slots and prove the copies match flash; an older backup is kept aside
 if [ -d "$B" ]; then
   run mv "$B" "$B.$(date +%Y%m%d-%H%M%S)"
@@ -75,23 +84,29 @@ run $SUDO abctl --set_unbootable "$(slot_num "$oth")"
 
 # 3. mirror the current slot into the other one, skipping what already matches
 # compare and copy with O_DIRECT: cmp can agree from the page cache when flash still differs
+i=0
 for n in $MIRROR; do
+  progress "writing slot ${oth#_}" $((55 + i * 4)); i=$((i + 1))
   if [ "$(dsha "$P/$n$cur" "$(size "$P/$n$cur")")" = "$(dsha "$P/$n$oth" "$(size "$P/$n$oth")")" ]; then
     echo "  $n already matches"
     continue
   fi
   run $SUDO dd if="$P/$n$cur" of="$P/$n$oth" bs=4M iflag=direct conv=fsync status=none
   if [ $YES = 1 ]; then
+    progress "reading back" $((55 + i * 4 - 2))
     sz=$(size "$P/$n$cur")
     [ "$(dsha "$P/$n$cur" "$sz")" = "$(dsha "$P/$n$oth" "$sz")" ] || die "$n$oth readback mismatch, slot not switched"
   fi
 done
 
 # 4. new kernel on the other slot only
+progress "writing slot ${oth#_}" 80
 run $SUDO dd if="$IMG" of="$P/boot$oth" bs=4M conv=fsync status=none
 if [ $YES = 1 ]; then
+  progress "reading back" 90
   [ "$(dsha "$P/boot$oth" "$isz")" = "$(fsha "$IMG")" ] || die "boot$oth readback mismatch, slot not switched"
 fi
+progress "switching slot" 98
 activate "$(slot_num "$oth")"
 
 echo "done. reboot to try it; to go back: restore_boot.sh --yes (stock slot is $cur)"

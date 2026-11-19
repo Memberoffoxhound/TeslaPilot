@@ -27,4 +27,6 @@ activate() {
 }
 
 slot_num() { case $1 in _a) echo 0 ;; _b) echo 1 ;; *) die "unknown slot '$1'" ;; esac; }
+# kernel flash step and percent, one line each in the installer output
+progress() { if [ "$YES" = 1 ]; then echo "  kernel: $1 $2%"; fi; }
 other() { case $1 in _a) echo _b ;; _b) echo _a ;; *) die "unknown slot '$1'" ;; esac; }

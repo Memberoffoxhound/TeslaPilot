@@ -8,7 +8,7 @@ FAKE_SSH = '''#!/bin/bash
 while [ $# -gt 0 ]; do case $1 in -i|-o|-p) shift 2 ;; -*) shift ;; *) break ;; esac; done
 shift
 [ $# -eq 0 ] && exit 0
-exec env -i PATH="$PATH" DPB_PARTS="$DPB_PARTS" SUDO="$SUDO" DPB_MODEL="$DPB_MODEL" DPB_VERSION="$DPB_VERSION" bash -c "$*"
+exec env -i PATH="$PATH" DPB_PARTS="$DPB_PARTS" SUDO="$SUDO" DPB_MODEL="$DPB_MODEL" DPB_VERSION="$DPB_VERSION" DPB_BLK="$DPB_BLK" bash -c "$*"
 '''
 FAKE_SCP = '''#!/bin/bash
 # fake scp: drop options and host: prefixes, then cp

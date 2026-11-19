@@ -49,7 +49,8 @@ exit 0
   img.write_bytes(b'ANDROID!' + os.urandom(MB))
   write_sha(img)
   env = dict(os.environ, PATH=f'{bin_}:{os.environ["PATH"]}', DPB_DIR=str(data), DPB_PARTS=str(parts), SUDO='',
-             DPB_MODEL=str(tmp_path / 'model'), DPB_VERSION=str(tmp_path / 'VERSION'))
+             DPB_MODEL=str(tmp_path / 'model'), DPB_VERSION=str(tmp_path / 'VERSION'), DPB_BLK='-f',
+             DPB_WCN=str(tmp_path / 'wcn3990'))
   return tmp_path, parts, data, img, env
 
 
