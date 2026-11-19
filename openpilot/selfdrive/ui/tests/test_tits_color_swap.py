@@ -8,6 +8,7 @@ import textwrap
 import pytest
 
 WHITE = [242, 242, 242]
+LANES = [(40, 200), (120, 230), (416, 306), (500, 340)]  # probe lane lines: near x, far x
 
 
 def brighter(path, base):
@@ -56,20 +57,22 @@ PROBE = textwrap.dedent('''
   mrm.custom_onroad_ui = lambda: False
   mr = mrm.ModelRenderer()
   mr._longitudinal_control, mr._transform_dirty = False, False
-  mr._path.projected_points = np.array([[0, 0], [10, 0], [10, 10]], dtype=np.float32)
-  # 4 lane lines, no road edges
-  mr._lane_lines = [SimpleNamespace(projected_points=np.zeros((4, 2), dtype=np.float32)) for _ in range(4)]
+  # path: left edge near to far, then right edge far to near
+  PATH = np.array([[200, 240], [260, 100], [276, 100], [336, 240]], dtype=np.float32)
+  mr._path.projected_points = PATH
+  # 4 lane lines (near x, far x), 6 px wide near, no road edges
+  LANES = [(40, 200), (120, 230), (416, 306), (500, 340)]
+  mr._lane_lines = [SimpleNamespace(projected_points=np.array([[n - 3, 240], [f - 1, 100], [f + 1, 100], [n + 3, 240]], dtype=np.float32))
+                    for n, f in LANES]
   mr._lane_line_probs, mr._road_edges = np.full(4, 0.7), []
   seen = {}
   def poly(rect, pts, color=None, gradient=None):
-    if len(pts) == 4:
-      seen.setdefault("lane_a", []).append(color.a)
-    else:
+    if np.array_equal(pts, PATH):
       seen["path"] = [[c.r, c.g, c.b, c.a] for c in gradient.colors] if gradient else [[color.r, color.g, color.b, color.a]]
+    else:  # near center x, near width, alpha, rgb
+      seen.setdefault("lanes", []).append([float(pts[0, 0] + pts[-1, 0]) / 2, float(abs(pts[-1, 0] - pts[0, 0])), color.a,
+                                           [color.r, color.g, color.b]])
   mrm.draw_polygon = poly
-  def line(p0, p1, w, color):
-    seen.setdefault("border", []).append((w, [color.r, color.g, color.b, color.a]))
-  rl.draw_line_ex = line
   RECT = rl.Rectangle(0, 0, 536, 240)
 
   T = [100.0]
@@ -82,9 +85,9 @@ PROBE = textwrap.dedent('''
     ui_state._update_status()
     mr._render(RECT)
     ll = mr._get_ll_color(0.7, True, False)
-    border = seen.get("border", [])
-    return {"swap": mr._swap.x, "lane": [ll.r, ll.g, ll.b], "path": seen["path"], "lane_a": max(seen.get("lane_a", [0])),
-            "border": [border[0][0], border[0][1], len(border)] if border else None}
+    lanes = seen.get("lanes", [])
+    return {"swap": mr._swap.x, "lane": [ll.r, ll.g, ll.b], "path": seen["path"], "lanes": lanes,
+            "lane_a": max((ln[2] for ln in lanes), default=0)}
 
   def run(n):
     return [frame() for _ in range(n)]
@@ -146,7 +149,7 @@ def probe(tmp_path_factory):
 def test_engaged_unchanged(probe):
   for s in (probe["engaged_off"], probe["engaged"]):
     assert s["swap"] == 0.0 and s["lane"] == probe["ll"] and s["path"] == probe["stock"]
-    assert s["lane_a"] == int(0.7 * 255) and s["border"] is None  # lane lines as today, no border
+    assert [ln[:3] for ln in s["lanes"]] == [[n, 6.0, 178] for n, _ in LANES]  # lane lines as today
 
 
 def test_steering_only_swaps(probe):
@@ -156,12 +159,21 @@ def test_steering_only_swaps(probe):
   assert brighter(s["path"], stock)
 
 
-def test_steering_only_border_no_lane_lines(probe):
-  s = probe["enter"][-1]
-  assert s["lane_a"] == 0  # lane lines gone
-  w, color, n = s["border"]
-  assert w == 3.0 and color[:3] == WHITE and abs(color[3] - 0.7 * 255) <= 1 and n == 2  # left, far end, right edges
+def test_steering_only_lanes_become_border(probe):
+  outer_l, left, right, outer_r = probe["enter"][-1]["lanes"]
+  assert outer_l[2] == 0 and outer_r[2] == 0  # the far lines fade out
+  for ln, edge_x in ((left, 200), (right, 336)):  # path edges, near end
+    x, width, a, rgb = ln
+    assert abs(x - edge_x) < 0.5 and abs(width - 3.0) < 0.05 and abs(a - 178) <= 1 and rgb == WHITE
 
+
+def test_lanes_slide_in_mid_fade(probe):
+  fps = probe["fps"]
+  for frames in (probe["enter"], probe["leave"]):
+    mid = frames[fps // 10 - 1]["lanes"]
+    (lx, lw, _, _), (rx, rw, _, _) = mid[1], mid[2]
+    assert 120 < lx < 200 and 336 < rx < 416  # between the lane and the path edge
+    assert 3.0 < lw < 6.0 and 3.0 < rw < 6.0  # thinning toward the border
 
 def test_swap_fades_both_ways(probe):
   fps = probe["fps"]
@@ -176,9 +188,9 @@ def test_swap_fades_both_ways(probe):
     assert mid["lane"] not in (probe["ll"], WHITE)  # blended, not snapped
     a, base = mid["path"][0][3], probe["stock"][0][3]
     assert base < a < round(base * 1.5)  # brightness ramps with the swap
-    assert 0 < mid["lane_a"] < 178 and 0 < mid["border"][1][3] < 178  # lanes out, border in
+    assert 0 < mid["lanes"][0][2] < 178  # far lines partway out
   assert probe["leave"][-1]["path"] == probe["stock"] and probe["leave"][-1]["lane"] == probe["ll"]
-  assert probe["leave"][-1]["lane_a"] == 178 and probe["leave"][-1]["border"] is None
+  assert [ln[:3] for ln in probe["leave"][-1]["lanes"]] == [[n, 6.0, 178] for n, _ in LANES]
 
 
 def test_override_stays_white(probe):

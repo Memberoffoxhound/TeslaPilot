@@ -44,6 +44,22 @@ def _tinted(gradient: Gradient, color: rl.Color, f: float) -> Gradient:
   return Gradient(gradient.start, gradient.end, [rl.Color(t.r, t.g, t.b, min(255, round(t.a * k))) for t in tint], gradient.stops)
 
 
+def _resample(line: np.ndarray, n: int) -> np.ndarray:
+  t, u = np.linspace(0, 1, len(line)), np.linspace(0, 1, n)
+  return np.column_stack((np.interp(u, t, line[:, 0]), np.interp(u, t, line[:, 1])))
+
+
+def _morph(lane: np.ndarray, edge: np.ndarray, w: float) -> np.ndarray:
+  # lane polygon slides onto a path edge (both near to far) and thins to BORDER_PX
+  m = len(lane) // 2
+  n = max(m, len(edge))
+  a, b = _resample(lane[:m], n), _resample(lane[m:][::-1], n)
+  center = (a + b) / 2 + (_resample(edge, n) - (a + b) / 2) * w
+  side = np.where(a[:, :1] <= b[:, :1], -1.0, 1.0)
+  half = (a - b) / 2 * (1 - w) + np.column_stack((side[:, 0] * BORDER_PX / 2, np.zeros(n))) * w
+  return np.vstack((center + half, (center - half)[::-1])).astype(np.float32)
+
+
 class LeadVehicle:
   def __init__(self):
     self.bar = np.empty((0, 2), dtype=np.float32)
@@ -188,16 +204,24 @@ class ModelRenderer(BaseModelRenderer):
   def _draw_lane_lines(self):
     """Draw lane lines and road edges. Two closest lines should be green (lane line or road edges)."""
     offset = self._draw_offset()
+    w = self._swap.x
+    path, h = self._path.projected_points + offset, len(self._path.projected_points) // 2
+    edges = sorted((path[:h], path[h:][::-1]), key=lambda e: float(e[:, 0].mean())) if h > 1 else None
 
     for i, lane_line in enumerate(self._lane_lines):
       if lane_line.projected_points.size == 0:
         continue
 
       color = self._get_ll_color(float(self._lane_line_probs[i]), i in (1, 2), i in (0, 1))
-      # steering only: lane lines fade out, the path border takes over
-      if self._swap.x >= 1e-3:
-        color.a = int(color.a * (1 - self._swap.x))
-      draw_polygon(self._rect, lane_line.projected_points + offset, color)
+      pts = lane_line.projected_points + offset
+      # steering only: the two closest lines slide onto the path edges and become its border, the others fade
+      if w >= 1e-3:
+        if i in (1, 2) and edges is not None and len(pts) >= 4:
+          pts = _morph(pts, edges[i - 1], w)
+          color.a = int(color.a + (255 * 0.7 * self._visible - color.a) * w)
+        else:
+          color.a = int(color.a * (1 - w))
+      draw_polygon(self._rect, pts, color)
 
     for i, road_edge in enumerate(self._road_edges):
       if road_edge.projected_points.size == 0:
@@ -221,12 +245,6 @@ class ModelRenderer(BaseModelRenderer):
     else:
       white = rl.Color(255, 255, 255, round(30 * self._visible * (1 + (SWAP_BRIGHT - 1) * swap)))
       draw_polygon(self._rect, path_pts, lerp_color(white, rl.Color(self._ll_engaged.r, self._ll_engaged.g, self._ll_engaged.b, white.a), swap))
-
-    # steering only: near-white outline along the left edge, far end and right edge
-    if swap >= 1e-3:
-      border = rl.Color(SWAP_LANE.r, SWAP_LANE.g, SWAP_LANE.b, int(255 * 0.7 * swap * self._visible))
-      for p0, p1 in zip(path_pts[:-1], path_pts[1:], strict=False):
-        rl.draw_line_ex(rl.Vector2(float(p0[0]), float(p0[1])), rl.Vector2(float(p1[0]), float(p1[1])), BORDER_PX, border)
 
   def _draw_lead_indicator(self):
     offset = self._draw_offset()
