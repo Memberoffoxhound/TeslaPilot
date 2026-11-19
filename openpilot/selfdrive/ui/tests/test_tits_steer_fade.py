@@ -136,7 +136,7 @@ def test_steering_only_looks_engaged(probe):
   assert tits["status"] == "disengaged" and tits["steer"] == "engaged"
   assert tits["path"] > 0.99 and tits["compass"] >= 225
   assert tits["ball"][0] == pytest.approx(eng["ball"][0], abs=0.5) and tits["ball"][1] == eng["ball"][1]  # same height, engaged colors
-  assert tits["lane"] == eng["lane"] != probe["off"]["lane"]  # lane lines in the engaged color
+  assert tits["lane"] != probe["off"]["lane"]  # lane lines lit, not grey (test_tits_color_swap checks the color)
 
 
 def test_long_only_stays_lit(probe):
