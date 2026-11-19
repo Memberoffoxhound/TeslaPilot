@@ -7,7 +7,7 @@ from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.layouts.settings.common import custom_onroad_ui, tesla_theme, THEME_TESLA_RGB, THEME_OPENPILOT_RGB
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
-from openpilot.selfdrive.ui.mici.onroad.status import status_fade
+from openpilot.selfdrive.ui.mici.onroad.status import status_fade, steer_fade
 from openpilot.selfdrive.ui.onroad.model_renderer import ModelRenderer as BaseModelRenderer, CLIP_MARGIN, MAX_DRAW_DISTANCE, STOCK_PATH_GRADIENT
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.polygon import Gradient, draw_polygon
@@ -94,7 +94,7 @@ class ModelRenderer(BaseModelRenderer):
       self._transform_dirty = False
 
     # lane lines and path fade out while disengaged
-    self._visible = 1 - status_fade.weight(UIStatus.DISENGAGED)
+    self._visible = 1 - steer_fade.weight(UIStatus.DISENGAGED)
     if self._visible > 1e-2:
       self._ll_engaged = TESLA_LANE_BLUE if custom_onroad_ui() and tesla_theme() else STOCK_LANE_GREEN
       self._draw_lane_lines()
@@ -149,7 +149,7 @@ class ModelRenderer(BaseModelRenderer):
   def _get_ll_color(self, prob: float, adjacent: bool, left: bool):
     alpha = np.clip(prob, 0.0, 0.7) * self._visible
     if adjacent:
-      _base_color = status_fade.color({**LANE_LINE_COLORS, UIStatus.ENGAGED: self._ll_engaged})
+      _base_color = steer_fade.color({**LANE_LINE_COLORS, UIStatus.ENGAGED: self._ll_engaged})
       color = rl.Color(_base_color.r, _base_color.g, _base_color.b, int(alpha * 255))
 
       # turn adjacent lls orange if torque is high

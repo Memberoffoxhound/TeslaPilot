@@ -20,8 +20,9 @@ def lerp_color(a: rl.Color, b: rl.Color, t: float) -> rl.Color:
 
 
 class StatusFade:
-  """ui_state.status as weights, stepped once per frame"""
-  def __init__(self):
+  """ui_state.<attr> as weights, stepped once per frame"""
+  def __init__(self, attr: str = "status"):
+    self._attr = attr
     self._weights: FirstOrderFilter | None = None
     self._frame = -1
     self._override_time = float('-inf')
@@ -30,10 +31,11 @@ class StatusFade:
     if self._weights is None or ui_state.sm.frame != self._frame:
       self._frame = ui_state.sm.frame
       now = rl.get_time()
-      if ui_state.status == UIStatus.OVERRIDE:
+      cur = getattr(ui_state, self._attr)
+      if cur == UIStatus.OVERRIDE:
         self._override_time = now
-      held = ui_state.status == UIStatus.ENGAGED and now - self._override_time < OVERRIDE_HOLD
-      status = UIStatus.OVERRIDE if held else ui_state.status
+      held = cur == UIStatus.ENGAGED and now - self._override_time < OVERRIDE_HOLD
+      status = UIStatus.OVERRIDE if held else cur
       target = np.array([status == s for s in STATUSES], dtype=float)
       if self._weights is None:
         self._weights = FirstOrderFilter(target, STATUS_FADE_RC, 1 / gui_app.target_fps)
@@ -52,3 +54,5 @@ class StatusFade:
 
 
 status_fade = StatusFade()
+# TITS steering alone counts as engaged: path, lane lines, confidence ball, compass
+steer_fade = StatusFade("steer_status")

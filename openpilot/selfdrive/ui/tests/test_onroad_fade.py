@@ -24,7 +24,8 @@ HEAD = textwrap.dedent('''
     frame, recv_frame, alive = 1, {"carState": 10, "selfdriveState": 10}, {"longitudinalPlan": False}
   sm = SM(selfdriveState=ss, carState=car, longitudinalPlan=SimpleNamespace(hasLead=False))
   from openpilot.common.params import Params
-  ui = SimpleNamespace(sm=sm, params=Params(), status=UIStatus.ENGAGED, engaged=True, started=True, started_frame=0, is_metric=False,
+  ui = SimpleNamespace(sm=sm, params=Params(), status=UIStatus.ENGAGED, steer_status=UIStatus.ENGAGED, engaged=True,
+                       started=True, started_frame=0, is_metric=False,
                        chestnut_state=CS.ACTIVE, accel_progress=None, has_longitudinal_control=True)
   mod = types.ModuleType("openpilot.selfdrive.ui.ui_state")
   mod.ui_state, mod.UIStatus, mod.ChestnutState = ui, UIStatus, CS
@@ -66,7 +67,8 @@ HEAD = textwrap.dedent('''
 
   def frames(n=1, status=None, top=True, slot=False, **kw):
     if status is not None:
-      ui.status, ui.engaged, ss.enabled = status, status != UIStatus.DISENGAGED, status != UIStatus.DISENGAGED
+      ui.status = ui.steer_status = status
+      ui.engaged = ss.enabled = status != UIStatus.DISENGAGED
     for k, v in kw.items():
       setattr(ui, k, v)
     for _ in range(n):
