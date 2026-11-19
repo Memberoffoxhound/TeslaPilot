@@ -9,6 +9,7 @@ import numpy as np
 from openpilot.common.swaglog import cloudlog
 
 FIFO = "/run/dpbridge/a2dp.fifo"  # S16_LE mono 48 kHz from bluealsa-aplay
+LEVEL_PATH = "/dev/shm/dpbridge-a2dp.level"  # 0 mutes music while driving
 VOL_FILE = "/data/dpbridge/music_db"  # music level in dB, e.g. -12
 DEFAULT_DB = -12.0
 MIN_DB = -60.0
@@ -18,8 +19,8 @@ SAMPLE_RATE = 48000
 
 
 class Music:
-  def __init__(self, fifo=FIFO, vol_file=VOL_FILE):
-    self.fifo, self.vol_file = fifo, vol_file
+  def __init__(self, fifo=FIFO, vol_file=VOL_FILE, level_path=LEVEL_PATH):
+    self.fifo, self.vol_file, self.level_path = fifo, vol_file, level_path
     self.fd = None
     self.buf = b""
     self.db = DEFAULT_DB
@@ -70,6 +71,13 @@ class Music:
     out[:len(s)] = s / 32768.
     return out
 
+
+  def _muted(self):
+    try:
+      return int(open(self.level_path).read().strip()) == 0
+    except (OSError, ValueError):
+      return False
+
   # returns the music block to add, or None when it must add nothing
   def get(self, frames, alert, now=None):
     try:
@@ -77,6 +85,8 @@ class Music:
       self._update_db(now)
       self._open(now)
       if self.fd is None:
+        return None
+      if self._muted():
         return None
       x = self._read(frames)
       if alert:

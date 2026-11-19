@@ -120,3 +120,13 @@ a2dp.run(a2dp.Ducker(mixer), levels(), print)
   p.send_signal(signal.SIGTERM)
   assert p.wait(5) == 0
   assert out.read_text().split() == [str(DUCK), str(MUTE)]
+
+
+def test_set_level_writes_tmpfs(tmp_path, monkeypatch):
+  import openpilot.system.dpbridge.a2dp as a2dp
+  path = tmp_path / 'level'
+  monkeypatch.setattr(a2dp, 'LEVEL_PATH', str(path))
+  a2dp.set_level(a2dp.MUTE)
+  assert path.read_text() == '0'
+  a2dp.set_level(a2dp.FULL)
+  assert path.read_text() == '100'

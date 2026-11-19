@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
+import os
 import signal
-import subprocess
 import sys
 import time
 
-# Keeps phone music out of the way: muted while driving unless DpbA2dpOnroad, down to about -20 dB during alerts.
-# The mici card has one playback PCM (MultiMedia1), so soundd and bluealsa-aplay share it through dmix
-# (/data/dpbridge/asound.conf, linked by audio.sh). Music alone passes a softvol control; alerts never do.
-# Any failure on the way down tries a full mute: music is never left loud by mistake.
-CONTROL = 'dpbridge A2DP Playback Volume'
-FULL, DUCK, MUTE = 100, 60, 0  # percent of the softvol range (-51 dB..0), 0 is mute
+# Keeps phone music out of the way: muted while driving unless DpbA2dpOnroad.
+# soundd mixes A2DP from the FIFO and already mutes during alerts, so this process
+# only publishes a tmpfs level that Music reads. 0 is mute. No ALSA mixer.
+LEVEL_PATH = '/dev/shm/dpbridge-a2dp.level'
+FULL, DUCK, MUTE = 100, 60, 0
 
 
 def target(onroad: bool, allow_onroad: bool, alert: bool) -> int:
@@ -19,11 +18,15 @@ def target(onroad: bool, allow_onroad: bool, alert: bool) -> int:
 
 
 def set_level(pct: int):
-  subprocess.run(['amixer', '-c0', '-q', 'cset', f'name={CONTROL}', f'{pct}%'], check=True, timeout=2)
+  path = LEVEL_PATH
+  tmp = path + '.tmp'
+  with open(tmp, 'w') as f:
+    f.write(str(int(pct)))
+  os.replace(tmp, path)
 
 
 class Ducker:
-  # an unchanged level is still rewritten every REFRESH_S: a bluealsa-aplay restart zeroes the control behind our back
+  # rewrite an unchanged level every REFRESH_S in case the reader missed a write
   REFRESH_S = 10
 
   def __init__(self, set_level=set_level, clock=time.monotonic):

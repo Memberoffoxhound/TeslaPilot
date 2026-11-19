@@ -143,3 +143,18 @@ def test_errors_give_silence(tmp_path, fifo):
   s = soundd(m)
   s.current_alert = AudibleAlert.none
   assert np.array_equal(s.get_sound_data(N), soundd().get_sound_data(N))
+
+
+def test_level_file_mutes(tmp_path, fifo):
+  level = tmp_path / 'level'
+  m = music(tmp_path, fifo, 0)
+  m.level_path = str(level)
+  m.fade = 1.
+  os.write(fifo[1], tone(N, 16384))
+  assert m.get(N, False, now=1.)[0] > 0
+  level.write_text('0')
+  os.write(fifo[1], tone(N, 16384))
+  assert m.get(N, False, now=1.) is None
+  level.write_text('100')
+  os.write(fifo[1], tone(N, 16384))
+  assert m.get(N, False, now=1.)[0] > 0
