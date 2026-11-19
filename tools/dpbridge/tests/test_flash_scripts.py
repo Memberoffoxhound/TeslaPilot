@@ -447,6 +447,7 @@ def test_kernel_flash_refuses(dev, case, msg):
   assert r.returncode != 0 and 'refusing' in r.stderr and msg in r.stderr, r.stderr
   assert snapshot(parts) == before
   assert not [o for o in ops(tmp) if o.startswith(('dd ', 'abctl', 'reboot'))]
+  assert (r.returncode == 75) == (case == 'no_release')  # only a failed download is temporary
   assert not (data / 'boot.img').exists() or case not in ('bad_download', 'short_download')
   if case in ('model', 'agnos', 'running_dpbridge', 'space', 'disable'):
     assert not [o for o in ops(tmp) if o.startswith('curl')]  # refused before any download

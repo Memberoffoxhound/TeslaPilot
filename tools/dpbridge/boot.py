@@ -192,6 +192,11 @@ def main(spinner_factory=None) -> int:
       # no stamp, no fail count: the next boot records how the flash went
       print("dpbridge boot: kernel step still running, starting openpilot")
       return 0
+    if rc == 75:
+      # a download failed (no network, release not up yet): not counted toward MAX_FAILS
+      log.write("download failed, not counted, next boot tries again\n")
+      print(f"dpbridge boot: download failed, see {LOG}")
+      return 0
     if rc != 0:
       n = fails(key) + 1
       put(FAILS, f"{key} {n}")

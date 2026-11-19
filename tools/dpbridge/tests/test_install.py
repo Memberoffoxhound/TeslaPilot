@@ -291,6 +291,25 @@ def test_get_fw_refuses_bad_downloads(tmp_path):
   assert r.returncode != 0 and 'does not match firmware.sha256' in r.stderr
 
 
+def test_get_fw_no_network_is_a_temporary_failure(tmp_path):
+  r, _ = run_get_fw(tmp_path, FW)  # writes the fake curl
+  (tmp_path / 'data/debs/fw.tar').unlink()
+  for f in FW:
+    (tmp_path / 'data' / f).unlink(missing_ok=True)
+  (tmp_path / 'rel/fw.tar').unlink()
+  (tmp_path / 'bin/curl').write_text('#!/bin/sh\nexit 6\n')  # could not resolve host
+  text = (HERE / 'install_userspace.sh').read_text()
+  assert text.count('dl_fail "') == 4  # btfw, BlueZ, apt-get update, apt-get download
+
+
+def test_downloads_exit_75(tmp_path):
+  import os
+  lib = (HERE / 'lib.sh').read_text()
+  r = subprocess.run(['bash', '-c', f'set -euo pipefail\n{lib}\nfalse || dl_fail "https://x"\necho no'], capture_output=True,
+                     text=True, env=dict(os.environ))
+  assert r.returncode == 75 and 'download failed: https://x' in r.stderr and 'no' not in r.stdout
+
+
 def run_kernel_step(tmp_path, state, yes=1, reflash=0, flash_rc=0):
   import os
   text = (HERE / 'install_userspace.sh').read_text()
@@ -339,6 +358,11 @@ def test_kernel_step_reflash_overrides_off_and_failed(tmp_path):
 def test_kernel_step_failure_stops_install_without_reboot(tmp_path):
   r, log = run_kernel_step(tmp_path, 'offer', flash_rc=1)
   assert r.returncode != 0 and 'kernel flash failed, see kernel.sh status' in r.stderr and 'nothing was switched' not in r.stderr and 'REBOOT' not in r.stdout
+
+
+def test_kernel_step_passes_a_download_failure_on(tmp_path):
+  r, log = run_kernel_step(tmp_path, 'offer', flash_rc=75)
+  assert r.returncode == 75 and 'kernel flash failed' not in r.stderr and 'REBOOT' not in r.stdout
 
 
 def test_kernel_step_dry_run_never_reboots(tmp_path):

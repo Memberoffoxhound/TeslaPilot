@@ -87,13 +87,15 @@ def test_skip_on_disable_and_off_a_comma_4(tmp_path, monkeypatch):
 
 
 def test_no_network_falls_through_and_retries(tmp_path, monkeypatch):
-  m = load(tmp_path, monkeypatch, install='echo "[2/4] BT firmware"; echo "firmware download failed" >&2; exit 1')
+  m = load(tmp_path, monkeypatch, install='echo "[2/4] BT firmware"; echo "refusing: download failed: x" >&2; exit 75')
   assert m.main(lambda: FakeSpinner()) == 0
   assert not (tmp_path / 'data/stamp').exists()
-  assert 'install failed (1, 1/3)' in (tmp_path / 'data/log').read_text()
-  assert 'firmware download failed' in (tmp_path / 'data/log').read_text()
-  m.main(lambda: FakeSpinner())
-  assert runs(tmp_path) == ['--yes', '--yes']  # next boot tries again
+  log = (tmp_path / 'data/log').read_text()
+  assert 'download failed, not counted' in log and 'download failed: x' in log
+  # never counted: no Wi-Fi for many boots does not use up the tries
+  for _ in range(4):
+    m.main(lambda: FakeSpinner())
+  assert runs(tmp_path) == ['--yes'] * 5 and not (tmp_path / 'data/fails').exists()
   assert not (tmp_path / 'reboots').exists()
 
 

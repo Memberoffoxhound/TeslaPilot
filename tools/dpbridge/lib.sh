@@ -6,6 +6,8 @@ SUDO=${SUDO-sudo}
 B=$DIR/backup
 
 die() { echo "refusing: $*" >&2; exit 1; }
+# no network or the release is not there yet: 75 (EX_TEMPFAIL), boot.py retries without counting it
+dl_fail() { echo "refusing: download failed: $*" >&2; exit 75; }
 run() { echo "+ $*"; if [ "$YES" = 1 ]; then "$@"; fi; }
 size() { $SUDO blockdev --getsize64 "$1"; }
 fsha() { sha256sum < "$1" | cut -d' ' -f1; }

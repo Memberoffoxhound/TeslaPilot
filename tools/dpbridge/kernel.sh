@@ -85,7 +85,7 @@ fetch() {
   # resume a partial download; nothing is flashed until the sha matches
   # download only, before any write: gives up on a stalled link (under 1 kB/s for 60 s) or after 20 min per try;
   # -C - resumes the partial file next run
-  $CURL -fL --retry 5 --retry-delay 3 --connect-timeout 20 --speed-limit 1024 --speed-time 60 --max-time 1200 -C - -o "$IMG.part" "$BOOT_URL" || die "download failed: $BOOT_URL"
+  $CURL -fL --retry 5 --retry-delay 3 --connect-timeout 20 --speed-limit 1024 --speed-time 60 --max-time 1200 -C - -o "$IMG.part" "$BOOT_URL" || dl_fail "$BOOT_URL"
   kill "$w" 2> /dev/null || true
   wait "$w" 2> /dev/null || true
   trap - EXIT
