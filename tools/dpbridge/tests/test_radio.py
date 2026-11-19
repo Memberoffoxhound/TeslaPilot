@@ -107,18 +107,35 @@ def watch(tmp_path, param, hci0, settle="2", secs=1.5):
   return (log.read_text().splitlines() if log.exists() else []), out
 
 
-def test_start_that_never_settled_switches_bluetooth_off(tmp_path):
+def test_two_starts_that_never_settled_switch_bluetooth_off(tmp_path):
   param = tmp_path / "DpbBluetooth"
   param.write_text("1")
   mark = tmp_path / "dpb" / "bt_boot"
-  # first boot: started, killed before hci0 came up
-  actions, _ = watch(tmp_path, param, hci0=False, secs=0.5)
-  assert any(a.startswith("start ") for a in actions) and mark.exists()
-  # next boot: off instead of starting again
-  (tmp_path / "sysctl.log").unlink()
+  reason = tmp_path / "dpb" / "bt_reason"
+  # boots 1 and 2: started, killed before hci0 came up
+  for n in (1, 2):
+    actions, _ = watch(tmp_path, param, hci0=False, secs=0.5)
+    assert any(a.startswith("start ") for a in actions) and mark.read_text().strip() == str(n)
+    assert param.read_text() == "1" and not reason.exists()
+    (tmp_path / "sysctl.log").unlink()
+  # boot 3: off instead of starting again, with a reason for Settings
   actions, out = watch(tmp_path, param, hci0=False, secs=0.5)
   assert param.read_text() == "0" and not mark.exists() and "never settled" in out
   assert not any(a.startswith("start ") for a in actions)
+  assert reason.read_text().strip() == "off: did not start twice"
+  # switched on again from Settings: the reason goes, a fresh count starts
+  param.write_text("1")
+  watch(tmp_path, param, hci0=False, secs=0.5)
+  assert not reason.exists() and mark.read_text().strip() == "1"
+
+
+def test_old_empty_marker_counts_as_one(tmp_path):
+  param = tmp_path / "DpbBluetooth"
+  param.write_text("1")
+  (tmp_path / "dpb").mkdir()
+  (tmp_path / "dpb" / "bt_boot").write_text("")
+  actions, _ = watch(tmp_path, param, hci0=False, secs=0.5)
+  assert any(a.startswith("start ") for a in actions) and (tmp_path / "dpb/bt_boot").read_text().strip() == "2"
 
 
 def test_settled_start_clears_the_marker(tmp_path):

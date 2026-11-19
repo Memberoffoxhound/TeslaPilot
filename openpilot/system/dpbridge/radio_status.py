@@ -3,6 +3,8 @@ import os
 from pathlib import Path
 
 PATH = "/dev/shm/dpbridge-radio.json"
+# why radio.sh switched Bluetooth off by itself, one short line for Settings
+REASON = "/data/dpbridge/bt_reason"
 
 
 def from_devices(devices: list[dict]) -> dict:
@@ -34,3 +36,10 @@ def read(path: str | None = None) -> dict:
     return {"connected": bool(st.get("connected")), "name": str(st.get("name") or "")}
   except (OSError, ValueError, TypeError):
     return {"connected": False, "name": ""}
+
+
+def off_reason(path: str | None = None) -> str:
+  try:
+    return Path(REASON if path is None else path).read_text().splitlines()[0].strip()[:40]
+  except (OSError, ValueError, IndexError):
+    return ""

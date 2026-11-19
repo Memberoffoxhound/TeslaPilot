@@ -23,3 +23,15 @@ def test_write_only_on_change(tmp_path):
   assert path.read_bytes() == first and path.stat().st_mtime_ns == mtime
   st = radio_status.read(path)
   assert st["connected"] and st["name"] == "Phone"
+
+
+def test_off_reason(tmp_path):
+  from openpilot.system.dpbridge.radio_status import off_reason
+  p = tmp_path / "bt_reason"
+  assert off_reason(str(p)) == ""
+  p.write_text("off: did not start twice\n")
+  assert off_reason(str(p)) == "off: did not start twice"
+  p.write_bytes(b"\xff\xfe garbage")
+  assert off_reason(str(p)) == ""  # never crashes the UI
+  p.write_text("")
+  assert off_reason(str(p)) == ""

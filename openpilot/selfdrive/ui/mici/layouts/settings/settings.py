@@ -10,7 +10,7 @@ from openpilot.selfdrive.ui.mici.layouts.settings.firehose import FirehoseLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.stats import StatsLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.models import ModelsLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.bluetooth import BluetoothUIMici, bt_supported
-from openpilot.system.dpbridge.radio_status import read as read_bt_radio
+from openpilot.system.dpbridge.radio_status import off_reason, read as read_bt_radio
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 
 
@@ -96,6 +96,8 @@ class SettingsLayout(NavScroller):
     super()._update_state()
     st = read_bt_radio()
     self._devices_btn.set_value(st["name"] if st["connected"] and st["name"] else "not connected")
+    # why Bluetooth went off by itself, until it is switched on again
+    self._bt_toggle.set_value(off_reason() if bt_supported() else "")
 
   @property
   def stats_layout(self):

@@ -8,9 +8,11 @@ HCI0="${DPB_HCI0:-/sys/class/bluetooth/hci0}"
 UNITS="${DPB_UNITS:-dpbridge-bt bluetooth dpbridge-obex bluealsa bluealsa-aplay}"
 SYSTEMCTL="${DPB_SYSTEMCTL:-systemctl}"
 INSTALL="${DPB_INSTALL:-}"
-# set while a start has not settled (hci0 up for SETTLE_S); still there at the next start means the last
-# one crashed the comma, so Bluetooth is switched off instead of panicking on every boot
+# set while a start has not settled (hci0 up for SETTLE_S), holding the count of such starts in a row;
+# at 2 the last two crashed the comma (or never came up), so Bluetooth is switched off, with a reason for Settings
 MARK="$DIR/bt_boot"
+REASON="$DIR/bt_reason"
+TRIP=2
 SETTLE_S="${DPB_SETTLE_S:-60}"
 WATCH=1
 # Bluetooth off (Settings or the marker) is $DIR/bt_off; $DIR/disable is only the install and flash kill switch
@@ -45,14 +47,17 @@ rfkill_bt() {
 }
 
 apply() {
-  if want_on && [ "$WATCH" = 1 ] && [ -e "$MARK" ]; then
-    echo "last Bluetooth start never settled, switching it off"
+  local n=0
+  if [ -e "$MARK" ]; then n=$(tr -dc 0-9 < "$MARK"); n=${n:-1}; fi
+  if want_on && [ "$WATCH" = 1 ] && [ "$n" -ge "$TRIP" ]; then
+    echo "the last $n Bluetooth starts never settled, switching it off"
     rm -f "$MARK"
+    echo "off: did not start twice" > "$REASON"
     printf '0' > "$PARAM"
   fi
   if want_on; then
-    rm -f "$OFF"
-    if [ "$WATCH" = 1 ]; then mkdir -p "$DIR"; touch "$MARK"; fi
+    rm -f "$OFF" "$REASON"
+    if [ "$WATCH" = 1 ]; then mkdir -p "$DIR"; echo $((n + 1)) > "$MARK"; fi
     if [ -n "$INSTALL" ] && [ -x "$INSTALL" ]; then
       if [ ! -e /usr/libexec/bluetooth/bluetoothd ]; then
         "$INSTALL" --yes || true

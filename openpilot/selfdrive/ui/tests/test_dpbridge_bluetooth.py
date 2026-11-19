@@ -86,6 +86,11 @@ def test_toggle_and_devices_on_main_settings():
   assert "class SettingsBigParamControl" in src
 
 
+def test_settings_shows_why_bluetooth_went_off():
+  src = (SETTINGS / "settings.py").read_text()
+  assert 'self._bt_toggle.set_value(off_reason() if bt_supported() else "")' in src
+
+
 def test_home_icon_next_to_wifi():
   home = Path(__file__).resolve().parents[1] / "mici/layouts/home.py"
   src = home.read_text()
