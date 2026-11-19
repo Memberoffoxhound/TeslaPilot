@@ -3,7 +3,7 @@ import time
 import threading
 from collections.abc import Callable
 from enum import Enum
-from openpilot.cereal import messaging, log
+from openpilot.cereal import custom, messaging, log
 from opendbc.car.structs import car
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
@@ -81,6 +81,7 @@ class UIState:
         "vehicleParameters",
         "testJoystick",
         "rawAudioData",
+        "selfdriveStateSP",
       ]
     )
 
@@ -125,6 +126,8 @@ class UIState:
     self.personality_param: int = log.LongitudinalPersonality.standard
     self.is_body: bool | None = False
     self.CP: car.CarParams | None = None
+    self.tits_enabled = False
+    self.cp_sp_flags = 0
     self.light_sensor: float = -1.0
     self.tesla_stepped_aside: bool = False  # card stepped aside for Tesla Autosteer/FSD
     self.park = ParkView()                  # park-offroad: parkd's ParkOffroadState, see lib/park_view.py
@@ -311,6 +314,10 @@ class UIState:
         self.has_longitudinal_control = self.CP.openpilotLongitudinalControl
 
     self.recording_audio = self.params.get_bool("RecordAudio") and self.started
+    # TITS (MADS)
+    self.tits_enabled = self.params.get_bool("Mads")
+    cp_sp_bytes = self.params.get("CarParamsSPPersistent")
+    self.cp_sp_flags = messaging.log_from_bytes(cp_sp_bytes, custom.CarParamsSP).flags if cp_sp_bytes else 0
     tesla = self.CP is not None and self.CP.brand == "tesla"
     self.tesla_stepped_aside = tesla and self.started and tesla_step_aside.stepped_aside(self.params)
     self._park_state = park_offroad.get_state(self.params) if tesla and park_offroad.enabled(self.params) else park_offroad.NONE
