@@ -84,8 +84,9 @@ From best to worst. `S` is the stock slot letter from `~/dpbridge-backup/<date>/
 `O` is the other one.
 
 1. It boots and SSH works: `mac/deliver.sh restore --yes`, then `mac/deliver.sh reboot`. The stock slot was never written.
-   The restore sticks until the installer runs again: on a stock kernel the installer always flashes dpbridge
-   (inactive slot only), also after a restore. To keep stock while installing, `touch /data/dpbridge/disable` first.
+   To stay on stock, `touch /data/dpbridge/disable` before that reboot: the slot change makes `boot.py` run the
+   installer at the next boot, and on a stock kernel it flashes dpbridge again (inactive slot only). Remove the
+   file to let it install again.
 2. It does not boot: the bootloader should fall back to the stock slot after failed tries
    (not verified on a comma 4). Leave it powered for a few minutes.
 3. QDL, keeps your data: side USB-C to the Mac first, then power on the top port (30 W or more).

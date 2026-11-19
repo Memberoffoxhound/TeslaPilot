@@ -138,6 +138,13 @@ def test_restore_goes_back_to_stock(dev):
   assert r.returncode == 0, r.stderr
   assert (parts / 'boot_b').read_bytes() == boot_a  # the stock kernel, matching the mirrored system
   assert ops(tmp)[-1] == 'abctl --set_active 0'
+  assert f'touch {data}/disable before rebooting' in r.stdout  # or the next boot reflashes
+
+
+def test_readme_recovery_says_touch_disable_before_the_reboot():
+  readme = (HERE / 'README.md').read_text()
+  rec = readme[readme.index('## Recovery'):]
+  assert '`touch /data/dpbridge/disable` before that reboot' in rec and 'sticks until' not in rec
 
 
 def test_restore_catches_bad_write(dev):

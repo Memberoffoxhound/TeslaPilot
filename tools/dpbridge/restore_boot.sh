@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Go back to the stock kernel: re-activate the slot that was running before flash_boot.sh.
 # --write also copies the stock kernel over the dpbridge slot, which matches the system mirrored there.
-# Sticks until install_userspace.sh runs again, which flashes dpbridge again. Prints the plan only unless --yes.
+# The next boot reruns the installer (slot changed) and it flashes dpbridge again unless /data/dpbridge/disable
+# exists. Prints the plan only unless --yes.
 set -euo pipefail
 YES=0; WRITE=0
 # shellcheck source=lib.sh
@@ -29,3 +30,5 @@ if [ $WRITE = 1 ]; then
 fi
 activate "$(slot_num "$stock")"
 echo "stock slot $stock active after reboot"
+# the slot change reruns the installer at the next boot, which reflashes a stock kernel
+echo "to stay on stock: touch $DIR/disable before rebooting, or the next boot flashes dpbridge again"
