@@ -342,7 +342,6 @@ def test_kernel_flash_downloads_checks_and_reboots_once(dev):
 
 
 def test_kernel_flash_progress_lines(dev):
-  tmp = dev[0]
   sha, e = kenv(dev)
   r = run('kernel.sh', e, 'flash', '--yes')
   lines = [ln.split(': ', 1)[1] for ln in r.stdout.splitlines() if ln.startswith('  kernel: ')]

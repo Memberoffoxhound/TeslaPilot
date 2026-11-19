@@ -9,7 +9,7 @@ RADIO = HERE / "radio.sh"
 def run_radio(tmp_path, param, hci0=False, disable=False):
   log = tmp_path / "sysctl.log"
   stub = tmp_path / "systemctl"
-  stub.write_text("#!/bin/bash\necho \"$*\" >>\"%s\"\n" % log)
+  stub.write_text(f"#!/bin/bash\necho \"$*\" >>\"{log}\"\n")
   stub.chmod(0o755)
   env = dict(os.environ,
              DPBRIDGE_DIR=str(tmp_path / "dpb"),
@@ -57,7 +57,7 @@ def test_seed_on_when_hci0_already_up(tmp_path):
 def watch(tmp_path, param, hci0, settle="2", secs=1.5):
   log = tmp_path / "sysctl.log"
   stub = tmp_path / "systemctl"
-  stub.write_text("#!/bin/bash\necho \"$*\" >>\"%s\"\n" % log)
+  stub.write_text(f"#!/bin/bash\necho \"$*\" >>\"{log}\"\n")
   stub.chmod(0o755)
   if hci0:
     (tmp_path / "hci0").write_text("")

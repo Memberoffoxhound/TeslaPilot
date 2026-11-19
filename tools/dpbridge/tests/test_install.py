@@ -58,7 +58,6 @@ def test_install_rules():
 
 
 def run_bluez_debs(tmp_path, tar_bytes, sha, have_tar=None):
-  import hashlib
   text = (HERE / 'install_userspace.sh').read_text()
   fn = text[text.index('bluez_debs() {'):text.index('\n}\n', text.index('bluez_debs() {')) + 3]
   rel = tmp_path / 'rel'
@@ -66,7 +65,7 @@ def run_bluez_debs(tmp_path, tar_bytes, sha, have_tar=None):
   (rel / 'b.tar').write_bytes(tar_bytes)
   bin_ = tmp_path / 'bin'
   bin_.mkdir(exist_ok=True)
-  (bin_ / 'curl').write_text(f'#!/bin/bash\necho curl >> {tmp_path}/curl.log\nwhile [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done\n'
+  (bin_ / 'curl').write_text(f'#!/bin/bash\necho curl >> {tmp_path}/curl.log\nwhile [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done\n' +
                              f'cp {rel}/b.tar "$out"\n')
   (bin_ / 'curl').chmod(0o755)
   data = tmp_path / 'data'
@@ -156,7 +155,7 @@ def run_get_fw(tmp_path, files, tar_sha=None, have=None, pinned=None):
   sha = tar_sha or hashlib.sha256(buf.getvalue()).hexdigest()
   bin_ = tmp_path / 'bin'
   bin_.mkdir(exist_ok=True)
-  (bin_ / 'curl').write_text(f'#!/bin/bash\nfor a; do case $a in file://*) u=${{a#file://}} ;; esac; done\n'
+  (bin_ / 'curl').write_text('#!/bin/bash\nfor a; do case $a in file://*) u=${a#file://} ;; esac; done\n' +
                              f'while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done\necho "curl $u" >> {tmp_path}/curl.log\ncp "$u" "$out"\n')
   (bin_ / 'curl').chmod(0o755)
   data = tmp_path / 'data'
@@ -164,7 +163,7 @@ def run_get_fw(tmp_path, files, tar_sha=None, have=None, pinned=None):
   for n, b in (have or {}).items():
     (data / n).write_bytes(b)
   lib = (HERE / 'lib.sh').read_text()
-  script = (f'set -euo pipefail\nSUDO=\n{lib}\nDIR={data}\nHERE={here}\nBTFW_TAR=fw.tar\nBTFW_SHA={sha}\n'
+  script = (f'set -euo pipefail\nSUDO=\n{lib}\nDIR={data}\nHERE={here}\nBTFW_TAR=fw.tar\nBTFW_SHA={sha}\n' +
             f'BTFW_URL=file://{rel}/fw.tar\n{fns}\nfw_ok || get_fw\nfw_ok && echo FWOK\n')
   r = subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=dict(os.environ, PATH=f'{bin_}:{os.environ["PATH"]}'))
   log = (tmp_path / 'curl.log').read_text().splitlines() if (tmp_path / 'curl.log').exists() else []
@@ -200,7 +199,7 @@ def run_kernel_step(tmp_path, state, yes=1, reflash=0, flash_rc=0):
   fake = tmp_path / 'kernel.sh'
   fake.write_text(f'echo "$*" >> {tmp_path}/k.log\n[ "$1" = status ] && echo state={state}\n[ "$1" = flash ] && exit {flash_rc}\nexit 0\n')
   lib = (HERE / 'lib.sh').read_text()
-  script = (f'set -euo pipefail\nSUDO=\nYES={yes}\nREFLASH={reflash}\n{lib}\nKSH=(bash {fake})\n{fn}\n'
+  script = (f'set -euo pipefail\nSUDO=\nYES={yes}\nREFLASH={reflash}\n{lib}\nKSH=(bash {fake})\n{fn}\n' +
             'if kernel_step; then echo REBOOT; else echo NOREBOOT; fi\n')
   r = subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=dict(os.environ))
   log = (tmp_path / 'k.log').read_text().splitlines()
