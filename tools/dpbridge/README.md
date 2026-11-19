@@ -19,6 +19,7 @@ Nothing here talks to the car or changes panda safety.
 | `flash_boot.sh` | comma | comma 4 on AGNOS 20.6 only. Backs up both boot slots, marks the other slot unbootable, mirrors the partitions AGNOS updates (xbl xbl_config abl aop devcfg system) into it, writes `boot.img` there, reads everything back from flash, switches to it. Dry run unless `--yes` |
 | `restore_boot.sh` | comma | switches back to the stock slot (`--write` also puts the stock kernel on the other slot) |
 | `install_userspace.sh` | comma | the installer: pinned BT firmware, the dpbridge BlueZ build (`bluez/bluez.env`), bluez-alsa from noble, all debs kept in `/data/dpbridge/debs` so an AGNOS update reinstalls offline (dpkg, skip udev, skip what is already installed), services incl. `dpbridge-obex` for cover art, then the kernel (`kernel.sh`) when the stock one runs and a reboot last. Leaves audio alone. Dry run unless `--yes` |
+| `boot.py` | comma | run by `launch_chffrplus.sh` before manager: `install_userspace.sh --yes` once per setup change with comma's spinner, never blocks openpilot, reboots only after a flash |
 | `bluez/build_bluez.sh` | noble arm64 root | BlueZ 5.83 as three debs plus a tarball: experimental API, obexd with the BIP client, no Evolution libs. The tarball is a release asset; its sha is in `bluez/bluez.env` |
 | `kernel.sh` | comma | automatic kernel flash, run only by `install_userspace.sh` on a stock kernel: status, fetch `boot.img` from the release (sha in `firmware/kernel.env`), `flash_boot.sh --rotate` on the inactive slot only; `post-boot` records the result on the next install |
 | `firmware/firmware.sha256` | both | sha256 of `qca/crbtfw21.tlv`, `qca/crnv21.bin` and its license from linux-firmware f859d9f, and of comma's `firmware/bluetooth.img` from agnos-builder 140ed0c; `mac/make_bundle.sh` and `make_btfw.sh` fetch and check them |
@@ -47,20 +48,27 @@ config is untouched.
 
 ## Steps
 
-The installer does everything, with openpilot down: `install_userspace.sh --yes` on the comma
-(`mac/deliver.sh install --yes` from a Mac). It prints `[1/4]` to `[4/4]` and the kernel step as
+The installer does everything, with openpilot down. After an install from comma's installer URL it runs by itself:
+`launch_chffrplus.sh` calls `boot.py` after `agnos_init`, before manager, on a comma 4 only. `boot.py` runs
+`install_userspace.sh --yes` with comma's spinner and a progress bar on screen, then writes a stamp
+(`/data/dpbridge_boot/stamp`: sha256 of the installer scripts, the pin files, the AGNOS version and the boot slot), so
+it runs again only when the code, a pin, AGNOS or the slot changes. It is skipped while `/data/dpbridge/disable`
+exists. A failure (no network) or the 20 min timeout is logged to `/data/dpbridge_boot/log`, openpilot starts anyway
+and the next boot tries again. After a flash it reboots once, without a stamp; the next boot records the result.
+By hand: `install_userspace.sh --yes` on the comma (`mac/deliver.sh install --yes` from a Mac). It prints `[1/4]` to `[4/4]` and the kernel step as
 `kernel: <step> <percent>%` (downloading, verifying, backing up, writing slot X, reading back, switching slot, rebooting).
 
 1. `[1/4]` records how the last flash went (`kernel.sh post-boot`).
 2. `[2/4]` BT firmware from the pinned release tarball. `[3/4]` BlueZ, bluez-alsa and the units.
 3. `[4/4]` on a stock kernel: fetch `boot.img` (pinned sha), write the inactive slot only, read it back, switch slots.
    The reboot is the installer's final step. On the pinned dpbridge kernel nothing is flashed and there is no reboot.
-4. After the reboot the Bluetooth toggle in Settings starts the radio. Run the installer again after an AGNOS update.
+4. After the reboot the Bluetooth toggle in Settings starts the radio. After an AGNOS update the next boot runs the
+   installer again.
 
 Without `--yes` it is a dry run. `kernel.sh status` prints `state=`: `ok` (pinned kernel runs), `outdated` (an older
 dpbridge kernel runs: restore first), `offer` (stock, install flashes), `off` (`/data/dpbridge/disable`), `failed`
 (the last try with this image, AGNOS and slot failed), `pending`, `no_space`, `unsupported_agnos`, `unsupported_device`.
-`install_userspace.sh --yes --reflash` flashes despite `off` or `failed`.
+`install_userspace.sh --yes --reflash` flashes despite `off` or `failed`; without it both leave the kernel alone.
 
 Manual path (development, new kernel builds): `build_kernel.sh`, `mac/deliver.sh probe`, `qdl-check`, `push`,
 `flash` (dry run) then `flash --yes`, `reboot`, `install --yes`, `test`. Boot a new image by hand this way before
