@@ -286,7 +286,7 @@ class MiciHomeLayout(Widget):
 
     self._long_badge = LongModeBadge()
     self._tits_badge = TitsBadge()
-    self._bt_icon = IconWidget("icons_mici/bluetooth.png", BT_ICON_SIZE, opacity=0.9)
+    self._bt_icon = IconWidget("icons_mici/settings/network/bluetooth.png", BT_ICON_SIZE, opacity=0.9)
     self._usb_icon = IconWidget("icons_mici/usb.png", (62, 40))
     self._chestnut_icon = IconWidget("icons_mici/chestnut_green.png", (54, 40))
     self._chestnut_loading_icon = IconWidget("icons_mici/chestnut.png", (68, 40))

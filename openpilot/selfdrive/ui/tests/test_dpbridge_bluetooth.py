@@ -72,7 +72,7 @@ def test_toggle_and_devices_on_main_settings():
 def test_home_icon_next_to_wifi():
   home = Path(__file__).resolve().parents[1] / "mici/layouts/home.py"
   src = home.read_text()
-  assert "icons_mici/bluetooth.png" in src
+  assert "icons_mici/settings/network/bluetooth.png" in src
   assert "BT_ICON_SIZE = (32, 48)" in src
   wifi = src.find("NetworkIcon()")
   icon = src.find("self._bt_icon,")

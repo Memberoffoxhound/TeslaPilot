@@ -59,7 +59,7 @@ class DeviceButton(BigButton):
     self._on_forget = on_forget
     self._forgetting = False
     self._busy = ""  # pairing... / connecting...
-    self._bt_icon = gui_app.texture("icons_mici/bluetooth.png", 32, 48)
+    self._bt_icon = gui_app.texture("icons_mici/settings/network/bluetooth.png", 32, 48)
     self._forget_btn = ForgetButton(self._forget)
     self._check_txt = gui_app.texture("icons_mici/setup/driver_monitoring/dm_check.png", 32, 32)
 
