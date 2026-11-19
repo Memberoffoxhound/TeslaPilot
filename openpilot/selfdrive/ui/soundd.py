@@ -140,7 +140,7 @@ class Soundd:
 
     out = ret * self.current_volume
     try:  # dpbridge A2DP, silent during any alert or shutter
-      m = self.music.get(frames, self.current_alert != AudibleAlert.none or self.shutter_idx < len(self.shutter), self.current_volume)
+      m = self.music.get(frames, self.current_alert != AudibleAlert.none or self.shutter_idx < len(self.shutter))
       if m is not None:
         out += m
     except Exception:

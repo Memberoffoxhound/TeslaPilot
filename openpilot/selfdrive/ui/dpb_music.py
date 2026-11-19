@@ -71,7 +71,7 @@ class Music:
     return out
 
   # returns the music block to add, or None when it must add nothing
-  def get(self, frames, alert, max_gain, now=None):
+  def get(self, frames, alert, now=None):
     try:
       now = time.monotonic() if now is None else now
       self._update_db(now)
@@ -85,7 +85,7 @@ class Music:
       if now < self.quiet_until:
         return None
       self.fade = min(1., self.fade + frames / SAMPLE_RATE / RAMP_TIME)
-      g = min(10 ** (self.db / 20), max_gain) * self.fade
+      g = (10 ** (self.db / 20)) * self.fade
       return x * g if g > 0 else None
     except Exception as e:
       t = time.monotonic()
