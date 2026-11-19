@@ -5,7 +5,7 @@ import threading
 
 import openpilot.cereal.messaging as messaging
 
-from openpilot.cereal import log
+from openpilot.cereal import custom, log
 from opendbc.car.structs import car
 
 from openpilot.common.params import Params
@@ -21,6 +21,9 @@ from opendbc.car.interfaces import CarInterfaceBase, RadarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.cruise import VCruiseHelper
 from openpilot.selfdrive.car import local_fingerprints, tesla_step_aside, park_offroad
+from opendbc.safety import ALTERNATIVE_EXPERIENCE
+from opendbc.sunnypilot.car.interfaces import get_params_sp, setup_mads
+from openpilot.sunnypilot.mads.helpers import set_alternative_experience, set_car_specific_params
 
 REPLAY = "REPLAY" in os.environ
 
@@ -67,7 +70,7 @@ class Car:
   def __init__(self, CI=None, RI=None) -> None:
     self.can_sock = messaging.sub_sock('can', timeout=20)
     self.sm = messaging.SubMaster(['pandaStates', 'carControl', 'onroadEvents'])
-    self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput', 'radarTracks'])
+    self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput', 'radarTracks', 'carParamsSP'])
 
     self.can_rcv_cum_timeout_counter = 0
 
@@ -114,6 +117,14 @@ class Car:
     if self.CP.brand != "tesla" or park_offroad.brand(self.params, "CarParamsPersistent") != "tesla":
       park_offroad.put_state(self.params, park_offroad.NONE, block=True)
     self.CP.alternativeExperience = 0
+
+    # MADS, car state hooks only when the toggle is on
+    screen_button = str(self.params.get("TeslaMadsScreenButton", return_default=True))
+    self.CP_SP = get_params_sp(self.CP, self.CI.fingerprints or {}, {"TeslaMadsScreenButton": screen_button})
+    set_alternative_experience(self.CP, self.CP_SP, self.params)
+    set_car_specific_params(self.CP, self.CP_SP, self.params)
+    if self.CP.alternativeExperience & ALTERNATIVE_EXPERIENCE.ENABLE_MADS:
+      setup_mads(self.CI, self.CP_SP)
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
     controller_available = self.CI.CC is not None and openpilot_enabled_toggle and not self.CP.dashcamOnly
 
@@ -172,6 +183,11 @@ class Car:
     if self.CP.brand != "mock" and not self.CP.dashcamOnly and len(self.CP.carFw) > 0:
       self.params.put("CarParamsCache", cp_bytes)
 
+    self.CP_SP_capnp = custom.CarParamsSP.new_message(flags=int(self.CP_SP.flags), safetyParam=int(self.CP_SP.safetyParam))
+    cp_sp_bytes = self.CP_SP_capnp.to_bytes()
+    self.params.put("CarParamsSP", cp_sp_bytes, block=True)
+    self.params.put("CarParamsSPPersistent", cp_sp_bytes)
+
     self.v_cruise_helper = VCruiseHelper(self.CP)
 
     self.is_metric = self.params.get_bool("IsMetric")
@@ -228,6 +244,11 @@ class Car:
       cp_send.valid = True
       cp_send.carParams = self.CP
       self.pm.send('carParams', cp_send)
+
+      cp_sp_send = messaging.new_message('carParamsSP')
+      cp_sp_send.valid = True
+      cp_sp_send.carParamsSP = self.CP_SP_capnp
+      self.pm.send('carParamsSP', cp_sp_send)
 
     # publish new carOutput
     co_send = messaging.new_message('carOutput')
