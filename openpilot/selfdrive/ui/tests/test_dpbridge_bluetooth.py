@@ -50,11 +50,28 @@ def test_available_is_hci0(monkeypatch, tmp_path):
   assert bt.bt_available()
 
 
-def test_supported_is_the_wcn_sysfs(monkeypatch, tmp_path):
-  bt.bt_supported.__globals__["WCN"] = str(tmp_path / "wcn")
-  assert not bt.bt_supported()
-  (tmp_path / "wcn").write_text("")
-  assert bt.bt_supported()
+def test_supported_is_the_kernel_check():
+  # every Bluetooth entry point goes through bt_kernel (openpilot/system/dpbridge/tests/test_kernel_ok.py)
+  src = (SETTINGS / "bluetooth.py").read_text()
+  assert "def bt_supported() -> bool:\n  return bt_kernel()\n" in src
+  assert "from openpilot.system.dpbridge.kernel_ok import bt_kernel" in src
+
+
+def test_home_and_nowplaying_gated_on_the_kernel():
+  ui = Path(__file__).resolve().parents[1] / "mici"
+  home = (ui / "layouts/home.py").read_text()
+  assert "self._bt_icon.set_visible(self._bt_on and bt_kernel())" in home
+  card = (ui / "widgets/nowplaying.py").read_text()
+  assert "self._state = read_state() if bt_kernel() else {}" in card
+  # the card is the only now-playing UI, on home and onroad
+  road = (ui / "onroad/augmented_road_view.py").read_text()
+  assert "NowPlayingCard()" in road and "read_state" not in road
+
+
+def test_pairing_panel_only_behind_the_gated_button():
+  for f in (Path(__file__).resolve().parents[1] / "mici").rglob("*.py"):
+    if f.name != "bluetooth.py" and "BluetoothUIMici()" in f.read_text():
+      assert f.name == "settings.py", f
 
 
 def test_toggle_and_devices_on_main_settings():
@@ -78,5 +95,5 @@ def test_home_icon_next_to_wifi():
   icon = src.find("self._bt_icon,")
   long = src.find("self._long_badge,")
   assert 0 <= wifi < icon < long
-  assert "set_visible(self._bt_on)" in src
+  assert "set_visible(self._bt_on and bt_kernel())" in src
   assert "set_opacity(0.9 if self._bt_connected else 0.5)" in src

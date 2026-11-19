@@ -5,6 +5,7 @@ import os
 import raylib_nb as rl
 from openpilot.selfdrive.ui.mici.widgets.trip_row import GREY, WHITE
 from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.system.dpbridge.kernel_ok import bt_kernel
 from openpilot.system.dpbridge.nowplaying import fmt_mmss, read_state, send_command, visible
 from openpilot.system.ui.lib.application import FontWeight, gui_app
 from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -78,7 +79,7 @@ class NowPlayingCard(Widget):
       self._unload_art()
 
   def _update_state(self):
-    self._state = read_state()
+    self._state = read_state() if bt_kernel() else {}  # no card off the dpbridge kernel
     show = visible(self._state)
     self.set_visible(show)
     if show:

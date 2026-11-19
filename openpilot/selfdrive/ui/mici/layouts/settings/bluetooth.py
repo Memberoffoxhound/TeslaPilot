@@ -5,6 +5,7 @@ from collections.abc import Callable
 from openpilot.common.params import Params
 from openpilot.selfdrive.ui.mici.layouts.settings.network.wifi_ui import ForgetButton, LoadingAnimation
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigParamControl, GreyBigButton, LABEL_COLOR
+from openpilot.system.dpbridge.kernel_ok import bt_kernel
 from openpilot.system.dpbridge.radio_status import read as read_bt_radio
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
 from openpilot.system.ui.widgets import Widget
@@ -15,14 +16,13 @@ import raylib_nb as rl
 # dpbridge Bluetooth: the toggle lives on the main Settings list. This page is the
 # devices card, styled like the Wi-Fi search list. UI only writes DpbCmd.
 HCI0 = "/sys/class/bluetooth/hci0"
-WCN = "/sys/module/hci_uart/parameters/wcn3990"
 SHARE_NOTE = ["DashKit streams to one device at a time.",
               "While the comma is logging, DashPilot on your phone shows no live data.",
               "Turn off log DashKit to give it back."]
 
 
 def bt_supported() -> bool:
-  return os.path.exists(WCN)
+  return bt_kernel()
 
 
 def bt_available() -> bool:

@@ -21,6 +21,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state, ChestnutState
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.widgets.trip_row import GREY, WHITE, draw_trip_row, fmt_trip
 from openpilot.selfdrive.ui.mici.widgets.nowplaying import NowPlayingCard
+from openpilot.system.dpbridge.kernel_ok import bt_kernel
 from openpilot.system.dpbridge.radio_status import PATH as BT_RADIO, read as read_bt_radio
 from openpilot.selfdrive.ui.mici.widgets.vehicle_profile import MAKES, make as car_make
 from openpilot.common.version import RELEASE_BRANCHES
@@ -484,7 +485,7 @@ class MiciHomeLayout(Widget):
     self._body_icon.set_visible(bool(ui_state.is_body))
     self._ssa_icon.set_visible(self._ssa_on and bool(ui_state.has_longitudinal_control))
     self._tits_badge.set_visible(self._tits_on)
-    self._bt_icon.set_visible(self._bt_on)
+    self._bt_icon.set_visible(self._bt_on and bt_kernel())
     self._bt_icon.set_opacity(0.9 if self._bt_connected else 0.5)
 
     footer_rect = rl.Rectangle(self.rect.x + HOME_PADDING, self.rect.y + self.rect.height - 48, self.rect.width - HOME_PADDING, 48)
