@@ -40,8 +40,8 @@ void Panda::set_safety_model(cereal::CarParams::SafetyModel safety_model, uint16
   handle->control_write(0xdc, (uint16_t)safety_model, safety_param);
 }
 
-void Panda::set_alternative_experience(uint16_t alternative_experience) {
-  handle->control_write(0xdf, alternative_experience, 0);
+void Panda::set_alternative_experience(uint16_t alternative_experience, uint16_t safety_param_sp) {
+  handle->control_write(0xdf, alternative_experience, safety_param_sp);
 }
 
 std::string Panda::serial_read(int port_number) {
@@ -123,8 +123,8 @@ void Panda::set_power_saving(bool power_saving) {
 }
 
 
-void Panda::send_heartbeat(bool engaged) {
-  handle->control_write(0xf3, engaged, 0);
+void Panda::send_heartbeat(bool engaged, bool engaged_mads) {
+  handle->control_write(0xf3, engaged, engaged_mads);
 }
 
 

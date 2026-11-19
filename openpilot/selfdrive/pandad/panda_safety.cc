@@ -1,5 +1,6 @@
 #include "selfdrive/pandad/pandad.h"
 #include "openpilot/cereal/messaging/messaging.h"
+#include "openpilot/cereal/gen/cpp/custom.capnp.h"
 #include "common/swaglog.h"
 
 void PandaSafety::configureSafetyMode(bool is_onroad) {
@@ -64,7 +65,17 @@ void PandaSafety::setSafetyMode(const std::string &params_string) {
   cereal::CarParams::SafetyModel safety_model = safety_configs[0].getSafetyModel();
   uint16_t safety_param = safety_configs[0].getSafetyParam();
 
-  LOGW("setting safety model: %d, param: %d, alternative experience: %d", (int)safety_model, safety_param, alternative_experience);
-  panda_->set_alternative_experience(alternative_experience);
+  // MADS car flags, only with MADS on so MADS off stays stock
+  uint16_t safety_param_sp = 0U;
+  std::string params_sp = params_.get("CarParamsSP");
+  if ((alternative_experience & 1024U) != 0U /* ALT_EXP_ENABLE_MADS */ && !params_sp.empty()) {
+    AlignedBuffer aligned_buf_sp;
+    capnp::FlatArrayMessageReader cmsg_sp(aligned_buf_sp.align(params_sp.data(), params_sp.size()));
+    safety_param_sp = cmsg_sp.getRoot<cereal::CarParamsSP>().getSafetyParam();
+  }
+
+  LOGW("setting safety model: %d, param: %d, alternative experience: %d, param sp: %d", (int)safety_model, safety_param,
+       alternative_experience, safety_param_sp);
+  panda_->set_alternative_experience(alternative_experience, safety_param_sp);
   panda_->set_safety_model(safety_model, safety_param);
 }
