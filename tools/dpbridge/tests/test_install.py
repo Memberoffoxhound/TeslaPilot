@@ -52,6 +52,12 @@ def test_teardown_runs_on_a_signal(tmp_path, sig):
   assert p.returncode == 143 and out.split() == ['teardown']
 
 
+def onroad_fn():
+  text = (HERE / 'install_userspace.sh').read_text()
+  start = text.index('onroad() {')
+  return text[start:text.index('\n}\n', start) + 3]
+
+
 def run_onroad_check(tmp_path, manager, offroad, yes=1):
   import os
   line = next(ln for ln in (HERE / 'install_userspace.sh').read_text().splitlines() if 'openpilot is onroad' in ln)
@@ -64,8 +70,8 @@ def run_onroad_check(tmp_path, manager, offroad, yes=1):
     (tmp_path / 'p/IsOffroad').write_text(offroad)
   lib = (HERE / 'lib.sh').read_text()
   env = dict(os.environ, PATH=f"{b}:{os.environ['PATH']}", DPB_PARAMS=str(tmp_path / 'p'))
-  return subprocess.run(['bash', '-c', f'set -euo pipefail; YES={yes}\n{lib}\n{line}\necho go'], capture_output=True,
-                        text=True, env=env)
+  script = f'set -euo pipefail; YES={yes}\n{lib}\n{onroad_fn()}\n{line}\necho go'
+  return subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=env)
 
 
 @pytest.mark.parametrize('manager, offroad, yes, ok', [(True, '0', 1, False), (True, None, 1, False), (True, '1', 1, True),
@@ -92,7 +98,7 @@ def test_onroad_check_finds_the_real_manager(tmp_path, offroad, ok):
   (tmp_path / 'p/IsOffroad').write_text(offroad)
   lib = (HERE / 'lib.sh').read_text()
   env = dict(os.environ, DPB_PARAMS=str(tmp_path / 'p'))
-  script = f'set -euo pipefail; YES=1\n{lib}\n{line}\necho go'
+  script = f'set -euo pipefail; YES=1\n{lib}\n{onroad_fn()}\n{line}\necho go'
   p = subprocess.Popen(['./manager.py'], cwd=mgr)
   try:
     time.sleep(0.3)
@@ -111,6 +117,50 @@ def test_onroad_check_finds_the_real_manager(tmp_path, offroad, ok):
 def test_onroad_check_is_before_any_change():
   text = script_text()
   assert text.index('openpilot is onroad') < text.index('echo "[1/4]')
+
+
+def after_flash_block():
+  text = (HERE / 'install_userspace.sh').read_text()
+  start = text.index('if kernel_step; then')
+  return text[start:text.index('echo "installed. the Bluetooth toggle')]
+
+
+def run_reboot_recheck(tmp_path, manager, offroad, yes=1):
+  import os
+  b = tmp_path / 'bin'
+  b.mkdir()
+  (b / 'pgrep').write_text(f'#!/bin/sh\nexit {0 if manager else 1}\n')
+  (b / 'pgrep').chmod(0o755)
+  (tmp_path / 'p').mkdir()
+  if offroad is not None:
+    (tmp_path / 'p/IsOffroad').write_text(offroad)
+  reboot = tmp_path / 'reboot'
+  reboot.write_text(f'#!/bin/sh\necho reboot >> {tmp_path}/reboots\n')
+  reboot.chmod(0o755)
+  lib = (HERE / 'lib.sh').read_text()
+  env = dict(os.environ, PATH=f"{b}:{os.environ['PATH']}", DPB_PARAMS=str(tmp_path / 'p'))
+  script = (f'set -euo pipefail\nYES={yes}\nSUDO=\nREBOOT={reboot}\n{lib}\n'
+            f'{onroad_fn()}\nkernel_step() {{ return 0; }}\n{after_flash_block()}')
+  return subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=env)
+
+
+@pytest.mark.parametrize('manager, offroad, parked', [(True, '0', True), (True, None, True), (True, '1', False),
+                                                      (False, '0', False)])
+def test_reboot_waits_if_the_car_went_onroad(tmp_path, manager, offroad, parked):
+  r = run_reboot_recheck(tmp_path, manager, offroad)
+  reboots = (tmp_path / 'reboots').exists()
+  if parked:
+    assert r.returncode == 0 and 'flashed, reboot when parked' in r.stdout and not reboots
+    assert 'rebooting into the dpbridge kernel' not in r.stdout and 'kernel: rebooting 100%' not in r.stdout
+  else:
+    assert r.returncode == 0 and reboots and 'flashed, reboot when parked' not in r.stdout
+    assert 'rebooting into the dpbridge kernel' in r.stdout and 'kernel: rebooting 100%' in r.stdout
+
+
+def test_onroad_is_rechecked_before_reboot():
+  text = script_text()
+  tail = text[text.index('echo "[4/4] kernel"'):]
+  assert tail.index('if onroad') < tail.index('flashed, reboot when parked') < tail.index('$SUDO "$REBOOT"')
 
 
 def test_radio_helper_is_installed_and_enabled():
