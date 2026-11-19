@@ -53,14 +53,17 @@ The installer does everything, with openpilot down. After an install from comma'
 `install_userspace.sh --yes` with comma's spinner and a progress bar on screen, then writes a stamp
 (`/data/dpbridge_boot/stamp`: sha256 of the installer scripts, the pin files, the AGNOS version and the boot slot), so
 it runs again only when the code, a pin, AGNOS or the slot changes. It is skipped while `/data/dpbridge/disable`
-exists. A failure (no network) or the 20 min timeout on steps 1-3 is logged to `/data/dpbridge_boot/log`, openpilot
-starts anyway and the next boot tries again, up to 3 runs per setup (`rm /data/dpbridge_boot/fails` to retry).
-The kernel step is never timed out or stopped by a signal; its download gives up on a stalled link by itself.
+exists. A failure or the 20 min timeout on steps 1-3 is logged to `/data/dpbridge_boot/log`, openpilot starts
+anyway and the next boot tries again, up to 3 runs per setup (`rm /data/dpbridge_boot/fails` to retry). A failed
+download (no network, exit 75) is not counted. The kernel step is never killed: its boot.img download gives up on
+a stalled link or after 20 min per try (resumed next run), and 60 min after `[4/4]` boot.py stops waiting and lets
+openpilot start while the flash finishes on its own (output in `/data/dpbridge_boot/install.out`).
 After a flash it reboots once, without a stamp; the next boot records the result.
 Do the first run parked at home on Wi-Fi: openpilot is not available for the minutes it takes, then one reboot.
 
-By hand: `install_userspace.sh --yes` on the comma (`mac/deliver.sh install --yes` from a Mac). It refuses while
-openpilot runs onroad (`IsOffroad` not 1). It prints `[1/4]` to `[4/4]` and the kernel step as
+By hand: `install_userspace.sh --yes` on the comma, or `mac/deliver.sh install --yes` from a Mac, which runs it
+detached from SSH (log in `install.log`) so a dropped session can't stop a flash. It refuses while openpilot runs
+onroad (`./manager.py` running and `IsOffroad` not 1). It prints `[1/4]` to `[4/4]` and the kernel step as
 `kernel: <step> <percent>%` (downloading, verifying, backing up, writing slot X, reading back, switching slot), then
 `kernel: rebooting 100%` from the installer.
 
@@ -83,7 +86,8 @@ the installer may flash it anywhere.
 
 Kill switch: `touch /data/dpbridge/disable` stops the first-boot run and any kernel flash (`--reflash` overrides).
 Bluetooth off is a separate file: the Settings toggle and `mac/deliver.sh disable` (car off) write
-`/data/dpbridge/bt_off`, which keeps the chip off from the next boot and nothing else.
+`/data/dpbridge/bt_off`, which keeps the chip off from the next boot and nothing else. A `disable` left by an older
+build with the toggle off is moved to `bt_off` by radio.sh (dpbridge kernel) or boot.py (any kernel).
 If two Bluetooth starts in a row never settle (hci0 up for 60 s), the next one switches Bluetooth off instead and
 Settings shows `off: did not start twice` under the toggle until it is switched on again.
 
