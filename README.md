@@ -88,7 +88,16 @@ Credit: ported from [sunnypilot](https://github.com/sunnypilot/sunnypilot)'s MAD
 
 Off by default. Turn it on in **Settings → toggles → TITS**. With TITS on, TeslaPilot keeps steering when you cancel cruise while you handle speed. Engage cruise again to get speed control back. On a Tesla, pressing the brake still turns both off. Only the TITS options that work on your car show under the toggle.
 
-When TITS is on, its badge shows on Home next to LONG. Tap it to get back to the toggle. Onroad, the wheel's rim lights up in your theme color while TITS steers on its own.
+The Home badge and onroad wheel. Colors are for the default Tesla theme; with the openpilot theme, blue is green.
+
+| | |
+|:---:|:---|
+| <img src="docs/screenshots/icon-tits.png" height="80" alt="TITS"> | **TITS**: shows on Home while TITS is on. Tap to open the toggle. |
+| <img src="docs/screenshots/icon-wheel-engaged.png" height="80" alt="Engaged"> | **Blue**: openpilot is engaged. |
+| <img src="docs/screenshots/icon-wheel-tits.png" height="80" alt="TITS steering"> | **Blue rim**: TITS is steering. You handle speed. |
+| <img src="docs/screenshots/icon-wheel-tits-paused.png" height="80" alt="TITS paused"> | **Dim rim**: TITS is on but not steering, like in Park or Reverse. |
+| <img src="docs/screenshots/icon-wheel-override.png" height="80" alt="Override"> | **White**: you're overriding, like with the gas pedal. |
+| <img src="docs/screenshots/icon-wheel-off.png" height="80" alt="Off"> | **Gray**: nothing is steering. |
 
 ### Big model on a chestnut or Jetlink (optional)
 
@@ -138,12 +147,13 @@ Your drive stats stay on the comma and nothing gets uploaded. Turn them on with 
 
 **Ending a drive on a Tesla (Tesla only).** A Tesla has no ignition to turn off, so openpilot would stay onroad in Park. With **go offroad in park** on, shifting into Park brings up the card and the comma goes offroad. Shift to R or D to start a new drive.
 
-The badge at the bottom of Home shows who's handling gas and brake:
+The badge at the bottom of Home shows who handles gas and brake:
 
 | | |
 |:---:|:---|
-| <img src="docs/screenshots/icon-tacc.png" height="80" alt="TACC"> | **TACC**: Tesla controls gas and brake, and openpilot steers. |
-| <img src="docs/screenshots/icon-long.png" height="80" alt="LONG"> | **LONG**: openpilot controls gas and brake (alpha, **Settings → developer → alpha longitudinal**). |
+| <img src="docs/screenshots/icon-tacc.png" height="80" alt="TACC"> | **TACC**: Tesla handles gas and brake. openpilot steers. |
+| <img src="docs/screenshots/icon-long.png" height="80" alt="LONG"> | **LONG**: openpilot handles gas and brake (alpha, **Settings → developer → alpha longitudinal**). |
+| <img src="docs/screenshots/icon-tits.png" height="80" alt="TITS"> | **TITS**: shows next to LONG or TACC when TITS is on. |
 
 On other cars it shows **SCC** for a Kia and **STOCK / ACC** for everything else.
 
