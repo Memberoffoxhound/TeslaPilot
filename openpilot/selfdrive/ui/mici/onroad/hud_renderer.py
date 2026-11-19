@@ -10,7 +10,7 @@ from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus, ChestnutState
 from openpilot.selfdrive.ui.mici.widgets.fill_icon import draw_progress
 from openpilot.selfdrive.ui.layouts.settings.common import (
   custom_onroad_ui, heading_deg, heading_letter, compass_size, COMPASS_LARGE,
-  tesla_theme, theme_color, THEME_TESLA_RGB,
+  tesla_theme, theme_color, theme_rgb, THEME_TESLA_RGB,
 )
 from openpilot.system.ui.lib.application import gui_app, FontWeight, ASSETS_DIR
 from openpilot.system.ui.lib.multilang import tr
@@ -34,6 +34,9 @@ WHEEL_SIZE = 52
 WHEEL_WHITE = rl.Color(255, 255, 255, 255)
 WHEEL_GREEN = rl.Color(0, 255, 64, 255)
 WHEEL_ORANGE = rl.Color(255, 115, 0, 255)
+WHEEL_RIM_R = 0.77
+TITS_PAUSED_ALPHA = 0.45
+TITS_HUB_ALPHA = 0.85
 
 
 def _texture(rgba: np.ndarray, px: float) -> rl.Texture:
@@ -70,6 +73,22 @@ def _wheel_effect_textures(asset: str, size: int) -> tuple[rl.Texture, rl.Textur
   highlight_rgba[..., 3] = np.clip(alpha * 89 * (1 - r), 0, 255)
 
   return _texture(glow_rgba, px), _texture(highlight_rgba, px)
+
+
+def _wheel_part_textures(asset: str, size: int) -> tuple[rl.Texture, rl.Texture]:
+  # TITS wheel: rim is steering, hub and spokes are speed
+  image = gui_app._load_image_from_path((ASSETS_DIR / asset).as_posix(), size, size)
+  w, h, px = image.width, image.height, image.width / size
+  alpha = np.frombuffer(image.to_bytes(w * h * 4), dtype=np.uint8).reshape(h, w, 4)[..., 3]
+  rl.unload_image(image)
+  yy, xx = np.mgrid[:h, :w]
+  rim = np.hypot(xx + 0.5 - w / 2, yy + 0.5 - h / 2) / (w / 2) > WHEEL_RIM_R
+  parts = []
+  for keep in (rim, ~rim):
+    rgba = np.full((h, w, 4), 255, dtype=np.uint8)
+    rgba[..., 3] = alpha * keep
+    parts.append(_texture(rgba, px))
+  return parts[0], parts[1]
 
 
 @dataclass(frozen=True)
@@ -115,6 +134,7 @@ class HudRenderer(Widget):
 
     self._txt_wheel: rl.Texture = gui_app.texture('icons_mici/wheel.png', WHEEL_SIZE, WHEEL_SIZE)
     self._txt_wheel_glow, self._txt_wheel_highlight = _wheel_effect_textures('icons_mici/wheel.png', WHEEL_SIZE)
+    self._txt_wheel_rim, self._txt_wheel_hub = _wheel_part_textures('icons_mici/wheel.png', WHEEL_SIZE)
     self._txt_chestnut: rl.Texture = gui_app.texture('icons_mici/chestnut.png', 48, 36)
     self._txt_chestnut_green: rl.Texture = gui_app.texture('icons_mici/chestnut_green.png', 48, 36)
     self._txt_chestnut_orange: rl.Texture = gui_app.texture('icons_mici/chestnut_orange.png', 61, 36)
@@ -306,6 +326,10 @@ class HudRenderer(Widget):
     rotation = -ui_state.sm['carState'].steeringAngleDeg if ui_state.started else 0.0
 
     alpha = 255 * (1 - (1 - DIMMED_ICON_ALPHA) * status_fade.weight(UIStatus.DISENGAGED) * (1 - critical))
+    mads = ui_state.sm['selfdriveStateSP'].mads
+    if ui_state.started and mads.enabled and not ui_state.engaged and critical < 0.5:
+      self._draw_tits_wheel(pos_x, pos_y, rotation, mads.active)
+      return
     origin = rl.Vector2(self._txt_wheel_glow.width / 2, self._txt_wheel_glow.height / 2)
     rl.draw_texture_pro(self._txt_wheel_glow, rl.Rectangle(0, 0, self._txt_wheel_glow.width, self._txt_wheel_glow.height),
                         rl.Rectangle(pos_x, pos_y, self._txt_wheel_glow.width, self._txt_wheel_glow.height), origin, rotation,
@@ -316,6 +340,21 @@ class HudRenderer(Widget):
     rl.draw_texture_pro(self._txt_wheel_highlight, rl.Rectangle(0, 0, wheel_txt.width, wheel_txt.height),
                         rl.Rectangle(pos_x, pos_y, wheel_txt.width, wheel_txt.height),
                         rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(255, 255, 255, int(alpha * glow)))
+
+  def _draw_tits_wheel(self, pos_x: int, pos_y: int, rotation: float, active: bool) -> None:
+    # TITS steering alone: rim in the theme color (comma green fallback), hub white; paused dims both
+    r, g, b = theme_rgb()
+    rim_alpha = 255 if active else int(255 * TITS_PAUSED_ALPHA)
+    hub_alpha = int(255 * (TITS_HUB_ALPHA if active else DIMMED_ICON_ALPHA))
+    dst = rl.Rectangle(pos_x, pos_y, self._txt_wheel_rim.width, self._txt_wheel_rim.height)
+    src = rl.Rectangle(0, 0, self._txt_wheel_rim.width, self._txt_wheel_rim.height)
+    origin = rl.Vector2(self._txt_wheel_rim.width / 2, self._txt_wheel_rim.height / 2)
+    if active:
+      glow = self._txt_wheel_glow
+      rl.draw_texture_pro(glow, rl.Rectangle(0, 0, glow.width, glow.height), rl.Rectangle(pos_x, pos_y, glow.width, glow.height),
+                          rl.Vector2(glow.width / 2, glow.height / 2), rotation, rl.Color(r, g, b, 255))
+    rl.draw_texture_pro(self._txt_wheel_rim, src, dst, origin, rotation, rl.Color(r, g, b, rim_alpha))
+    rl.draw_texture_pro(self._txt_wheel_hub, src, dst, origin, rotation, rl.Color(255, 255, 255, hub_alpha))
 
   def _draw_compass(self, rect: rl.Rectangle, panel_visible: bool | None = None) -> None:
     # large draws from render(), small from the side panel
