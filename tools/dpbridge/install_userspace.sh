@@ -80,6 +80,8 @@ OBEX_OFF=pcsuite,ftp,irmc,pbap,mas,mns
 TORN=0
 teardown() { if [ $YES = 1 ] && [ $TORN = 0 ]; then TORN=1; $SUDO umount "$MNT" 2> /dev/null || true; $SUDO /usr/comma/apt_teardown.sh; fi; }
 trap teardown EXIT
+# a timeout's SIGTERM still runs the teardown: exit through the EXIT trap
+trap 'exit 143' TERM INT HUP
 run $SUDO /usr/comma/apt_setup.sh
 
 # WCN3990 firmware (the comma 4 has no bluetooth partition). btqca loads qca/crbtfw<rev>.tlv and qca/crnv<rev>.bin

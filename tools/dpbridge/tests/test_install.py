@@ -1,14 +1,18 @@
 # install_userspace.sh's EXIT trap, run as the script runs it (set -euo pipefail, --yes) with a stub sudo.
 import re
+import signal
 import subprocess
 from pathlib import Path
+
+import pytest
 
 HERE = Path(__file__).resolve().parents[1]
 
 
 def teardown_block():
   text = (HERE / 'install_userspace.sh').read_text()
-  return text[text.index('TORN=0'):text.index('trap teardown EXIT') + len('trap teardown EXIT')]
+  end = "trap 'exit 143' TERM INT HUP"
+  return text[text.index('TORN=0'):text.index(end) + len(end)]
 
 
 def stub_sudo(tmp_path):
@@ -34,6 +38,18 @@ def test_teardown_runs_once_before_the_kernel_step(tmp_path):
   text = script_text()
   k = text[text.index('echo "[4/4] kernel"'):]
   assert k.index('teardown') < k.index('kernel_step') < k.index('$SUDO "$REBOOT"')
+
+
+@pytest.mark.parametrize('sig', [signal.SIGTERM, signal.SIGINT, signal.SIGHUP])
+def test_teardown_runs_on_a_signal(tmp_path, sig):
+  # what boot.py's timeout sends: the installer must still put / back to read-only
+  stub = stub_sudo(tmp_path)
+  script = f'set -euo pipefail; YES=1; MNT={tmp_path}/mnt; SUDO={stub}\n{teardown_block()}\necho up; sleep 30 > /dev/null & wait'
+  p = subprocess.Popen(['bash', '-c', script], stdout=subprocess.PIPE, text=True)
+  assert p.stdout.readline().strip() == 'up'
+  p.send_signal(sig)
+  out, _ = p.communicate(timeout=10)
+  assert p.returncode == 143 and out.split() == ['teardown']
 
 
 def test_radio_helper_is_installed_and_enabled():
