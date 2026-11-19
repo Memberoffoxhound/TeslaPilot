@@ -1,4 +1,5 @@
 # boot.py: the first-boot run of the installer before manager.
+import hashlib
 import importlib.util
 import re
 import subprocess
@@ -45,6 +46,24 @@ def load(tmp_path, monkeypatch, install='echo "[1/4] x"; exit 0', state='ok', mo
 def runs(tmp_path):
   p = tmp_path / 'runs'
   return p.read_text().splitlines() if p.exists() else []
+
+
+def pin_cache(m, tmp_path, btfw=b'fw', bluez=b'bz', boot=b'boot', write=True):
+  (tmp_path / 'data/debs').mkdir(exist_ok=True)
+  if write:
+    (tmp_path / 'data/debs/fw.tar').write_bytes(btfw)
+    (tmp_path / 'data/debs/bz.tar').write_bytes(bluez)
+    (tmp_path / 'data/boot.img').write_bytes(boot)
+  pins = {
+    ('firmware/btfw.env', 'BTFW_TAR'): 'fw.tar',
+    ('firmware/btfw.env', 'BTFW_SHA'): hashlib.sha256(btfw).hexdigest(),
+    ('bluez/bluez.env', 'BLUEZ_TAR'): 'bz.tar',
+    ('bluez/bluez.env', 'BLUEZ_SHA'): hashlib.sha256(bluez).hexdigest(),
+    ('firmware/kernel.env', 'BOOT_SHA'): hashlib.sha256(boot).hexdigest(),
+    ('firmware/kernel.env', 'BOOT_SIZE'): str(len(boot)),
+  }
+  orig = m.env_val
+  m.env_val = lambda f, name, pins=pins, orig=orig: pins.get((f, name), orig(f, name))
 
 
 def test_runs_once_then_stamp_skips(tmp_path, monkeypatch):
@@ -235,14 +254,38 @@ def test_unreachable_host_skips_without_counting(tmp_path, monkeypatch):
 def test_offline_with_everything_on_data_still_installs(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch)
   m.online = lambda: False
-  (tmp_path / 'data/debs').mkdir()
-  for f in (m.env_val('firmware/btfw.env', 'BTFW_TAR'), m.env_val('bluez/bluez.env', 'BLUEZ_TAR')):
-    (tmp_path / 'data/debs' / f).touch()
+  pin_cache(m, tmp_path, write=False)
+  (tmp_path / 'data/debs/fw.tar').write_bytes(b'fw')
+  (tmp_path / 'data/debs/bz.tar').write_bytes(b'bz')
   m.main(lambda: FakeSpinner())
   assert runs(tmp_path) == []  # boot.img missing: still needs the network
-  (tmp_path / 'data/boot.img').touch()
+  (tmp_path / 'data/boot.img').write_bytes(b'boot')
   m.main(lambda: FakeSpinner())
   assert runs(tmp_path) == ['--yes']
+
+
+def test_stale_cache_does_not_skip_the_offline_check(tmp_path, monkeypatch):
+  # leftover files from an older pin must not count as cached
+  m = load(tmp_path, monkeypatch)
+  m.online = lambda: False
+  pin_cache(m, tmp_path)
+  assert m.cached()
+  (tmp_path / 'data/debs/fw.tar').write_bytes(b'old fw')
+  assert not m.cached()
+  m.main(lambda: FakeSpinner())
+  assert runs(tmp_path) == [] and 'unreachable, not counted' in (tmp_path / 'data/log').read_text()
+  (tmp_path / 'data/debs/fw.tar').write_bytes(b'fw')
+  (tmp_path / 'data/boot.img').write_bytes(b'bootXXXX')  # wrong size
+  assert not m.cached()
+  (tmp_path / 'data/boot.img').write_bytes(b'BOOT')  # same size, wrong sha
+  assert not m.cached()
+  m.main(lambda: FakeSpinner())
+  assert runs(tmp_path) == []
+  # exist-only (the old cached() test) is not enough
+  (tmp_path / 'data/debs/fw.tar').write_bytes(b'')
+  (tmp_path / 'data/debs/bz.tar').write_bytes(b'')
+  (tmp_path / 'data/boot.img').write_bytes(b'')
+  assert not m.cached()
 
 
 def test_reachability_check_is_5_s(tmp_path, monkeypatch):

@@ -68,11 +68,34 @@ def release_host() -> str:
   return m.group(0) + "/" if m else ""
 
 
+def file_sha(path: str) -> str:
+  h = hashlib.sha256()
+  try:
+    with open(path, "rb") as f:
+      for chunk in iter(lambda: f.read(1 << 20), b""):
+        h.update(chunk)
+  except OSError:
+    return ""
+  return h.hexdigest()
+
+
 def cached() -> bool:
-  # every release download already on /data (an AGNOS update reinstalls offline)
-  return all(os.path.exists(f) for f in (os.path.join(DIR, "debs", env_val("firmware/btfw.env", "BTFW_TAR")),
-                                         os.path.join(DIR, "debs", env_val("bluez/bluez.env", "BLUEZ_TAR")),
-                                         os.path.join(DIR, "boot.img")))
+  # every release download already on /data and matching the pins (an AGNOS update reinstalls offline)
+  btfw = os.path.join(DIR, "debs", env_val("firmware/btfw.env", "BTFW_TAR"))
+  bluez = os.path.join(DIR, "debs", env_val("bluez/bluez.env", "BLUEZ_TAR"))
+  boot = os.path.join(DIR, "boot.img")
+  sha_btfw = env_val("firmware/btfw.env", "BTFW_SHA")
+  sha_bluez = env_val("bluez/bluez.env", "BLUEZ_SHA")
+  sha_boot = env_val("firmware/kernel.env", "BOOT_SHA")
+  size_boot = env_val("firmware/kernel.env", "BOOT_SIZE")
+  if not (sha_btfw and sha_bluez and sha_boot):
+    return False
+  try:
+    if os.path.getsize(boot) != int(size_boot):
+      return False
+  except (OSError, ValueError):
+    return False
+  return file_sha(btfw) == sha_btfw and file_sha(bluez) == sha_bluez and file_sha(boot) == sha_boot
 
 
 def online() -> bool:
