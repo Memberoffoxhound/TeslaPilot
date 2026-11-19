@@ -37,7 +37,7 @@ kernel_step() {
   esac
   [ $YES = 1 ] && a+=(--yes)
   [ $REFLASH = 1 ] && a+=(--retry)
-  $SUDO "${KSH[@]}" "${a[@]}" || die "kernel flash failed, nothing was switched"
+  $SUDO "${KSH[@]}" "${a[@]}" || die "kernel flash failed, see kernel.sh status"
   [ $YES = 1 ]
 }
 

@@ -468,6 +468,19 @@ def test_kernel_prunes_old_backups(dev):
   assert len(old) == 2 and (data / 'backup/stock_slot').exists()
 
 
+def test_kernel_prune_failure_after_the_switch_is_not_a_failed_flash(dev):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev, DPB_KEEP_BACKUPS='0')
+  (data / 'backup.20260101-000000').mkdir()
+  e['PATH'] = f"{tmp / 'norm'}:{e['PATH']}"
+  (tmp / 'norm').mkdir()
+  (tmp / 'norm/rm').write_text('#!/bin/sh\ncase "$*" in *backup.*) exit 1 ;; esac\nexec /bin/rm "$@"\n')
+  (tmp / 'norm/rm').chmod(0o755)
+  r = run('kernel.sh', e, 'flash', '--yes')
+  assert r.returncode == 0 and 'old backups not pruned' in r.stdout and ops(tmp)[-1] == 'abctl --set_active 1'
+  assert (data / 'kernel/pending').exists() and not (data / 'kernel/failed').exists()
+
+
 @pytest.mark.parametrize('booted', [True, False])
 def test_kernel_post_boot(dev, booted):
   tmp, parts, data, img, env = dev
@@ -548,7 +561,7 @@ def test_kernel_flash_is_not_stopped_by_a_signal(dev, sig):
 def test_kernel_signals_work_again_after_the_flash():
   sh = (HERE / 'kernel.sh').read_text()
   body = sh[sh.index("trap '' INT TERM HUP"):]
-  assert body.index('flash_boot.sh') < body.index('trap - INT TERM HUP') < body.index('prune\n')
+  assert body.index('flash_boot.sh') < body.index('trap - INT TERM HUP') < body.index('prune ||')
 
 
 def test_kernel_dry_run_does_not_download(dev):

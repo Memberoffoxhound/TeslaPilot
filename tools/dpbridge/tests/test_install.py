@@ -277,7 +277,7 @@ def test_kernel_step_reflash_overrides_off_and_failed(tmp_path):
 
 def test_kernel_step_failure_stops_install_without_reboot(tmp_path):
   r, log = run_kernel_step(tmp_path, 'offer', flash_rc=1)
-  assert r.returncode != 0 and 'kernel flash failed, nothing was switched' in r.stderr and 'REBOOT' not in r.stdout
+  assert r.returncode != 0 and 'kernel flash failed, see kernel.sh status' in r.stderr and 'nothing was switched' not in r.stderr and 'REBOOT' not in r.stdout
 
 
 def test_kernel_step_dry_run_never_reboots(tmp_path):

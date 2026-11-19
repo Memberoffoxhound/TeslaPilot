@@ -148,7 +148,8 @@ flash() {
     die "flash_boot.sh failed"
   fi
   trap - INT TERM HUP
-  prune
+  # switched already: a failed cleanup must not read as a failed flash
+  prune || echo "old backups not pruned"
   [ $YES = 1 ] || { echo "dry run: nothing switched"; return 0; }
   sync
   echo "flashed $oth, reboot to use it"
