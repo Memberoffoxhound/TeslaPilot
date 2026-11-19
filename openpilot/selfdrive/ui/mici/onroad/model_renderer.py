@@ -20,7 +20,8 @@ TESLA_LANE_BLUE = rl.Color(*THEME_TESLA_RGB, 255)
 
 SWAP_RC = 0.15  # lane/path color swap, ~0.5 s each way
 SWAP_BRIGHT = 1.5  # steering-only path alpha
-SWAP_LANE = rl.Color(242, 242, 242, 255)  # steering-only lane lines: the cruising near-white
+SWAP_LANE = rl.Color(242, 242, 242, 255)  # steering-only path border: the cruising near-white
+BORDER_PX = 3.0  # steering-only path border width
 
 LANE_LINE_COLORS = {
   UIStatus.DISENGAGED: rl.Color(200, 200, 200, 255),
@@ -193,6 +194,9 @@ class ModelRenderer(BaseModelRenderer):
         continue
 
       color = self._get_ll_color(float(self._lane_line_probs[i]), i in (1, 2), i in (0, 1))
+      # steering only: lane lines fade out, the path border takes over
+      if self._swap.x >= 1e-3:
+        color.a = int(color.a * (1 - self._swap.x))
       draw_polygon(self._rect, lane_line.projected_points + offset, color)
 
     for i, road_edge in enumerate(self._road_edges):
@@ -217,6 +221,12 @@ class ModelRenderer(BaseModelRenderer):
     else:
       white = rl.Color(255, 255, 255, round(30 * self._visible * (1 + (SWAP_BRIGHT - 1) * swap)))
       draw_polygon(self._rect, path_pts, lerp_color(white, rl.Color(self._ll_engaged.r, self._ll_engaged.g, self._ll_engaged.b, white.a), swap))
+
+    # steering only: near-white outline along the left edge, far end and right edge
+    if swap >= 1e-3:
+      border = rl.Color(SWAP_LANE.r, SWAP_LANE.g, SWAP_LANE.b, int(255 * 0.7 * swap * self._visible))
+      for p0, p1 in zip(path_pts[:-1], path_pts[1:], strict=False):
+        rl.draw_line_ex(rl.Vector2(float(p0[0]), float(p0[1])), rl.Vector2(float(p1[0]), float(p1[1])), BORDER_PX, border)
 
   def _draw_lead_indicator(self):
     offset = self._draw_offset()

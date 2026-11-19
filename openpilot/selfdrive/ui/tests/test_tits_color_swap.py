@@ -57,23 +57,34 @@ PROBE = textwrap.dedent('''
   mr = mrm.ModelRenderer()
   mr._longitudinal_control, mr._transform_dirty = False, False
   mr._path.projected_points = np.array([[0, 0], [10, 0], [10, 10]], dtype=np.float32)
-  mr._draw_lane_lines = lambda: None
+  # 4 lane lines, no road edges
+  mr._lane_lines = [SimpleNamespace(projected_points=np.zeros((4, 2), dtype=np.float32)) for _ in range(4)]
+  mr._lane_line_probs, mr._road_edges = np.full(4, 0.7), []
   seen = {}
   def poly(rect, pts, color=None, gradient=None):
-    seen["path"] = [[c.r, c.g, c.b, c.a] for c in gradient.colors] if gradient else [[color.r, color.g, color.b, color.a]]
+    if len(pts) == 4:
+      seen.setdefault("lane_a", []).append(color.a)
+    else:
+      seen["path"] = [[c.r, c.g, c.b, c.a] for c in gradient.colors] if gradient else [[color.r, color.g, color.b, color.a]]
   mrm.draw_polygon = poly
+  def line(p0, p1, w, color):
+    seen.setdefault("border", []).append((w, [color.r, color.g, color.b, color.a]))
+  rl.draw_line_ex = line
   RECT = rl.Rectangle(0, 0, 536, 240)
 
   T = [100.0]
   rl.get_time = lambda: T[0]  # status fade's override hold reads the clock
 
   def frame():
+    seen.clear()
     ui_state.sm.frame += 1
     T[0] += 1 / gui_app.target_fps
     ui_state._update_status()
     mr._render(RECT)
     ll = mr._get_ll_color(0.7, True, False)
-    return {"swap": mr._swap.x, "lane": [ll.r, ll.g, ll.b], "path": seen["path"]}
+    border = seen.get("border", [])
+    return {"swap": mr._swap.x, "lane": [ll.r, ll.g, ll.b], "path": seen["path"], "lane_a": max(seen.get("lane_a", [0])),
+            "border": [border[0][0], border[0][1], len(border)] if border else None}
 
   def run(n):
     return [frame() for _ in range(n)]
@@ -91,7 +102,7 @@ PROBE = textwrap.dedent('''
   mads.state = MS.enabled
   run(fps)
   ss.enabled, ss.state = True, OP.enabled
-  out["leave"] = run(fps)  # cruise back on
+  out["leave"] = run(2 * fps)  # cruise back on
   # plain white path (long, no gradient yet)
   mr._longitudinal_control = True
   ss.enabled, ss.state = False, OP.disabled
@@ -135,6 +146,7 @@ def probe(tmp_path_factory):
 def test_engaged_unchanged(probe):
   for s in (probe["engaged_off"], probe["engaged"]):
     assert s["swap"] == 0.0 and s["lane"] == probe["ll"] and s["path"] == probe["stock"]
+    assert s["lane_a"] == int(0.7 * 255) and s["border"] is None  # lane lines as today, no border
 
 
 def test_steering_only_swaps(probe):
@@ -142,6 +154,13 @@ def test_steering_only_swaps(probe):
   assert s["lane"] == WHITE  # fixed near-white, not the path color
   assert [c[:3] for c in s["path"]] == [probe["ll"]] * len(stock)  # lane color, same stops
   assert brighter(s["path"], stock)
+
+
+def test_steering_only_border_no_lane_lines(probe):
+  s = probe["enter"][-1]
+  assert s["lane_a"] == 0  # lane lines gone
+  w, color, n = s["border"]
+  assert w == 3.0 and color[:3] == WHITE and abs(color[3] - 0.7 * 255) <= 1 and n == 2  # left, far end, right edges
 
 
 def test_swap_fades_both_ways(probe):
@@ -157,7 +176,9 @@ def test_swap_fades_both_ways(probe):
     assert mid["lane"] not in (probe["ll"], WHITE)  # blended, not snapped
     a, base = mid["path"][0][3], probe["stock"][0][3]
     assert base < a < round(base * 1.5)  # brightness ramps with the swap
+    assert 0 < mid["lane_a"] < 178 and 0 < mid["border"][1][3] < 178  # lanes out, border in
   assert probe["leave"][-1]["path"] == probe["stock"] and probe["leave"][-1]["lane"] == probe["ll"]
+  assert probe["leave"][-1]["lane_a"] == 178 and probe["leave"][-1]["border"] is None
 
 
 def test_override_stays_white(probe):
