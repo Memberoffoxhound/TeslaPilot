@@ -1,22 +1,23 @@
-# Loads asound.conf with the box's libasound. Card-specific PCMs are swapped for null so no sound card is needed.
+# Loads asound.conf with the box's libasound and plays through dpb_a2dp into a FIFO, as bluealsa-aplay does.
 import ctypes
 import ctypes.util
+import os
 from pathlib import Path
 
 import pytest
 
 HERE = Path(__file__).resolve().parents[1]
-PLAYBACK, CAPTURE = 0, 1
+FIFO = '/run/dpbridge/a2dp.fifo'
 lib = ctypes.util.find_library('asound')
 pytestmark = pytest.mark.skipif(lib is None, reason='no libasound')
 
 
-def config(*extra):
+def config(text):
   a = ctypes.CDLL(lib)
   cfg = ctypes.c_void_p()
   assert a.snd_config_top(ctypes.byref(cfg)) == 0
-  for text in (Path('/usr/share/alsa/alsa.conf').read_text(), (HERE / 'asound.conf').read_text(), *extra):
-    b, inp = text.encode(), ctypes.c_void_p()
+  for t in (Path('/usr/share/alsa/alsa.conf').read_text(), text):
+    b, inp = t.encode(), ctypes.c_void_p()
     assert a.snd_input_buffer_open(ctypes.byref(inp), b, len(b)) == 0
     r = a.snd_config_load(cfg, inp)
     a.snd_input_close(inp)
@@ -24,28 +25,27 @@ def config(*extra):
   return a, cfg
 
 
-def opens(name, stream, *extra):
-  a, cfg = config(*extra)
+def test_only_defines_dpb_a2dp():
+  text = (HERE / 'asound.conf').read_text()
+  assert FIFO in text and '!default' not in text and 'dmix' not in text and 'hw:' not in text
+
+
+def test_dpb_a2dp_writes_s16_mono_to_the_fifo(tmp_path):
+  fifo = tmp_path / 'a2dp.fifo'
+  os.mkfifo(fifo)
+  rd = os.open(fifo, os.O_RDONLY | os.O_NONBLOCK)
+  a, cfg = config((HERE / 'asound.conf').read_text().replace(FIFO, str(fifo)))
   pcm = ctypes.c_void_p()
-  r = a.snd_pcm_open_lconf(ctypes.byref(pcm), name.encode(), stream, 0, cfg)
-  if r == 0:
+  assert a.snd_pcm_open_lconf(ctypes.byref(pcm), b'dpb_a2dp', 0, 0, cfg) == 0
+  try:
+    # what bluealsa-aplay asks for: stereo S16 at 44.1 kHz, plug converts
+    assert a.snd_pcm_set_params(pcm, 2, 3, 2, 44100, 1, 100000) == 0
+    buf = (ctypes.c_int16 * 882)(*([8000] * 882))
+    assert a.snd_pcm_writei(pcm, buf, 441) == 441
+    a.snd_pcm_drain(pcm)
+  finally:
     a.snd_pcm_close(pcm)
-  return r == 0
-
-
-def test_default_capture_stays_on_sysdefault():
-  # micd records from default; dmix (here on a missing card) can't capture
-  assert opens('default', CAPTURE, 'pcm.!sysdefault { type null }')
-
-
-def test_default_playback_goes_through_dmix():
-  assert opens('default', PLAYBACK, 'pcm.!dpb_mix { type null }')
-  assert not opens('default', PLAYBACK, 'pcm.!sysdefault { type null }')  # not around it
-
-
-def test_dmix_buffer():
-  a, cfg = config()
-  node, val = ctypes.c_void_p(), ctypes.c_long()
-  assert a.snd_config_search(cfg, b'pcm.dpb_mix.slave.buffer_size', ctypes.byref(node)) == 0
-  assert a.snd_config_get_integer(node, ctypes.byref(val)) == 0
-  assert val.value == 8192  # 8 periods of 1024, about 170 ms
+  data = os.read(rd, 1 << 16)
+  os.close(rd)
+  assert len(data) == 480 * 2  # 10 ms at 48 kHz, mono S16
+  assert int.from_bytes(data[600:602], 'little', signed=True) == pytest.approx(8000, abs=100)

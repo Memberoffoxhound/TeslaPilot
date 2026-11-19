@@ -21,8 +21,8 @@ Nothing here talks to the car or changes panda safety.
 | `install_userspace.sh` | comma | pinned BT firmware, bluez, bluez-obexd, bluez-alsa (apt-get download + dpkg, skip udev, skip packages already installed), services (installed, not enabled). Leaves audio alone. Dry run unless `--yes` |
 | `firmware/firmware.sha256` | both | sha256 of `qca/crbtfw21.tlv`, `qca/crnv21.bin` and its license from linux-firmware f859d9f, and of comma's `firmware/bluetooth.img` from agnos-builder 140ed0c (not committed: that repo has no license file); `mac/make_bundle.sh` fetches and checks them |
 | `firmware/qca.sha256` | comma | the six files installed in `/lib/firmware/qca`: rev 21 from linux-firmware, revs 11 and 20 from `bluetooth.img`. btqca picks by the chip's revision. Fallback if linux-firmware's rev 21 misbehaves: comma's own rev 21 pair from the same image (crbtfw21.tlv 2a42859081393ca6a50a177773385eac4fcabb9f21fc1b78299ed35bf8a598c4, crnv21.bin 18cc38fff25a6a56bc163f1874184da93d90882dc047c9f0c534ed9888c543b3): add both names to `comma_fw` in install and swap the two hashes here |
-| `audio.sh` | comma | `on` links `asound.conf` to `/etc/asound.conf`, `off` removes the link. Offroad only |
-| `asound.conf` | comma | shared dmix for soundd and music, capture unchanged |
+| `audio.sh` | comma | `off` removes the old `/etc/asound.conf` link if present. Offroad only |
+| `asound.conf` | comma | `dpb_a2dp` for bluealsa-aplay only: S16 mono 48 kHz into `/run/dpbridge/a2dp.fifo` |
 | `lib.sh` | comma | helpers shared by the scripts above |
 | `attach.sh` | comma | started by `dpbridge-bt.service`: power on, `btattach` on /dev/ttyHS1, then this unit's own address |
 | `test_bt.sh` | both | the 16 acceptance checks; device rows skip without hci0 |
@@ -34,13 +34,12 @@ openpilot side: `openpilot/system/dpbridge/` (dashkitd, btagentd, a2dp ducking, 
 Now playing is a tmpfs JSON file plus a home / disengaged-onroad card; it is hidden when nothing is up.
 All of it stays off when `/sys/class/bluetooth/hci0` is missing.
 
-Audio: the mici sound card exposes one playback PCM (MultiMedia1). `asound.conf` puts soundd's playback (the
-default device) and `bluealsa-aplay` on one dmix; capture stays on sysdefault, so micd is unchanged. It lives in
-`/data/dpbridge` and is only active while `mac/deliver.sh enable` has linked it to `/etc/asound.conf`
-(`disable` removes the link). Both refuse to change the link while soundd or micd runs (a no-op is fine): the manager does not restart a process
-it lost, so they pick the change up at their next start (car off, after a reboot or ignition cycle). Music alone passes a softvol control
-(`dpbridge A2DP Playback Volume`), which dpb_a2dp sets to 100% (normal), 60% (about -20 dB, during alerts) or 0 (muted
-onroad). Alerts never pass it. The link is on the dpbridge slot only, so the stock slot keeps plain soundd.
+Audio: the mici sound card exposes one playback PCM (MultiMedia1) and the 4.9 kernel has no SysV IPC, so there is
+no dmix. `bluealsa-aplay` plays to `dpb_a2dp` (its own `ALSA_CONFIG_PATH`), which writes a FIFO in
+`/run/dpbridge`; soundd (`openpilot/selfdrive/ui/dpb_music.py`) mixes it under its own output and adds nothing
+during any alert or the shutter, then fades back in over 1 s after 0.5 s. Music level: dB in
+`/data/dpbridge/music_db` (default -12, read once a second, never louder than the alert volume). The global ALSA
+config is untouched.
 
 ## Steps
 
@@ -58,7 +57,7 @@ onroad). Alerts never pass it. The link is on the dpbridge slot only, so the sto
 10. Test: `mac/deliver.sh test`. Pair in Settings > bluetooth, then rerun for the manual rows.
 
 Kill switch: `touch /data/dpbridge/disable` keeps the chip off from the next boot. `mac/deliver.sh disable` (car off)
-also stops the services and takes the audio link out.
+also stops the services.
 
 ## Recovery
 

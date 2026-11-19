@@ -10,8 +10,8 @@
 #   backup-pull  copy /data/dpbridge/backup to ~/dpbridge-backup/<date>/ and check sha256
 #   install      install_userspace.sh (dry run unless --yes), after rebooting into the new kernel
 #   attach       one manual chip bring-up for 20 s, output saved to ~/dpbridge-backup/<date>/attach.txt
-#   enable       car off: share the speaker with A2DP and start Bluetooth on every boot (after attach looked good);
-#                disable turns both off again (audio sharing only with the car off)
+#   enable       car off: start Bluetooth on every boot (after attach looked good); A2DP plays through soundd;
+#                disable turns it off again
 #   restore      restore_boot.sh (dry run unless --yes; --write also rewrites the boot slot)
 #   test         test_bt.sh, output saved to ~/dpbridge-backup/<date>/test_bt.txt
 #   reboot       sudo reboot on the comma
@@ -153,18 +153,21 @@ case $CMD in
     ;;
   enable)
     reach
-    dev "bash $REMOTE/audio.sh on"  # car off only; soundd and micd pick it up when they next start
+    dev "bash $REMOTE/audio.sh off"  # takes out the old dmix link if present; car off only
     r "rm -f $REMOTE/disable && $(units enable)"
-    # systemctl can return 0 with failed starts, so check each unit
-    if ! r "for _ in \$(seq 15); do systemctl is-active --quiet $UNITS && exit 0; sleep 2; done; \
-systemctl is-active $UNITS | paste -sd' '; exit 1"; then
-      die "not all of $UNITS are active, see journalctl -b -u dpbridge-bt -u bluetooth -u bluealsa -u bluealsa-aplay"
+    # systemctl can return 0 with failed starts, and a restart loop can look active, so each unit has to be
+    # active and keep its restart count over 10 s
+    if ! r "for _ in \$(seq 15); do systemctl is-active --quiet $UNITS && break; sleep 2; done; \
+a=\$(systemctl show -p NRestarts --value $UNITS | paste -sd' '); sleep 10; \
+b=\$(systemctl show -p NRestarts --value $UNITS | paste -sd' '); \
+systemctl is-active --quiet $UNITS && [ \"\$a\" = \"\$b\" ] && exit 0; \
+systemctl is-active $UNITS | paste -sd' '; echo \"restarts \$a -> \$b\"; exit 1"; then
+      die "not all of $UNITS are active and stable, see journalctl -b -u dpbridge-bt -u bluetooth -u bluealsa -u bluealsa-aplay"
     fi
-    echo "all active: $UNITS"
+    echo "all active and stable: $UNITS"
     ;;
   disable)
     reach
-    # audio first: if it refuses (car on), Bluetooth stays up rather than leaving soundd on dmix without it
     dev "bash $REMOTE/audio.sh off"
     r "touch $REMOTE/disable && $(units disable)"
     ;;

@@ -114,11 +114,9 @@ ExecStart=
 ExecStart=/usr/bin/bluealsa -p a2dp-sink
 UNIT
 
-# opening dpb_a2dp once creates its volume control (softvol starts it at full), then it is zeroed so nothing
-# plays before dpb_a2dp sets it; without the audio.sh link there is no dpb_a2dp, so it stays off
+# A2DP goes to a FIFO in /run/dpbridge that soundd reads; the global ALSA config is left alone
 put /etc/systemd/system/bluealsa-aplay.service.d/dpbridge.conf <<UNIT
 [Unit]
-ConditionPathIsSymbolicLink=/etc/asound.conf
 # start once the controller and bluealsa are up
 After=dpbridge-bt.service bluetooth.service bluealsa.service
 Requires=bluealsa.service
@@ -126,8 +124,12 @@ Requires=bluealsa.service
 # the 4.9 kernel has no user namespaces, the stock PrivateUsers=true fails with 217/USER
 PrivateUsers=no
 RestartSec=5
-ExecStartPre=-/usr/bin/aplay -q -D dpb_a2dp -t raw -f S16_LE -r 48000 -c 2 -s 1 /dev/zero
-ExecStartPre=/usr/bin/amixer -c0 -q cset name='dpbridge A2DP Playback Volume' 0%
+RuntimeDirectory=dpbridge
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+ReadWritePaths=/run/dpbridge
+Environment=ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf:$DIR/asound.conf
+ExecStartPre=/bin/sh -c '[ -p /run/dpbridge/a2dp.fifo ] || mkfifo -m 0666 /run/dpbridge/a2dp.fifo'
 ExecStart=
 ExecStart=/usr/bin/bluealsa-aplay -D dpb_a2dp
 UNIT
