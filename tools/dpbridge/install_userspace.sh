@@ -123,6 +123,8 @@ ConditionPathIsSymbolicLink=/etc/asound.conf
 After=dpbridge-bt.service bluetooth.service bluealsa.service
 Requires=bluealsa.service
 [Service]
+# the 4.9 kernel has no user namespaces, the stock PrivateUsers=true fails with 217/USER
+PrivateUsers=no
 RestartSec=5
 ExecStartPre=-/usr/bin/aplay -q -D dpb_a2dp -t raw -f S16_LE -r 48000 -c 2 -s 1 /dev/zero
 ExecStartPre=/usr/bin/amixer -c0 -q cset name='dpbridge A2DP Playback Volume' 0%
