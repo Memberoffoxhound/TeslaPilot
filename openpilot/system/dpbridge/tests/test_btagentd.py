@@ -126,14 +126,19 @@ def test_forget_clears_dashkit():
   assert 'DashKitAddr' not in params and 'DashKitVersion' not in params
 
 
-def test_scan_stops_after_window():
+def test_scan_keeps_running_while_watched():
   p, bz, _ = setup()
   p.command('scan', 0)
   assert p.status(5)['scanning']
+  assert any(c[1] == 'StartDiscovery' for c in bz.calls)
   p.tick(5)
-  assert bz.calls[-1][1] == 'StartDiscovery'
+  n = len(bz.calls)
   p.tick(btagentd.SCAN_S + 1)
-  assert bz.calls[-1][1] == 'StopDiscovery' and not p.status(btagentd.SCAN_S + 1)['scanning']
+  assert any(c[1] == 'StartDiscovery' for c in bz.calls[n:]) and p.status(btagentd.SCAN_S + 1)['scanning']
+  p.tick(btagentd.WATCH_S + 1)
+  assert any(c[1] == 'StopDiscovery' for c in bz.calls)
+  assert (p.status(btagentd.WATCH_S + 1)['scanning'] is False)
+  assert any(c[1] == 'set Discoverable' and c[2] is False for c in bz.calls)
 
 
 def test_main_survives_bluetoothd_not_ready(monkeypatch):
@@ -197,3 +202,24 @@ def test_discoverable_also_limits_pairable():
   p, bz, params = setup()
   p.command('discoverable', 0)
   assert ('/org/bluez/hci0', 'set PairableTimeout', btagentd.DISCOVERABLE_S) in bz.calls
+
+
+
+def test_connect_and_disconnect():
+  p, bz, _ = setup()
+  p.command(f'connect:{MAC}', 0)
+  assert (dev_path(MAC), 'Connect', ()) in bz.calls
+  p.command(f'disconnect:{MAC}', 1)
+  assert (dev_path(MAC), 'Disconnect', ()) in bz.calls
+
+
+def test_publish_writes_radio_file_while_page_is_closed(tmp_path, monkeypatch):
+  from openpilot.system.dpbridge import radio_status
+  path = tmp_path / 'radio.json'
+  monkeypatch.setattr(radio_status, 'PATH', str(path))
+  p, bz, params = setup()
+  bz.devices = lambda: [{'mac': MAC, 'name': 'Phone', 'rssi': -60, 'paired': True, 'connected': True, 'dashkit': False}]
+  p.publish(100.0)
+  assert 'DpbStatus' not in params
+  st = radio_status.read(str(path))
+  assert st['connected'] is True and st['name'] == 'Phone'

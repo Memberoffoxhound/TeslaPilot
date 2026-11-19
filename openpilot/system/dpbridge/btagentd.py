@@ -6,9 +6,10 @@ from jeepney import DBusAddress, HeaderFields, MatchRule, MessageType, new_error
 from jeepney.io.blocking import open_dbus_connection
 
 from openpilot.system.dpbridge.bluez import ADAPTER, ADAPTER_IF, BLUEZ, DASHKIT_NAME, DEVICE_IF, Bluez, dev_path
+from openpilot.system.dpbridge.radio_status import write as write_radio
 
 # Owns pairing for the settings page: scan, pair, forget, discoverable, and the agent that shows a phone's code.
-# UI -> DpbCmd ("status", "scan", "pair:<mac>", "forget:<mac>", "discoverable", "confirm:1|0"); status -> DpbStatus.
+# UI -> DpbCmd ("status", "scan", "pair:<mac>", "connect:<mac>", "disconnect:<mac>", "forget:<mac>", "discoverable", "confirm:1|0"); status -> DpbStatus.
 # DpbStatus is written only on change, and only while the page is open (it sends "status" every few seconds)
 # or a phone waits for a code, so the flash isn't written while driving.
 AGENT_PATH = '/dpbridge/agent'
@@ -35,6 +36,13 @@ class Pairing:
     self.watch_until = 0.0
     self.published, self.published_t = None, 0.0
 
+  def _discoverable(self, on: bool):
+    timeout = DISCOVERABLE_S if on else 0
+    self.bz.set(ADAPTER, ADAPTER_IF, 'PairableTimeout', 'u', timeout)
+    self.bz.set(ADAPTER, ADAPTER_IF, 'Pairable', 'b', on)
+    self.bz.set(ADAPTER, ADAPTER_IF, 'DiscoverableTimeout', 'u', timeout)
+    self.bz.set(ADAPTER, ADAPTER_IF, 'Discoverable', 'b', on)
+
   def command(self, cmd: str, now: float):
     verb, _, arg = cmd.partition(':')
     self.watch_until = now + WATCH_S
@@ -44,6 +52,11 @@ class Pairing:
     if verb == 'scan':
       self.bz.call(ADAPTER, ADAPTER_IF, 'StartDiscovery')
       self.scan_until = now + SCAN_S
+      self._discoverable(True)
+    elif verb == 'connect':
+      self.bz.call(dev_path(arg), DEVICE_IF, 'Connect')
+    elif verb == 'disconnect':
+      self.bz.call(dev_path(arg), DEVICE_IF, 'Disconnect')
     elif verb == 'pair':
       serial = next(self.bz.conn.outgoing_serial)
       self.bz.conn.send(new_method_call(DBusAddress(dev_path(arg), BLUEZ, DEVICE_IF), 'Pair'), serial=serial)
@@ -54,10 +67,7 @@ class Pairing:
         self.params.remove("DashKitAddr")
         self.params.remove("DashKitVersion")
     elif verb == 'discoverable':
-      self.bz.set(ADAPTER, ADAPTER_IF, 'PairableTimeout', 'u', DISCOVERABLE_S)
-      self.bz.set(ADAPTER, ADAPTER_IF, 'Pairable', 'b', True)
-      self.bz.set(ADAPTER, ADAPTER_IF, 'DiscoverableTimeout', 'u', DISCOVERABLE_S)
-      self.bz.set(ADAPTER, ADAPTER_IF, 'Discoverable', 'b', True)
+      self._discoverable(True)
     elif verb == 'confirm' and self.confirm is not None:
       ok = arg == '1'
       self.bz.conn.send(new_method_return(self.confirm) if ok else new_error(self.confirm, REJECTED))
@@ -100,11 +110,26 @@ class Pairing:
     self.bz.conn.send(reply)
 
   def tick(self, now: float):
-    if self.scan_until and now > self.scan_until:
+    if now < self.watch_until:
+      if not self.scan_until or now > self.scan_until:
+        try:
+          self.bz.call(ADAPTER, ADAPTER_IF, 'StartDiscovery')
+        except Exception:
+          pass
+        self.scan_until = now + SCAN_S
+    elif self.scan_until:
       self.scan_until = 0.0
-      self.bz.call(ADAPTER, ADAPTER_IF, 'StopDiscovery')
+      try:
+        self.bz.call(ADAPTER, ADAPTER_IF, 'StopDiscovery')
+      except Exception:
+        pass
+      self._discoverable(False)
 
   def publish(self, now: float):
+    try:
+      write_radio(self.bz.devices())
+    except Exception:
+      pass
     if not (now < self.watch_until or self.passkey) or now - self.published_t < STATUS_S:
       return
     self.published_t = now
