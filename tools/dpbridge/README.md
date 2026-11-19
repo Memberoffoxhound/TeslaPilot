@@ -55,9 +55,9 @@ The installer does everything, with openpilot down. After an install from comma'
 it runs again only when the code, a pin, AGNOS or the slot changes. It is skipped while `/data/dpbridge/disable`
 exists. A failure or the 20 min timeout on steps 1-3 is logged to `/data/dpbridge_boot/log`, openpilot starts
 anyway and the next boot tries again, up to 3 runs per setup (`rm /data/dpbridge_boot/fails` to retry). A failed
-download (no network, exit 75) is not counted. The kernel step is never killed: its boot.img download gives up on
-a stalled link or after 20 min per try (resumed next run), and 60 min after `[4/4]` boot.py stops waiting and lets
-openpilot start while the flash finishes on its own (output in `/data/dpbridge_boot/install.out`).
+download (no network, exit 75) is not counted. The kernel step is never killed and openpilot waits for it: its
+boot.img download gives up on a stalled link, after 20 min per try or 25 min in all (resumed next run), before any
+write (output in `/data/dpbridge_boot/install.out`).
 After a flash it reboots once, without a stamp; the next boot records the result.
 Do the first run parked at home on Wi-Fi: openpilot is not available for the minutes it takes, then one reboot.
 

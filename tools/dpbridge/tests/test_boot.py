@@ -152,21 +152,15 @@ def test_kernel_step_is_never_timed_out(tmp_path, monkeypatch):
   assert 'timed out' not in log and 'flashed' in log and (tmp_path / 'data/stamp').exists()
 
 
-def test_long_kernel_step_stops_waiting_without_a_kill(tmp_path, monkeypatch):
-  # 60 min after [4/4] boot.py lets manager start; the installer keeps running and keeps writing its output
+def test_kernel_step_is_waited_for_to_the_end(tmp_path, monkeypatch):
+  # no stop after [4/4]: manager starts only once the kernel step is over
+  monkeypatch.setenv('DPB_KERNEL_WAIT_S', '0.3')  # the old 60 min stop's knob, now ignored
   m = load(tmp_path, monkeypatch, install=f'echo "[4/4] kernel"; sleep 2; echo "  kernel: switching slot 98%"; echo done > {tmp_path}/finished')
-  m.KERNEL_WAIT_S = 0.5
-  t0 = __import__('time').monotonic()
+  m.TIMEOUT_S = 0.3
   assert m.main(lambda: FakeSpinner()) == 0
-  assert __import__('time').monotonic() - t0 < 1.8
-  assert 'kernel step still running' in (tmp_path / 'data/log').read_text()
-  assert not (tmp_path / 'data/stamp').exists() and not (tmp_path / 'data/fails').exists()
-  assert not (tmp_path / 'reboots').exists()
-  deadline = __import__('time').monotonic() + 5
-  while not (tmp_path / 'finished').exists() and __import__('time').monotonic() < deadline:
-    __import__('time').sleep(0.1)
-  assert (tmp_path / 'finished').exists()  # not killed, no broken pipe
-  assert 'switching slot 98%' in (tmp_path / 'data/install.out').read_text()
+  assert (tmp_path / 'finished').exists() and (tmp_path / 'data/stamp').exists()
+  assert 'switching slot 98%' in (tmp_path / 'data/log').read_text()
+  assert not hasattr(m, 'KERNEL_WAIT_S') and not hasattr(m, 'STILL')
 
 
 def test_timeout_sends_term_first(tmp_path, monkeypatch):
