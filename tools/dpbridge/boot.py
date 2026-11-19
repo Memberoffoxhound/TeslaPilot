@@ -58,6 +58,32 @@ def setup_key() -> str:
   return h.hexdigest()
 
 
+def env_val(f: str, name: str) -> str:
+  m = re.search(rf"^{name}=(\S+)", read(os.path.join(HERE, f)), re.M)
+  return m.group(1) if m else ""
+
+
+def release_host() -> str:
+  m = re.match(r"https?://[^/]+", env_val("firmware/btfw.env", "BTFW_URL"))
+  return m.group(0) + "/" if m else ""
+
+
+def cached() -> bool:
+  # every release download already on /data (an AGNOS update reinstalls offline)
+  return all(os.path.exists(f) for f in (os.path.join(DIR, "debs", env_val("firmware/btfw.env", "BTFW_TAR")),
+                                         os.path.join(DIR, "debs", env_val("bluez/bluez.env", "BLUEZ_TAR")),
+                                         os.path.join(DIR, "boot.img")))
+
+
+def online() -> bool:
+  # any HTTP answer within 5 s; a dead hotspot costs 5 s instead of the installer's timeouts
+  try:
+    return subprocess.run(["curl", "-sI", "--max-time", "5", "-o", "/dev/null", release_host()],
+                          capture_output=True, timeout=10).returncode == 0
+  except (OSError, subprocess.SubprocessError):
+    return False
+
+
 def skip_reason(key: str) -> str | None:
   if "mici" not in read(MODEL):
     return "not a comma 4"
@@ -167,6 +193,13 @@ def main(spinner_factory=None) -> int:
   why = skip_reason(key)
   if why is not None:
     print(f"dpbridge boot: skip, {why}")
+    return 0
+  if not cached() and not online():
+    # not counted, like a failed download: next boot tries again
+    os.makedirs(STATE, exist_ok=True)
+    with open(LOG, "a") as log:
+      log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} {release_host()} unreachable, not counted\n")
+    print(f"dpbridge boot: skip, {release_host()} unreachable")
     return 0
   if spinner_factory is None:
     from openpilot.common.spinner import Spinner as spinner_factory

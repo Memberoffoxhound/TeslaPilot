@@ -38,6 +38,7 @@ def load(tmp_path, monkeypatch, install='echo "[1/4] x"; exit 0', state='ok', mo
   m.INSTALL, m.KERNEL, m.SUDO = str(tmp_path / 'install.sh'), str(tmp_path / 'kernel.sh'), []
   m.REBOOT = ['bash', str(tmp_path / 'reboot')]
   m.slot = lambda: slot
+  m.online = lambda: True  # no network in tests
   return m
 
 
@@ -217,3 +218,46 @@ def test_spinner_is_comma_s():
   text = (HERE / 'boot.py').read_text()
   assert 'from openpilot.common.spinner import Spinner' in text
   assert re.search(r'DPB_REBOOT="true"', text)
+
+
+def test_unreachable_host_skips_without_counting(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  m.online = lambda: False
+  for _ in range(4):
+    assert m.main(lambda: FakeSpinner()) == 0
+  assert runs(tmp_path) == [] and not (tmp_path / 'data/fails').exists() and not (tmp_path / 'data/stamp').exists()
+  assert 'github.com/ unreachable, not counted' in (tmp_path / 'data/log').read_text()
+  m.online = lambda: True
+  m.main(lambda: FakeSpinner())
+  assert runs(tmp_path) == ['--yes']
+
+
+def test_offline_with_everything_on_data_still_installs(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  m.online = lambda: False
+  (tmp_path / 'data/debs').mkdir()
+  for f in (m.env_val('firmware/btfw.env', 'BTFW_TAR'), m.env_val('bluez/bluez.env', 'BLUEZ_TAR')):
+    (tmp_path / 'data/debs' / f).touch()
+  m.main(lambda: FakeSpinner())
+  assert runs(tmp_path) == []  # boot.img missing: still needs the network
+  (tmp_path / 'data/boot.img').touch()
+  m.main(lambda: FakeSpinner())
+  assert runs(tmp_path) == ['--yes']
+
+
+def test_reachability_check_is_5_s(tmp_path, monkeypatch):
+  import os
+  load(tmp_path, monkeypatch)  # env only; the real online() from a fresh import
+  spec = importlib.util.spec_from_file_location('dpb_boot2', HERE / 'boot.py')
+  fresh = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(fresh)
+  assert fresh.release_host() == 'https://github.com/'
+  bin_ = tmp_path / 'bin'
+  bin_.mkdir()
+  (bin_ / 'curl').write_text(f'#!/bin/sh\necho "$*" > {tmp_path}/args\nexit ${{CURL_RC:-0}}\n')
+  (bin_ / 'curl').chmod(0o755)
+  monkeypatch.setenv('PATH', f'{bin_}:{os.environ["PATH"]}')
+  assert fresh.online()
+  assert (tmp_path / 'args').read_text().split() == ['-sI', '--max-time', '5', '-o', '/dev/null', 'https://github.com/']
+  monkeypatch.setenv('CURL_RC', '28')
+  assert not fresh.online()
