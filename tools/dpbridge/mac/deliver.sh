@@ -8,7 +8,7 @@
 #   qdl-check    read-only QDL test on the Mac: proves the rescue path works on this comma before any flash
 #   flash        flash_boot.sh as a dry run; with --yes it flashes detached from SSH, then pulls the boot backups
 #   backup-pull  copy /data/dpbridge/backup to ~/dpbridge-backup/<date>/ and check sha256
-#   install      install_userspace.sh (dry run unless --yes), after rebooting into the new kernel
+#   install      install_userspace.sh (dry run unless --yes; with --yes detached from SSH, log in install.log)
 #   attach       one manual chip bring-up for 20 s, output saved to ~/dpbridge-backup/<date>/attach.txt
 #   enable       car off: start Bluetooth on every boot (after attach looked good); A2DP plays through soundd;
 #                disable turns it off again
@@ -60,6 +60,36 @@ reach() {
   r true 2> /dev/null || die "cannot reach $HOST:$PORT with $KEY"
 }
 
+# run a device script detached, so a dropped SSH session can't stop it halfway; poll until <name>.rc appears.
+# Stops waiting if the job is gone without one (reboot, power cut) or after DPB_<NAME>_MAX_S (default $4 s)
+detached() {
+  local name=$1 pat="[${2:0:1}]${2:1}" cmd=$3 v out end max
+  v="DPB_$(echo "$1" | tr '[:lower:]' '[:upper:]')_MAX_S"  # macOS bash 3.2: no ${x^^}
+  max=${!v:-$4}
+  r "pgrep -f $pat" > /dev/null && die "already running: $name"
+  dev "rm -f $REMOTE/$name.rc; setsid nohup bash -c '$cmd > $REMOTE/$name.log 2>&1; \
+    echo \$? > $REMOTE/$name.rc' < /dev/null > /dev/null 2>&1 &"
+  end=$((SECONDS + max))
+  while ! r "test -f $REMOTE/$name.rc" 2> /dev/null; do
+    [ $SECONDS -lt $end ] || die "no result after $((max / 60)) min, see $REMOTE/$name.log"
+    sleep "${DPB_POLL_S:-5}"
+    if out=$(r "pgrep -f $pat > /dev/null || test -f $REMOTE/$name.rc || echo gone; tail -n 1 $REMOTE/$name.log" 2> /dev/null); then
+      if grep -qx gone <<< "$out"; then
+        # the script may have just exited with the wrapper's echo still to come
+        sleep 2
+        r "test -f $REMOTE/$name.rc" 2> /dev/null && break
+        die "$name stopped without a result, see $REMOTE/$name.log (the slot switch is the last write)"
+      fi
+      echo "$out"
+    else
+      echo "(no answer, still waiting)"
+    fi
+  done
+  r "cat $REMOTE/$name.log"
+  [ "$(r "cat $REMOTE/$name.rc")" = 0 ] || die "$name failed, see above"
+}
+
+
 push_file() {
   put "$1" "$HOST:$REMOTE/"
   [ "$(local_sha "$1")" = "$(remote_sha "$REMOTE/$(basename "$1")")" ] || die "sha256 mismatch for $(basename "$1")"
@@ -107,36 +137,20 @@ case $CMD in
     reach
     case " $ARGS " in
       *" --yes "*)
-        # detached, so a dropped SSH session can't stop it halfway
-        r "pgrep -f [f]lash_boot.sh" > /dev/null && die "a flash is already running"
-        dev "rm -f $REMOTE/flash.rc; setsid nohup bash -c 'bash $REMOTE/flash_boot.sh --yes > $REMOTE/flash.log 2>&1; \
-          echo \$? > $REMOTE/flash.rc' < /dev/null > /dev/null 2>&1 &"
-        # until flash.rc appears; stop if the job is gone without one (reboot, power cut) or after an hour
-        end=$((SECONDS + ${DPB_FLASH_MAX_S:-3600}))
-        while ! r "test -f $REMOTE/flash.rc" 2> /dev/null; do
-          [ $SECONDS -lt $end ] || die "no result after $(( ${DPB_FLASH_MAX_S:-3600} / 60 )) min, see $REMOTE/flash.log"
-          sleep "${DPB_POLL_S:-5}"
-          if out=$(r "pgrep -f [f]lash_boot.sh > /dev/null || test -f $REMOTE/flash.rc || echo gone; tail -n 1 $REMOTE/flash.log" 2> /dev/null); then
-            if grep -qx gone <<< "$out"; then
-              # flash_boot.sh may have just exited with the wrapper's echo still to come
-              sleep 2
-              r "test -f $REMOTE/flash.rc" 2> /dev/null && break
-              die "flash stopped without a result, see $REMOTE/flash.log (the slot switch is its last step)"
-            fi
-            echo "$out"
-          else
-            echo "(no answer, still waiting)"
-          fi
-        done
-        r "cat $REMOTE/flash.log"
-        [ "$(r "cat $REMOTE/flash.rc")" = 0 ] || die "flash failed, see above"
+        detached flash flash_boot.sh "bash $REMOTE/flash_boot.sh --yes" 3600
         backup_pull
         ;;
       *) dev "bash $REMOTE/flash_boot.sh" ;;
     esac
     ;;
   backup-pull) reach; backup_pull ;;
-  install) reach; dev "bash $REMOTE/install_userspace.sh $ARGS" ;;
+  install)
+    reach
+    case " $ARGS " in
+      *" --yes "*) detached install install_userspace.sh "bash $REMOTE/install_userspace.sh $ARGS" 7200 ;;
+      *) dev "bash $REMOTE/install_userspace.sh $ARGS" ;;
+    esac
+    ;;
   attach)
     reach
     mkdir -p "$OUT"

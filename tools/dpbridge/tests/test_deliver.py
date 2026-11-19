@@ -141,3 +141,52 @@ def test_flash_poll_gives_up_after_the_cap(dev):
     assert r.returncode != 0 and 'no result after' in r.stderr
   finally:
     subprocess.run(['pkill', '-f', str(remote / 'flash_boot.sh')])
+
+
+def stub_install(remote, body):
+  (remote / 'install_userspace.sh').write_text(f'#!/bin/bash\necho "args $*"\n{body}\n')
+
+
+def test_install_yes_runs_detached_from_ssh(dev):
+  import os
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  # its own session, so an SSH drop (HUP, dead pty) can't end a flash midway
+  stub_install(remote, f'cut -d" " -f6 /proc/$$/stat > {remote}/sid; [ -t 1 ] && echo tty || echo notty; sleep 0.5; echo installed')
+  r = deliver(dict(env, DPB_POLL_S='0.2'), 'install', '--yes')
+  assert r.returncode == 0, r.stderr
+  assert (remote / 'install.rc').read_text().strip() == '0'
+  log = (remote / 'install.log').read_text()
+  assert 'args --yes' in log and 'installed' in log and 'notty' in log and 'installed' in r.stdout
+  assert int((remote / 'sid').read_text()) != os.getsid(0)
+
+
+def test_install_failure_is_reported(dev):
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  stub_install(remote, 'echo "refusing: openpilot is onroad" >&2; exit 1')
+  r = deliver(dict(env, DPB_POLL_S='0.2'), 'install', '--yes')
+  assert r.returncode != 0 and 'install failed' in r.stderr and 'openpilot is onroad' in r.stdout
+
+
+def test_install_dry_run_stays_attached(dev):
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  stub_install(remote, 'echo "dry run"')
+  r = deliver(env, 'install')
+  assert r.returncode == 0 and 'args ' in r.stdout and 'dry run' in r.stdout and not (remote / 'install.rc').exists()
+
+
+def test_install_refuses_a_second_run(dev):
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  stub_install(remote, 'sleep 3')
+  p = subprocess.Popen(['bash', str(HERE / 'mac/deliver.sh'), '-i', env['KEYFILE'], 'install', '--yes'],
+                       env=dict(env, DPB_POLL_S='0.2'), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+  try:
+    import time
+    time.sleep(1)
+    r = deliver(env, 'install', '--yes')
+    assert r.returncode != 0 and 'already running: install' in r.stderr
+  finally:
+    p.wait(timeout=20)
