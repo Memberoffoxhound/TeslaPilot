@@ -32,6 +32,8 @@ kernel_step() {
     outdated) echo "  an older dpbridge kernel runs: restore_boot.sh --yes, reboot, then install again"; return 1 ;;
     off) if [ $REFLASH = 0 ]; then echo "  kernel flash is off ($DIR/disable), pass --reflash"; return 1; fi ;;
     failed) if [ $REFLASH = 0 ]; then echo "  the last flash failed and was kept off, pass --reflash"; return 1; fi ;;
+    # nothing to flash here; the rest of the install still counts
+    unsupported_agnos | unsupported_device | no_space) echo "  kernel: $st, not flashed"; return 1 ;;
   esac
   [ $YES = 1 ] && a+=(--yes)
   [ $REFLASH = 1 ] && a+=(--retry)

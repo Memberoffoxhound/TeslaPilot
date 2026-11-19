@@ -258,6 +258,15 @@ def test_kernel_step_leaves_a_running_or_disabled_kernel_alone(tmp_path):
     assert r.returncode == 0 and 'NOREBOOT' in r.stdout and word in r.stdout and log == ['status']
 
 
+def test_kernel_step_skips_what_it_cannot_flash(tmp_path):
+  # an AGNOS bump, another device or a full /data: print and go on, the install still succeeds and stamps
+  for st in ('unsupported_agnos', 'unsupported_device', 'no_space'):
+    d = tmp_path / st
+    d.mkdir()
+    r, log = run_kernel_step(d, st)
+    assert r.returncode == 0 and 'NOREBOOT' in r.stdout and f'kernel: {st}, not flashed' in r.stdout and log == ['status']
+
+
 def test_kernel_step_reflash_overrides_off_and_failed(tmp_path):
   for st in ('off', 'failed'):
     d = tmp_path / st

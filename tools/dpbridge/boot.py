@@ -17,6 +17,8 @@ DIR = os.environ.get("DPB_DIR", "/data/dpbridge")
 STATE = os.environ.get("DPB_BOOT_DIR", "/data/dpbridge_boot")
 STAMP = os.path.join(STATE, "stamp")
 LOG = os.path.join(STATE, "log")
+FAILS = os.path.join(STATE, "fails")  # "<key> <count>": gives up after MAX_FAILS runs of the same setup
+MAX_FAILS = 3
 TIMEOUT_S = float(os.environ.get("DPB_BOOT_TIMEOUT_S", "1200"))
 MODEL = os.environ.get("DPB_MODEL", "/sys/firmware/devicetree/base/model")
 VERSION = os.environ.get("DPB_VERSION", "/VERSION")
@@ -62,7 +64,20 @@ def skip_reason(key: str) -> str | None:
     return "disabled"
   if read(STAMP) == key:
     return "up to date"
+  if fails(key) >= MAX_FAILS:
+    return f"gave up after {MAX_FAILS} failed runs, rm {FAILS} to retry"
   return None
+
+
+def fails(key: str) -> int:
+  f = read(FAILS).split()
+  return int(f[1]) if len(f) == 2 and f[0] == key and f[1].isdigit() else 0
+
+
+def put(path: str, text: str):
+  with open(path + ".tmp", "w") as f:
+    f.write(text)
+  os.replace(path + ".tmp", path)
 
 
 def progress(line: str, cur: int) -> int:
@@ -147,7 +162,9 @@ def main(spinner_factory=None) -> int:
     finally:
       spinner.close()
     if rc != 0:
-      log.write(f"install failed ({rc}), openpilot starts anyway, next boot tries again\n")
+      n = fails(key) + 1
+      put(FAILS, f"{key} {n}")
+      log.write(f"install failed ({rc}, {n}/{MAX_FAILS}), openpilot starts anyway, next boot tries again\n")
       print(f"dpbridge boot: install failed ({rc}), see {LOG}")
       return 0
     if kernel_state() == "pending":
@@ -156,9 +173,9 @@ def main(spinner_factory=None) -> int:
       log.flush()
       subprocess.run(REBOOT)
       return 0
-    with open(STAMP + ".tmp", "w") as f:
-      f.write(key)
-    os.replace(STAMP + ".tmp", STAMP)
+    put(STAMP, key)
+    if os.path.exists(FAILS):
+      os.unlink(FAILS)
     log.write("done\n")
   return 0
 

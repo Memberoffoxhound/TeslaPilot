@@ -90,11 +90,31 @@ def test_no_network_falls_through_and_retries(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, install='echo "[2/4] BT firmware"; echo "firmware download failed" >&2; exit 1')
   assert m.main(lambda: FakeSpinner()) == 0
   assert not (tmp_path / 'data/stamp').exists()
-  assert 'install failed (1)' in (tmp_path / 'data/log').read_text()
+  assert 'install failed (1, 1/3)' in (tmp_path / 'data/log').read_text()
   assert 'firmware download failed' in (tmp_path / 'data/log').read_text()
   m.main(lambda: FakeSpinner())
   assert runs(tmp_path) == ['--yes', '--yes']  # next boot tries again
   assert not (tmp_path / 'reboots').exists()
+
+
+def test_gives_up_after_three_failures_per_setup(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, install='exit 1')
+  for _ in range(5):
+    m.main(lambda: FakeSpinner())
+  assert runs(tmp_path) == ['--yes'] * 3
+  assert (tmp_path / 'data/fails').read_text() == f'{m.setup_key()} 3'
+  assert 'gave up after 3 failed runs' in m.skip_reason(m.setup_key())
+  # a new setup (pin, AGNOS or slot) gets its own three tries
+  m.slot = lambda: '_b'
+  m.main(lambda: FakeSpinner())
+  assert runs(tmp_path) == ['--yes'] * 4
+
+
+def test_success_clears_the_fail_count(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  (tmp_path / 'data/fails').write_text(f'{m.setup_key()} 2')
+  m.main(lambda: FakeSpinner())
+  assert (tmp_path / 'data/stamp').exists() and not (tmp_path / 'data/fails').exists()
 
 
 def test_hung_install_times_out(tmp_path, monkeypatch):
