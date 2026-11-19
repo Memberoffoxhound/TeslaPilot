@@ -288,6 +288,51 @@ def test_stale_cache_does_not_skip_the_offline_check(tmp_path, monkeypatch):
   assert not m.cached()
 
 
+def test_cached_wrong_bluez_sha_is_not_cached(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  m.online = lambda: False
+  pin_cache(m, tmp_path)
+  (tmp_path / 'data/debs/bz.tar').write_bytes(b'old bz')
+  assert not m.cached()
+  m.main(lambda: FakeSpinner())
+  assert runs(tmp_path) == [] and 'unreachable, not counted' in (tmp_path / 'data/log').read_text()
+
+
+def test_cached_empty_pins_and_missing_files_is_false(tmp_path, monkeypatch):
+  # empty shas plus missing files compare "" == ""; the size check is allowed to pass so only the guard rejects it
+  m = load(tmp_path, monkeypatch)
+  pin_cache(m, tmp_path, write=False)
+  orig = m.env_val
+  m.env_val = lambda f, name, orig=orig: '' if name in ('BTFW_SHA', 'BLUEZ_SHA', 'BOOT_SHA') else orig(f, name)
+  monkeypatch.setattr(m.os.path, 'getsize', lambda path: int(orig('firmware/kernel.env', 'BOOT_SIZE')))
+  assert not m.cached()
+
+
+def test_cached_boot_size_precheck(tmp_path, monkeypatch):
+  # size is a fast path; this still fails if only the sha is trusted
+  m = load(tmp_path, monkeypatch)
+  pin_cache(m, tmp_path)
+  (tmp_path / 'data/boot.img').write_bytes(b'bootXXXX')
+  sha = {'fw.tar': hashlib.sha256(b'fw').hexdigest(),
+         'bz.tar': hashlib.sha256(b'bz').hexdigest(),
+         'boot.img': hashlib.sha256(b'boot').hexdigest()}
+  m.file_sha = lambda path, sha=sha: sha[path.rsplit('/', 1)[-1]]
+  assert not m.cached()
+
+
+def test_stamped_boot_never_hashes_payloads(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  pin_cache(m, tmp_path)
+  (tmp_path / 'data/stamp').write_text(m.setup_key())
+
+  def boom(path):
+    raise AssertionError(f'file_sha opened {path} on a stamped boot')
+
+  m.file_sha = boom
+  assert m.main(lambda: FakeSpinner()) == 0
+  assert runs(tmp_path) == []
+
+
 def test_reachability_check_is_5_s(tmp_path, monkeypatch):
   import os
   load(tmp_path, monkeypatch)  # env only; the real online() from a fresh import
