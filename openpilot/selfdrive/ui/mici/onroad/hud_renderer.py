@@ -4,7 +4,7 @@ import raylib_nb as rl
 from dataclasses import dataclass
 from openpilot.common.constants import CV
 from openpilot.selfdrive.ui.mici.onroad import DIMMED_ICON_ALPHA
-from openpilot.selfdrive.ui.mici.onroad.status import STATUS_FADE_RC, lerp_color, status_fade
+from openpilot.selfdrive.ui.mici.onroad.status import STATUS_FADE_RC, lerp_color, status_fade, steer_fade
 from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus, ChestnutState
 from openpilot.selfdrive.ui.mici.widgets.fill_icon import draw_progress
@@ -372,7 +372,7 @@ class HudRenderer(Widget):
     custom = custom_onroad_ui()
     # large sits under alerts and fades out disengaged like MAX, small dims like the other panel icons
     shown = custom and (self._can_draw_top_icons if large else bool(panel_visible))
-    disengaged = status_fade.weight(UIStatus.DISENGAGED)
+    disengaged = steer_fade.weight(UIStatus.DISENGAGED)
     dim = 1 - disengaged if large else 1 - (1 - DIMMED_ICON_ALPHA / 0.9) * disengaged
     a = int(255 * 0.9 * self._compass_fade[large].update(float(shown)) * dim)
     if not custom or a < 3:

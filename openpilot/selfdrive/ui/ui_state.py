@@ -31,6 +31,18 @@ class UIStatus(Enum):
   OVERRIDE = "override"
 
 
+MadsState = custom.ModularAssistiveDrivingSystem.ModularAssistiveDrivingSystemState
+
+
+def steer_status(status: UIStatus, enabled: bool, mads) -> UIStatus:
+  # TITS steering alone draws the path, ball and compass like openpilot engaged
+  if enabled or status == UIStatus.OVERRIDE or not mads.enabled:
+    return status
+  if mads.state == MadsState.overriding:
+    return UIStatus.OVERRIDE
+  return UIStatus.ENGAGED if mads.state in (MadsState.enabled, MadsState.softDisabling) else UIStatus.DISENGAGED
+
+
 class ChestnutState(Enum):
   DISCONNECTED = "disconnected"
   UNCOMPILED = "uncompiled"
@@ -90,6 +102,7 @@ class UIState:
 
     # UI Status tracking
     self.status: UIStatus = UIStatus.DISENGAGED
+    self.steer_status: UIStatus = UIStatus.DISENGAGED
     self.started_frame: int = 0
     self.started_time: float = 0.0
     self._engaged_prev: bool = False
@@ -218,6 +231,7 @@ class UIState:
         self.status = UIStatus.OVERRIDE
       else:
         self.status = UIStatus.ENGAGED if ss.enabled else UIStatus.DISENGAGED
+      self.steer_status = steer_status(self.status, ss.enabled, self.sm["selfdriveStateSP"].mads)
 
     # Check for engagement state changes
     if self.engaged != self._engaged_prev:
@@ -227,7 +241,7 @@ class UIState:
 
     # Handle onroad/offroad transition
     if self.started != self._started_prev or self.sm.frame == 1:
-      self.status = UIStatus.DISENGAGED
+      self.status = self.steer_status = UIStatus.DISENGAGED
       if self.started:
         self.started_frame = self.sm.frame
         self.started_time = time.monotonic()

@@ -2,7 +2,7 @@ import numpy as np
 import raylib_nb as rl
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.layouts.settings.common import tesla_theme, THEME_TESLA_RGB
-from openpilot.selfdrive.ui.mici.onroad.status import status_fade
+from openpilot.selfdrive.ui.mici.onroad.status import steer_fade
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.polygon import Gradient, draw_polygon
@@ -59,7 +59,7 @@ class ConfidenceBall(Widget):
     margin = 10
     dot_x = self._rect.x + margin + status_dot_radius if self._left else self._rect.x + self._rect.width - margin - status_dot_radius
     # rests at the bottom while disengaged. the color still comes from the confidence, so it doesn't pass through the low zones
-    height = self._confidence_filter.x * (1 - status_fade.weight(UIStatus.DISENGAGED))
+    height = self._confidence_filter.x * (1 - steer_fade.weight(UIStatus.DISENGAGED))
     dot_height = (1 - height) * (self._rect.height - 2 * (status_dot_radius + margin)) + status_dot_radius + margin
     dot_height = self._rect.y + dot_height
 
@@ -73,7 +73,7 @@ class ConfidenceBall(Widget):
       engaged = (rl.Color(255, 0, 21, 255), rl.Color(255, 0, 89, 255))
     override = (rl.Color(255, 255, 255, 255), rl.Color(82, 82, 82, 255))
     disengaged = (rl.Color(102, 102, 102, 255), rl.Color(26, 26, 26, 255))
-    top_dot_color, bottom_dot_color = (status_fade.color({UIStatus.ENGAGED: e, UIStatus.OVERRIDE: o, UIStatus.DISENGAGED: d})
+    top_dot_color, bottom_dot_color = (steer_fade.color({UIStatus.ENGAGED: e, UIStatus.OVERRIDE: o, UIStatus.DISENGAGED: d})
                                        for e, o, d in zip(engaged, override, disengaged, strict=True))
 
     draw_circle_gradient(dot_x, dot_height, status_dot_radius,
