@@ -7,7 +7,7 @@ import numpy as np
 import raylib_nb as rl
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
-from openpilot.selfdrive.ui.mici.onroad.status import status_fade
+from openpilot.selfdrive.ui.mici.onroad.status import status_fade, steer_fade
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.polygon import draw_polygon, Gradient
@@ -188,7 +188,8 @@ class TorqueBar(Widget):
     torque_line_height = np.interp(abs(self._torque_filter.x), [0.5, 1], [14, 56])
 
     # animate alpha and angle span
-    line_alpha = self._torque_line_alpha_filter.update(not self._hidden) * (1 - status_fade.weight(UIStatus.DISENGAGED))
+    # TITS steering alone keeps it shown
+    line_alpha = self._torque_line_alpha_filter.update(not self._hidden) * (1 - steer_fade.weight(UIStatus.DISENGAGED))
     engaged = status_fade.weight(UIStatus.ENGAGED)
 
     # dimmer while not engaged
