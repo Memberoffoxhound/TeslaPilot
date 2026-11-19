@@ -5,7 +5,7 @@ import threading
 
 import openpilot.cereal.messaging as messaging
 
-from openpilot.cereal import log
+from openpilot.cereal import custom, log
 from opendbc.car.structs import car
 from openpilot.cereal.visionipc import VisionStreamType
 from msgq.visionipc import VisionIpcClient
@@ -27,6 +27,9 @@ from openpilot.selfdrive.selfdrived.state import StateMachine
 from openpilot.selfdrive.selfdrived.alertmanager import AlertManager, set_offroad_alert
 
 from openpilot.common.version import get_build_metadata
+from opendbc.sunnypilot.structs import CarParamsSP
+from openpilot.sunnypilot.mads.mads import ModularAssistiveDrivingSystem
+from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
 from openpilot.common.hardware import HARDWARE
 
 REPLAY = "REPLAY" in os.environ
@@ -78,7 +81,7 @@ class SelfdriveD:
     self.jetlink_events = JetlinkEvents()
 
     # Setup sockets
-    self.pm = messaging.PubMaster(['selfdriveState', 'onroadEvents'])
+    self.pm = messaging.PubMaster(['selfdriveState', 'onroadEvents', 'selfdriveStateSP', 'onroadEventsSP'])
 
     self.gps_location_service = get_gps_location_service(self.params)
     self.gps_packets = [self.gps_location_service]
@@ -139,6 +142,16 @@ class SelfdriveD:
     self.state_machine = StateMachine()
     self.rk = Ratekeeper(100, print_delay_threshold=None)
 
+    # MADS
+    self.CP_SP = CarParamsSP()
+    cp_sp_bytes = self.params.get("CarParamsSP")
+    if cp_sp_bytes is not None:
+      with custom.CarParamsSP.from_bytes(cp_sp_bytes) as cp_sp:
+        self.CP_SP = CarParamsSP(flags=cp_sp.flags, safetyParam=cp_sp.safetyParam)
+    self.events_sp = EventsSP()
+    self.events_sp_prev: list[int] = []
+    self.mads = ModularAssistiveDrivingSystem(self)
+
     # Tesla step-aside (card): passive because Tesla's Autosteer/FSD is selected or active
     self.tesla_stepped_aside = self.CP.brand == "tesla" and self.CP.passive and tesla_step_aside.stepped_aside(self.params)
 
@@ -165,6 +178,7 @@ class SelfdriveD:
     """Compute onroadEvents from carState"""
 
     self.events.clear()
+    self.events_sp.clear()
 
     if self.sm['controlsState'].lateralControlState.which() == 'debugState':
       self.events.add(EventName.joystickDebug)
@@ -484,6 +498,10 @@ class SelfdriveD:
       if self.sm['modelV2'].frameDropPerc > 1 and not big_model_settling:
         self.events.add(EventName.modeldLagging)
 
+    # MADS: canBusMissing can false alarm in park while paused
+    if CS.gearShifter == car.CarState.GearShifter.park and self.mads.enabled:
+      self.events.remove(EventName.canBusMissing)
+
     # Decrement personality on distance button press
     if self.CP.openpilotLongitudinalControl:
       if any(not be.pressed and be.type == ButtonType.gapAdjustCruise for be in CS.buttonEvents):
@@ -546,9 +564,10 @@ class SelfdriveD:
       clear_event_types.add(ET.NO_ENTRY)
 
     pers = LONGITUDINAL_PERSONALITY_MAP[self.personality]
-    alerts = self.events.create_alerts(self.state_machine.current_alert_types, [self.CP, CS, self.sm, self.is_metric,
-                                                                                self.state_machine.soft_disable_timer, pers])
-    self.AM.add_many(self.sm.frame, alerts)
+    callback_args = [self.CP, CS, self.sm, self.is_metric, self.state_machine.soft_disable_timer, pers]
+    alerts = self.events.create_alerts(self.state_machine.current_alert_types, callback_args)
+    alerts_sp = self.events_sp.create_alerts(self.state_machine.current_alert_types, callback_args)
+    self.AM.add_many(self.sm.frame, alerts + alerts_sp)
     self.AM.process_alerts(self.sm.frame, clear_event_types)
 
   def publish_selfdriveState(self, CS):
@@ -580,11 +599,30 @@ class SelfdriveD:
       self.pm.send('onroadEvents', ce_send)
     self.events_prev = self.events.names.copy()
 
+    # MADS
+    ss_sp_msg = messaging.new_message('selfdriveStateSP')
+    ss_sp_msg.valid = True
+    mads = ss_sp_msg.selfdriveStateSP.mads
+    mads.state = self.mads.state_machine.state
+    mads.enabled = self.mads.enabled
+    mads.active = self.mads.active
+    mads.available = self.mads.enabled_toggle
+    self.pm.send('selfdriveStateSP', ss_sp_msg)
+
+    if (self.sm.frame % int(1. / DT_CTRL) == 0) or (self.events_sp.names != self.events_sp_prev):
+      ce_send_sp = messaging.new_message('onroadEventsSP')
+      ce_send_sp.valid = True
+      ce_send_sp.onroadEventsSP.events = self.events_sp.to_msg()
+      self.pm.send('onroadEventsSP', ce_send_sp)
+    self.events_sp_prev = self.events_sp.names.copy()
+
   def step(self):
     CS = self.data_sample()
     self.update_events(CS)
     if not self.CP.passive and self.initialized:
       self.enabled, self.active = self.state_machine.update(self.events)
+    if not self.CP.notCar:
+      self.mads.update(CS)
     self.update_alerts(CS)
 
     self.publish_selfdriveState(CS)
@@ -597,6 +635,7 @@ class SelfdriveD:
       self.is_ldw_enabled = self.params.get_bool("IsLdwEnabled")
       self.disengage_on_accelerator = self.params.get_bool("DisengageOnAccelerator")
       self.personality = self.params.get("LongitudinalPersonality", return_default=True)
+      self.mads.read_params()
       time.sleep(0.1)
 
   def run(self):
