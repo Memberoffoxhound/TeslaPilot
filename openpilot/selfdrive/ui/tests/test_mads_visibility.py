@@ -1,0 +1,73 @@
+import pytest
+
+from opendbc.car.chrysler.values import CUSW_CARS
+from opendbc.car.hyundai.values import HyundaiFlags
+from opendbc.car.subaru.values import SubaruFlags
+from opendbc.car.volkswagen.values import VolkswagenFlags
+from opendbc.sunnypilot.car.tesla.values import TeslaFlagsSP
+from openpilot.selfdrive.ui import mads
+from openpilot.selfdrive.ui.mads import MAIN_CRUISE, UNIFIED, STEERING_MODE, SCREEN_BUTTON
+
+BUS = int(TeslaFlagsSP.HAS_VEHICLE_BUS)
+
+
+ALL = {MAIN_CRUISE, UNIFIED, STEERING_MODE}
+BRANDS = ["body", "byd", "chrysler", "ford", "gm", "honda", "hyundai", "mazda", "mg", "mock", "nissan", "psa", "rivian", "subaru", "tesla",
+          "toyota", "volkswagen"]
+
+
+@pytest.mark.parametrize("brand, flags, screen, car_flags, shown", [
+  (None, 0, 0, 0, ALL),
+  *[(b, 0, 0, 0, ALL) for b in ("chrysler", "ford", "gm", "honda", "hyundai", "mazda", "nissan", "subaru", "toyota", "volkswagen")],
+  ("hyundai", 0, 0, int(HyundaiFlags.CANFD), ALL),
+  ("volkswagen", 0, 0, int(VolkswagenFlags.MLB), {STEERING_MODE}),
+  ("byd", 0, 0, 0, {STEERING_MODE}),
+  ("subaru", 0, 0, int(SubaruFlags.PREGLOBAL), ALL),
+  ("mg", 0, 0, 0, {STEERING_MODE}),
+  ("psa", 0, 0, 0, {STEERING_MODE}),
+  ("mock", 0, 0, 0, {STEERING_MODE}),
+  ("body", 0, 0, 0, set()),
+  ("rivian", 0, 0, 0, set()),
+  ("tesla", 0, 0, 0, set()),
+  ("tesla", 0, 2, 0, set()),
+  ("tesla", BUS, 0, 0, {SCREEN_BUTTON}),
+  *[("tesla", BUS, s, 0, {SCREEN_BUTTON, UNIFIED}) for s in (1, 2, 3)],
+])
+def test_visible_options(brand, flags, screen, car_flags, shown):
+  assert mads.visible_options(brand, flags, screen, car_flags) == shown
+
+
+# Chrysler CUSW safety has no MADS main cruise or button, so only the brake mode applies
+def test_chrysler_cusw():
+  for fp in CUSW_CARS:
+    assert mads.visible_options("chrysler", 0, 0, 0, fp) == {STEERING_MODE}
+
+
+@pytest.mark.parametrize("brand", BRANDS)
+def test_every_brand(brand):
+  for flags, screen in ((0, 0), (BUS, 0), (BUS, 1)):
+    shown = mads.visible_options(brand, flags, screen)
+    assert shown <= ALL | {SCREEN_BUTTON}
+    # brake is forced to disengage on Tesla, and the screen button is Tesla only
+    if brand == "tesla":
+      assert STEERING_MODE not in shown and MAIN_CRUISE not in shown
+    else:
+      assert SCREEN_BUTTON not in shown
+
+
+def test_brand_list_is_complete():
+  import os
+  from opendbc.car import __file__ as car_init
+  car_dir = os.path.dirname(car_init)
+  ported = {d for d in os.listdir(car_dir) if os.path.isfile(os.path.join(car_dir, d, "interface.py"))}
+  assert ported == set(BRANDS)
+
+
+def test_welcome_copy():
+  assert mads.TITS_TITLE == "TITS - Trajectory Independent Torque Steering"
+  title, under = mads.TITS_WELCOME[0]
+  assert title.replace("\n", " ") == mads.TITS_TITLE
+  assert under.replace("\n", " ") == "Tesla gave you ASS. TeslaPilot gives you TITS."
+  for card in mads.TITS_WELCOME:
+    for text in (card if isinstance(card, tuple) else (card,)):
+      assert "\u2014" not in text and "\u2013" not in text and "stands for" not in text
