@@ -17,6 +17,7 @@ K=$DIR/kernel
 IMG=$DIR/boot.img
 KEEP=${DPB_KEEP_BACKUPS:-3}
 CURL=${DPB_CURL:-curl}
+DL_TIMEOUT_S=${DPB_DL_TIMEOUT_S:-1500}
 
 model_ok() { grep -q mici < <(tr -d '\0' < "${DPB_MODEL:-/sys/firmware/devicetree/base/model}"); }
 agnos() { tr -d '[:space:]' < "${DPB_VERSION:-/VERSION}"; }
@@ -83,9 +84,9 @@ fetch() {
   # shellcheck disable=SC2064
   trap "kill $w 2> /dev/null || true" EXIT
   # resume a partial download; nothing is flashed until the sha matches
-  # download only, before any write: gives up on a stalled link (under 1 kB/s for 60 s) or after 20 min per try;
-  # -C - resumes the partial file next run
-  $CURL -fL --retry 5 --retry-delay 3 --connect-timeout 20 --speed-limit 1024 --speed-time 60 --max-time 1200 -C - -o "$IMG.part" "$BOOT_URL" || dl_fail "$BOOT_URL"
+  # download only, before any write: gives up on a stalled link (under 1 kB/s for 60 s), 20 min per try and
+  # DL_TIMEOUT_S for all tries; -C - resumes the partial file next run
+  timeout "$DL_TIMEOUT_S" "$CURL" -fL --retry 5 --retry-delay 3 --connect-timeout 20 --speed-limit 1024 --speed-time 60 --max-time 1200 -C - -o "$IMG.part" "$BOOT_URL" || dl_fail "$BOOT_URL"
   kill "$w" 2> /dev/null || true
   wait "$w" 2> /dev/null || true
   trap - EXIT

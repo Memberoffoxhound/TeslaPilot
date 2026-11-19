@@ -382,6 +382,21 @@ def test_kernel_download_is_bounded(dev):
     assert args[args.index(flag) + 1] == val, flag
 
 
+def test_kernel_download_has_a_total_bound(dev):
+  # all retries together: a link that keeps tripping and resuming ends in 75, before any write
+  tmp, parts = dev[0], dev[1]
+  sha, e = kenv(dev, DPB_DL_TIMEOUT_S='1')
+  before = snapshot(parts)
+  (tmp / 'bin/curl').write_text('#!/bin/bash\nexec sleep 30\n')
+  t0 = time.monotonic()
+  r = run('kernel.sh', e, 'flash', '--yes')
+  assert r.returncode == 75 and 'download failed' in r.stderr, r.stderr
+  assert time.monotonic() - t0 < 10
+  assert snapshot(parts) == before and writes(tmp) == []
+  assert 'DL_TIMEOUT_S=${DPB_DL_TIMEOUT_S:-1500}' in (HERE / 'kernel.sh').read_text()
+  assert 'timeout "$DL_TIMEOUT_S" "$CURL" ' in (HERE / 'kernel.sh').read_text()
+
+
 def test_kernel_download_watcher_dies_with_the_script(dev):
   tmp = dev[0]
   sha, e = kenv(dev)
