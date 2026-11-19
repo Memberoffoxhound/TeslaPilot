@@ -1,0 +1,205 @@
+From 2f7da71a3fde0e4e851a5a5c3d00418ff263d056 Mon Sep 17 00:00:00 2001
+From: Memberoffoxhound <Memberoffoxhound@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 00:44:32 -0600
+Subject: [PATCH] Bluetooth: hci_qca: WCN3990 raises only RTS after the baud
+ switch, reads the version first
+
+---
+ drivers/bluetooth/btqca.c   |  6 +++
+ drivers/bluetooth/btqca.h   |  6 +++
+ drivers/bluetooth/hci_qca.c | 91 +++++++++++++++++++++++++++++++------
+ 3 files changed, 88 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/bluetooth/btqca.c b/drivers/bluetooth/btqca.c
+index 9ba2f02e..18321c9d 100644
+--- a/drivers/bluetooth/btqca.c
++++ b/drivers/bluetooth/btqca.c
+@@ -429,6 +429,12 @@ int qca_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
+ }
+ EXPORT_SYMBOL_GPL(qca_set_bdaddr);
+ 
++int qca_read_soc_version(struct hci_dev *hdev, u32 *ver)
++{
++	return rome_patch_ver_req(hdev, ver);
++}
++EXPORT_SYMBOL_GPL(qca_read_soc_version);
++
+ static int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
+ 			  bool wcn3990)
+ {
+diff --git a/drivers/bluetooth/btqca.h b/drivers/bluetooth/btqca.h
+index 83464e70..cea868b9 100644
+--- a/drivers/bluetooth/btqca.h
++++ b/drivers/bluetooth/btqca.h
+@@ -134,6 +134,7 @@ struct tlv_type_hdr {
+ 
+ int qca_set_bdaddr_rome(struct hci_dev *hdev, const bdaddr_t *bdaddr);
+ int qca_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr);
++int qca_read_soc_version(struct hci_dev *hdev, u32 *ver);
+ int qca_uart_setup_rome(struct hci_dev *hdev, uint8_t baudrate);
+ int qca_uart_setup_wcn3990(struct hci_dev *hdev, uint8_t baudrate);
+ 
+@@ -149,6 +150,11 @@ static inline int qca_set_bdaddr(struct hci_dev *hdev, const bdaddr_t *bdaddr)
+ 	return -EOPNOTSUPP;
+ }
+ 
++static inline int qca_read_soc_version(struct hci_dev *hdev, u32 *ver)
++{
++	return -EOPNOTSUPP;
++}
++
+ static inline int qca_uart_setup_rome(struct hci_dev *hdev, int speed)
+ {
+ 	return -EOPNOTSUPP;
+diff --git a/drivers/bluetooth/hci_qca.c b/drivers/bluetooth/hci_qca.c
+index 52213c65..617d2231 100644
+--- a/drivers/bluetooth/hci_qca.c
++++ b/drivers/bluetooth/hci_qca.c
+@@ -57,11 +57,16 @@
+ #define QCA_WCN3990_POWERON_PULSE	0xFC
+ #define QCA_WCN3990_POWEROFF_PULSE	0xC0
+ #define QCA_DROP_VENDOR_EVENT		2
++#define QCA_DROP_RX			3
+ 
+ static bool wcn3990;
+ module_param(wcn3990, bool, 0644);
+ MODULE_PARM_DESC(wcn3990, "Controller is a WCN3990");
+ 
++static unsigned int wcn3990_speed = 3000000;
++module_param(wcn3990_speed, uint, 0644);
++MODULE_PARM_DESC(wcn3990_speed, "WCN3990 operating baud, 115200 skips the switch");
++
+ /* HCI_IBS transmit side sleep protocol states */
+ enum tx_ibs_states {
+ 	HCI_IBS_TX_ASLEEP,
+@@ -834,6 +839,13 @@ static int qca_recv(struct hci_uart *hu, const void *data, int count)
+ 	if (!test_bit(HCI_UART_REGISTERED, &hu->flags))
+ 		return -EUNATCH;
+ 
++	/* Stray bytes while the WCN3990 boots, drop any partial frame too */
++	if (test_bit(QCA_DROP_RX, &qca->flags)) {
++		kfree_skb(qca->rx_skb);
++		qca->rx_skb = NULL;
++		return count;
++	}
++
+ 	qca->rx_skb = h4_recv_buf(hu->hdev, qca->rx_skb, data, count,
+ 				  qca_recv_pkts, ARRAY_SIZE(qca_recv_pkts));
+ 	if (IS_ERR(qca->rx_skb)) {
+@@ -946,13 +958,57 @@ static void qca_send_power_pulse(struct hci_uart *hu, u8 cmd)
+ 	msleep(cmd == QCA_WCN3990_POWERON_PULSE ? 100 : 10);
+ }
+ 
++/* Move RTS alone. A termios change restarts msm_geni RX and drops what is
++ * in its DMA buffer, so never change termios right after raising RTS.
++ */
++static void qca_set_rts(struct hci_uart *hu, bool on)
++{
++	struct tty_struct *tty = hu->tty;
++
++	if (on)
++		tty->driver->ops->tiocmset(tty, TIOCM_RTS, 0);
++	else
++		tty->driver->ops->tiocmset(tty, 0, TIOCM_RTS);
++}
++
+ /* Rails are already on via msm bt_power; force the chip into boot mode */
+ static void qca_wcn3990_init(struct hci_uart *hu, unsigned int init_speed)
+ {
++	struct qca_data *qca = hu->priv;
++
++	set_bit(QCA_DROP_RX, &qca->flags);
+ 	hci_uart_set_baudrate(hu, 2400);
+ 	qca_send_power_pulse(hu, QCA_WCN3990_POWEROFF_PULSE);
+ 	hci_uart_set_baudrate(hu, init_speed);
+ 	qca_send_power_pulse(hu, QCA_WCN3990_POWERON_PULSE);
++	clear_bit(QCA_DROP_RX, &qca->flags);
++}
++
++/* Baud switch with RTS low, then raise only RTS so the vendor event at
++ * the new rate is not lost to an RX restart
++ */
++static int qca_wcn3990_set_speed(struct hci_uart *hu, unsigned int speed,
++				 u8 qca_baudrate)
++{
++	struct qca_data *qca = hu->priv;
++	int ret;
++
++	hci_uart_set_flow_control(hu, true);
++	reinit_completion(&qca->drop_ev_comp);
++	set_bit(QCA_DROP_VENDOR_EVENT, &qca->flags);
++
++	ret = qca_set_baudrate(hu->hdev, qca_baudrate);
++	if (!ret) {
++		hci_uart_set_baudrate(hu, speed);
++		qca_set_rts(hu, true);
++		if (!wait_for_completion_timeout(&qca->drop_ev_comp,
++						 msecs_to_jiffies(200)))
++			ret = -ETIMEDOUT;
++	}
++
++	hci_uart_set_flow_control(hu, false);
++	clear_bit(QCA_DROP_VENDOR_EVENT, &qca->flags);
++	return ret;
+ }
+ 
+ static int qca_setup(struct hci_uart *hu)
+@@ -977,35 +1033,40 @@ static int qca_setup(struct hci_uart *hu)
+ 	if (speed)
+ 		hci_uart_set_baudrate(hu, speed);
+ 
+-	if (wcn3990)
++	if (wcn3990) {
++		u32 ver = 0;
++
+ 		qca_wcn3990_init(hu, speed ? speed : 115200);
+ 
++		/* Prove the chip booted before touching the baud rate */
++		ret = qca_read_soc_version(hdev, &ver);
++		if (ret) {
++			BT_ERR("%s: WCN3990 silent at init speed (%d)",
++			       hdev->name, ret);
++			return ret;
++		}
++		BT_INFO("%s: WCN3990 version 0x%08x", hdev->name, ver);
++	}
++
+ 	/* Setup user speed if needed */
+ 	speed = 0;
+ 	if (hu->oper_speed)
+ 		speed = hu->oper_speed;
+ 	else if (hu->proto->oper_speed)
+ 		speed = hu->proto->oper_speed;
++	if (wcn3990)
++		speed = wcn3990_speed > 115200 ? wcn3990_speed : 0;
+ 
+ 	if (speed) {
+ 		qca_baudrate = qca_get_baudrate_value(speed);
+ 
+ 		BT_INFO("%s: Set UART speed to %d", hdev->name, speed);
+ 		if (wcn3990) {
+-			/* Deassert RTS while both sides change rate */
+-			hci_uart_set_flow_control(hu, true);
+-			reinit_completion(&qca->drop_ev_comp);
+-			set_bit(QCA_DROP_VENDOR_EVENT, &qca->flags);
+-		}
+-		ret = qca_set_baudrate(hdev, qca_baudrate);
+-		if (!ret)
+-			hci_uart_set_baudrate(hu, speed);
+-		if (wcn3990) {
+-			hci_uart_set_flow_control(hu, false);
+-			if (!ret && !wait_for_completion_timeout(&qca->drop_ev_comp,
+-						msecs_to_jiffies(100)))
+-				ret = -ETIMEDOUT;
+-			clear_bit(QCA_DROP_VENDOR_EVENT, &qca->flags);
++			ret = qca_wcn3990_set_speed(hu, speed, qca_baudrate);
++		} else {
++			ret = qca_set_baudrate(hdev, qca_baudrate);
++			if (!ret)
++				hci_uart_set_baudrate(hu, speed);
+ 		}
+ 		if (ret) {
+ 			BT_ERR("%s: Failed to change the baud rate (%d)",
+-- 
+2.47.3
+

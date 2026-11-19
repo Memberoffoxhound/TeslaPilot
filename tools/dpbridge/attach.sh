@@ -27,7 +27,14 @@ case ${1:-} in
 esac
 
 [ -e /lib/firmware/qca/crbtfw21.tlv ] || { echo "no BT firmware, run install_userspace.sh"; exit 1; }
-rfkill unblock bluetooth
+# AGNOS has no rfkill tool; unblocking bt_power through sysfs powers the chip
+for r in /sys/class/rfkill/rfkill*; do
+  [ "$(cat "$r/type")" = bluetooth ] && echo 1 > "$r/state"
+done
+sleep 0.1  # let the rails settle before the power pulses
 echo 1 > /sys/module/hci_uart/parameters/wcn3990
+# DPB_BT_SPEED=115200 keeps the chip at its boot rate, for debugging the 3M switch
+P=/sys/module/hci_uart/parameters/wcn3990_speed
+if [ -n "${DPB_BT_SPEED:-}" ] && [ -w "$P" ]; then echo "$DPB_BT_SPEED" > "$P"; fi
 # the chip starts at 115200, hci_qca moves it to 3M after the power pulses
 exec btattach -B "$TTY" -P qca -S 115200

@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Install the Bluetooth userspace on a comma 4 running the dpbridge kernel: firmware, bluez, bluez-alsa,
-# bonds kept on /data, and the services that attach the chip and play A2DP on the speaker.
-# Changes the read-only rootfs of the running slot (an AGNOS update undoes it). Prints the plan only unless --yes.
+# Install the Bluetooth userspace on a comma 4 running the dpbridge kernel: firmware, bluez, bluez-obexd,
+# bluez-alsa, bonds kept on /data, and the services that attach the chip and play A2DP on the speaker.
+# Packages are apt-get download + dpkg --ignore-depends=udev --force-confold, skipped if their files are present.
+# Never apt-get install, never apt --fix-broken, never install udev. An AGNOS update undoes the rootfs changes.
+# Prints the plan only unless --yes.
 set -euo pipefail
 YES=0
 # shellcheck source=lib.sh
@@ -38,8 +40,35 @@ run comma_fw
 run $SUDO umount "$MNT"
 if [ $YES = 1 ]; then (cd /lib/firmware/qca && sha256sum -c --quiet "$DIR/qca.sha256") || die "installed BT firmware does not match qca.sha256"; fi
 
-run $SUDO apt-get update
-run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends bluez bluez-alsa-utils alsa-utils
+# AGNOS has no udev package, and apt is already broken on netplan/network-manager needing udev.
+# Never apt-get install, never apt --fix-broken, never install real udev.
+# /var is tmpfs and apt_setup.sh resets the dpkg database from /usr/default, so dpkg never remembers these;
+# check the installed files instead. Same download + dpkg method and list already used on this comma.
+PKGS="bluez bluez-obexd bluez-alsa-utils libasound2-plugin-bluez libical3t64 libldacbt-abr2 libldacbt-enc2 libsbc1"
+L=/usr/lib/aarch64-linux-gnu
+MARKS="/usr/libexec/bluetooth/bluetoothd /usr/libexec/bluetooth/obexd /usr/bin/bluealsa /usr/bin/bluealsa-aplay
+$L/alsa-lib/libasound_module_pcm_bluealsa.so $L/libical.so.3 $L/libldacBT_abr.so.2 $L/libldacBT_enc.so.2 $L/libsbc.so.1"
+missing=""
+for f in $MARKS; do [ -e "$f" ] || missing="$missing $f"; done
+if [ -z "$missing" ]; then
+  echo "  bluetooth packages already on the rootfs"
+else
+  echo "  missing:$missing"
+  run $SUDO apt-get update
+  echo "+ apt-get download $PKGS"
+  echo "+ dpkg --ignore-depends=udev --force-confold -i /tmp/dpbridge-debs/*.deb"
+  if [ $YES = 1 ]; then
+    $SUDO mkdir -p /tmp/dpbridge-debs
+    $SUDO rm -f /tmp/dpbridge-debs/*.deb
+    # shellcheck disable=SC2086  # PKGS is a list of package names
+    (cd /tmp/dpbridge-debs && $SUDO apt-get download $PKGS)
+    # something can remount / read-only while apt runs; make sure it is writable for dpkg
+    $SUDO mount -o rw,remount /
+    $SUDO dpkg --ignore-depends=udev --force-confold -i /tmp/dpbridge-debs/*.deb
+  fi
+fi
+
+if [ $YES = 1 ]; then $SUDO mount -o rw,remount /; fi
 
 # /var is tmpfs, keep bonds on /data
 run $SUDO mkdir -p "$DIR/bluetooth"

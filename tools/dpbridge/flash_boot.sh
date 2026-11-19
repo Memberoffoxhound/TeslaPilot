@@ -65,12 +65,13 @@ fi
 run $SUDO abctl --set_unbootable "$(slot_num "$oth")"
 
 # 3. mirror the current slot into the other one, skipping what already matches
+# compare and copy with O_DIRECT: cmp can agree from the page cache when flash still differs
 for n in $MIRROR; do
-  if $SUDO cmp -s "$P/$n$cur" "$P/$n$oth"; then
+  if [ "$(dsha "$P/$n$cur" "$(size "$P/$n$cur")")" = "$(dsha "$P/$n$oth" "$(size "$P/$n$oth")")" ]; then
     echo "  $n already matches"
     continue
   fi
-  run $SUDO dd if="$P/$n$cur" of="$P/$n$oth" bs=4M conv=fsync status=none
+  run $SUDO dd if="$P/$n$cur" of="$P/$n$oth" bs=4M iflag=direct conv=fsync status=none
   if [ $YES = 1 ]; then
     sz=$(size "$P/$n$cur")
     [ "$(dsha "$P/$n$cur" "$sz")" = "$(dsha "$P/$n$oth" "$sz")" ] || die "$n$oth readback mismatch, slot not switched"

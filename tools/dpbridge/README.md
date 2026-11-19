@@ -13,12 +13,12 @@ Nothing here talks to the car or changes panda safety.
 
 | file | runs on | what |
 |---|---|---|
-| `kernel/*.patch` | build host | 9 patches on agnos-kernel-sdm845 e88ac80: config, DT (BT UART as ttyHS1), WCN3990 setup and address in btqca/hci_qca |
+| `kernel/*.patch` | build host | 10 patches on agnos-kernel-sdm845 e88ac80: config, DT (BT UART as ttyHS1), WCN3990 setup and address in btqca/hci_qca |
 | `build_kernel.sh` | Linux | clones agnos-builder 140ed0c, applies the patches, builds and signs `boot.img` |
 | `probe_ro.sh` | comma | read-only probe: kernel config, UART node, rfkill, firmware, A/B sizes, modules, audio |
 | `flash_boot.sh` | comma | comma 4 on AGNOS 20.6 only. Backs up both boot slots, marks the other slot unbootable, mirrors the partitions AGNOS updates (xbl xbl_config abl aop devcfg system) into it, writes `boot.img` there, reads everything back from flash, switches to it. Dry run unless `--yes` |
 | `restore_boot.sh` | comma | switches back to the stock slot (`--write` also puts the stock kernel on the other slot) |
-| `install_userspace.sh` | comma | pinned BT firmware, bluez, bluez-alsa, services (installed, not enabled). Leaves audio alone. Dry run unless `--yes` |
+| `install_userspace.sh` | comma | pinned BT firmware, bluez, bluez-obexd, bluez-alsa (apt-get download + dpkg, skip udev, skip packages already installed), services (installed, not enabled). Leaves audio alone. Dry run unless `--yes` |
 | `firmware/firmware.sha256` | both | sha256 of `qca/crbtfw21.tlv`, `qca/crnv21.bin` and its license from linux-firmware f859d9f, and of comma's `firmware/bluetooth.img` from agnos-builder 140ed0c (not committed: that repo has no license file); `mac/make_bundle.sh` fetches and checks them |
 | `firmware/qca.sha256` | comma | the six files installed in `/lib/firmware/qca`: rev 21 from linux-firmware, revs 11 and 20 from `bluetooth.img`. btqca picks by the chip's revision. Fallback if linux-firmware's rev 21 misbehaves: comma's own rev 21 pair from the same image (crbtfw21.tlv 2a42859081393ca6a50a177773385eac4fcabb9f21fc1b78299ed35bf8a598c4, crnv21.bin 18cc38fff25a6a56bc163f1874184da93d90882dc047c9f0c534ed9888c543b3): add both names to `comma_fw` in install and swap the two hashes here |
 | `audio.sh` | comma | `on` links `asound.conf` to `/etc/asound.conf`, `off` removes the link. Offroad only |
@@ -29,8 +29,9 @@ Nothing here talks to the car or changes panda safety.
 | `dk_unpack.py` | dev box | DashKit frames from a route as CSV, `--check` for the acceptance test |
 | `mac/deliver.sh` | Mac | copies everything over SSH and runs the steps below |
 
-openpilot side: `openpilot/system/dpbridge/` (dashkitd, btagentd, a2dp ducking), params `DashKitBridge`,
+openpilot side: `openpilot/system/dpbridge/` (dashkitd, btagentd, a2dp ducking, nowplaying), params `DashKitBridge`,
 `DashKitAddr`, `DashKitVersion`, `DpbA2dpOnroad`, `DpbCmd`, `DpbStatus`, and Settings > bluetooth.
+Now playing is a tmpfs JSON file plus a home / disengaged-onroad card; it is hidden when nothing is up.
 All of it stays off when `/sys/class/bluetooth/hci0` is missing.
 
 Audio: the mici sound card exposes one playback PCM (MultiMedia1). `asound.conf` puts soundd's playback (the

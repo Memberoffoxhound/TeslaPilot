@@ -26,7 +26,7 @@ shasum -a 256 -c boot.img.sha256        # boot.img: OK
 ./deliver.sh probe                       # now: CONFIG_BT=y, BT UART node status=ok, /dev/ttyHS1, rfkill bt_power
 
 ./deliver.sh install                     # dry run of the userspace install
-./deliver.sh install --yes               # firmware, bluez, bluez-alsa; nothing enabled, audio untouched
+./deliver.sh install --yes               # firmware, bluez, bluez-obexd, bluez-alsa via dpkg (skip udev); nothing enabled, audio untouched
 ./deliver.sh attach                      # first chip bring-up by hand, 20 s. Hang or SSH lost: reboot,
                                          # nothing runs at boot yet. Saved to ~/dpbridge-backup/<date>/attach.txt
 ./deliver.sh enable                      # car off, only if attach listed hci0 and wlan0 is still UP: links the

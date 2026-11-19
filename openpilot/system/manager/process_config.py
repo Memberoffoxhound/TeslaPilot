@@ -138,9 +138,10 @@ procs = [
   # the big-model catalog and pick (from sunnypilot's model manager); offroad only
   RestartingPythonProcess("modelmanagerd", "openpilot.selfdrive.modelmanager.manager", only_offroad, enabled=not PC),
 
-  # dpbridge: pairing, music ducking, and log-only DashKit capture
+  # dpbridge: pairing, music ducking, now playing, and log-only DashKit capture
   RestartingPythonProcess("btagentd", "openpilot.system.dpbridge.btagentd", bluetooth, enabled=not PC),
   RestartingPythonProcess("dpb_a2dp", "openpilot.system.dpbridge.a2dp", bluetooth, enabled=not PC),
+  RestartingPythonProcess("dpb_nowplaying", "openpilot.system.dpbridge.nowplaying", bluetooth, enabled=not PC),
   RestartingPythonProcess("dashkitd", "openpilot.system.dpbridge.dashkitd", dashkit, enabled=not PC),
 
   # debug procs

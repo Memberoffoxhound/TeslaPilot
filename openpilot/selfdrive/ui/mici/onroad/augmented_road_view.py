@@ -9,6 +9,7 @@ from openpilot.selfdrive.ui.mici.onroad.alert_renderer import AlertRenderer
 from openpilot.selfdrive.ui.mici.onroad.driver_state import DriverStateRenderer
 from openpilot.selfdrive.ui.mici.onroad.status import status_fade
 from openpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
+from openpilot.selfdrive.ui.mici.widgets.nowplaying import NowPlayingCard
 from openpilot.selfdrive.ui.mici.onroad.long_indicator import LongIndicator
 from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.mici.onroad.navigation import NavigationPanel, PANEL_WIDTH
@@ -182,6 +183,7 @@ class AugmentedRoadView(CameraView):
     self._alert_renderer = AlertRenderer()
     self._driver_state_renderer = DriverStateRenderer(background=False)
     self._confidence_ball = ConfidenceBall()
+    self._nowplaying = NowPlayingCard()
     self._offroad_label = UnifiedLabel("start the car to\nuse openpilot", 54, FontWeight.DISPLAY,
                                        text_color=rl.Color(255, 255, 255, int(255 * 0.9)),
                                        alignment=TextAlignment.CENTER,
@@ -219,6 +221,8 @@ class AugmentedRoadView(CameraView):
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
     # Don't trigger click callback if bookmark was triggered
+    if self._nowplaying.is_visible and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._nowplaying.rect):
+      return
     if not self._bookmark_icon.interacting():
       super()._handle_mouse_release(mouse_pos)
 
@@ -287,6 +291,9 @@ class AugmentedRoadView(CameraView):
       self._long_indicator.set_should_draw(alert_to_render is None and not self._hud_renderer.slot_busy())
       self._long_indicator.render(rl.Rectangle(c.x + c.width - LONG_MARGIN - LONG_RECT_W, c.y + c.height - LONG_RECT_BOTTOM, LONG_RECT_W, c.height))
     self._alert_renderer.render(self._content_rect)
+    if not ui_state.engaged and alert_to_render is None:
+      c = self._content_rect
+      self._nowplaying.render(rl.Rectangle(c.x + 8, c.y + c.height - 8 - NowPlayingCard.H, c.width - 16, NowPlayingCard.H))
 
     # Draw fake rounded border
     rl.draw_rectangle_rounded_lines_ex(self._content_rect, 0.2 * 1.02, 10, 50, rl.BLACK)

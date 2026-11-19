@@ -18,6 +18,7 @@ from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.selfdrive.ui.ui_state import ui_state, ChestnutState
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.widgets.trip_row import GREY, WHITE, draw_trip_row, fmt_trip
+from openpilot.selfdrive.ui.mici.widgets.nowplaying import NowPlayingCard
 from openpilot.selfdrive.ui.mici.widgets.vehicle_profile import MAKES, make as car_make
 from openpilot.common.version import RELEASE_BRANCHES
 
@@ -230,6 +231,7 @@ class MiciHomeLayout(Widget):
     self._ssa_icon = IconWidget("icons_mici/set_speed_assist.png", (SSA_ICON_SIZE, SSA_ICON_SIZE))
 
     self._alerts_pill = AlertsPill()
+    self._nowplaying = NowPlayingCard()
 
     self._status_bar_layout = HBoxLayout([
       IconWidget("icons_mici/settings.png", (48, 48), opacity=0.9),
@@ -287,6 +289,8 @@ class MiciHomeLayout(Widget):
     self._alerts_pill.set_alert_count_callback(alert_count_callback, alert_icon_callback)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
+    if self._nowplaying.is_visible and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._nowplaying.rect):
+      return  # the card already handled play/pause/next/prev; don't open settings
     if self._on_ssa_click and self._ssa_hit.width > 0 and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._ssa_hit):
       self._on_ssa_click()
       return
@@ -323,15 +327,20 @@ class MiciHomeLayout(Widget):
     return version, branch, commit[:7], date_str
 
   def _render(self, _):
-    text_pos = rl.Vector2(self.rect.x - 2 + HOME_PADDING, self.rect.y + 2)
-    mark = "TESLAPILOT"
-    avail = max(200, self.rect.width - HOME_PADDING * 2)
-    wm = MICI_WORDMARK_SIZE
-    while wm > 28 and measure_text_cached(self._wordmark_font, mark, wm).x > avail:
-      wm -= 2
-    rl.draw_text_ex(self._wordmark_font, mark, text_pos, wm, 0, WHITE)
+    self._nowplaying._update_state()
+    show_np = self._nowplaying.is_visible
 
-    if self._version_text is not None:
+    # when now playing is up, drop the TESLAPILOT wordmark so the card can use that space
+    if not show_np:
+      text_pos = rl.Vector2(self.rect.x - 2 + HOME_PADDING, self.rect.y + 2)
+      mark = "TESLAPILOT"
+      avail = max(200, self.rect.width - HOME_PADDING * 2)
+      wm = MICI_WORDMARK_SIZE
+      while wm > 28 and measure_text_cached(self._wordmark_font, mark, wm).x > avail:
+        wm -= 2
+      rl.draw_text_ex(self._wordmark_font, mark, text_pos, wm, 0, WHITE)
+
+    if not show_np and self._version_text is not None:
       release_branch = self._version_text[1] in RELEASE_BRANCHES
       version_pos = rl.Rectangle(text_pos.x, text_pos.y + wm + 16, 100, 44)
       self._version_label.set_text(self._version_text[0])
@@ -351,6 +360,8 @@ class MiciHomeLayout(Widget):
       avail = self.rect.width - HOME_PADDING * 2
       row_w, lsz = draw_trip_row(gui_app.font(FontWeight.ROMAN), gui_app.font(FontWeight.DISPLAY), version_pos.x, y2, avail, self._day_txt, self._week_txt)
       self._trip_hit = rl.Rectangle(version_pos.x - 4, y2 - 4, min(avail, row_w) + 8, lsz * 1.16 + 8)
+    else:
+      self._trip_hit = rl.Rectangle(0, 0, 0, 0)
 
     # ***** Center-aligned bottom section icons *****
     usb_connected = ui_state.usb_connected
@@ -388,6 +399,15 @@ class MiciHomeLayout(Widget):
     accel = next((w for w in (self._chestnut_icon, self._chestnut_loading_icon, self._chestnut_failed_icon, self._chestnut_fill_icon)
                   if w.is_visible), None)
     self._accel_hit = rl.Rectangle(accel.rect.x - 8, accel.rect.y - 8, accel.rect.width + 16, accel.rect.height + 8) if accel else rl.Rectangle(0, 0, 0, 0)
+
+    if show_np:
+      # card uses the full area above the footer, now that the wordmark is hidden
+      footer_y = self.rect.y + self.rect.height - 48
+      top = self.rect.y + 4
+      self._nowplaying.render(rl.Rectangle(
+        self.rect.x + HOME_PADDING, top,
+        self.rect.width - HOME_PADDING * 2, footer_y - 4 - top,
+      ))
 
     self._alerts_pill.set_position(self.rect.x + self.rect.width - self._alerts_pill.rect.width - HOME_PADDING,
                                    self.rect.y + self.rect.height - self._alerts_pill.rect.height)
