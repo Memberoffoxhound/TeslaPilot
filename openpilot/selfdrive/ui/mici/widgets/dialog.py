@@ -4,6 +4,7 @@ import re
 import raylib_nb as rl
 from typing import Union
 from collections.abc import Callable
+from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.nav_widget import NavWidget
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.system.ui.widgets.label import UnifiedLabel
@@ -258,13 +259,13 @@ class BigConfirmationCircleButton(BigCircleButton):
     self.set_click_callback(show_confirm_dialog)
 
 
-def wire_confirm(page: NavScroller, title: str, bodies: list[str], on_confirm: Callable[[], None], label="slide to\nenable") -> None:
+def wire_confirm(page: NavScroller, title: str, bodies: list[str | Widget], on_confirm: Callable[[], None], label="slide to\nenable") -> None:
   """Warning title, body rows and a slide-to-confirm button on a NavScroller page."""
   warn = gui_app.texture("icons_mici/setup/warning.png", 64, 64)
   check = gui_app.texture("icons_mici/setup/driver_monitoring/dm_check.png", 64, 64)
   accept = BigConfirmationCircleButton(label, check, lambda: page.dismiss(on_confirm))
   page._scroller.add_widgets([
     GreyBigButton(title, "scroll to continue", warn),
-    *[GreyBigButton("", body) for body in bodies],
+    *[body if isinstance(body, Widget) else GreyBigButton("", body) for body in bodies],
     accept,
   ])
