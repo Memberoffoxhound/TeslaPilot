@@ -180,5 +180,13 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ChestnutModelFailed", {PERSISTENT, STRING}},
     {"ChestnutCompileProgress", {CLEAR_ON_MANAGER_START, JSON}},
     {"ChestnutRetry", {CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_ON, BOOL}},
+    // MADS, ported from sunnypilot, see LICENSE.sunnypilot
+    {"CarParamsSP", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BYTES}},
+    {"CarParamsSPPersistent", {PERSISTENT, BYTES}},
+    {"Mads", {PERSISTENT, BOOL, "0"}},
+    {"MadsMainCruiseAllowed", {PERSISTENT, BOOL, "1"}},
+    {"MadsSteeringMode", {PERSISTENT, INT, "0"}},
+    {"MadsUnifiedEngagementMode", {PERSISTENT, BOOL, "1"}},
+    {"TeslaMadsScreenButton", {PERSISTENT, INT, "0"}},
     {"Version", {PERSISTENT, STRING}},
 };
