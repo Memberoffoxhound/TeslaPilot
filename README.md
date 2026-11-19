@@ -12,6 +12,8 @@
 
 # TeslaPilot
 
+The purpose of this fork is to integrate DashPilot CAN data for research.
+
 TeslaPilot is a hobby fork of [comma.ai openpilot](https://github.com/commaai/openpilot). It should work on any car comma supports, but it's built to give you a great experience on Tesla. You get Tesla-friendly controls, a Tesla-style theme, drive stats that stay on your device, and a small web page hosted on your comma.
 
 This is a one-person project. There's no support, and you install it at your own risk.
