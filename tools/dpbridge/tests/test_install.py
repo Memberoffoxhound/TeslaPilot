@@ -52,6 +52,36 @@ def test_teardown_runs_on_a_signal(tmp_path, sig):
   assert p.returncode == 143 and out.split() == ['teardown']
 
 
+def run_onroad_check(tmp_path, manager, offroad, yes=1):
+  import os
+  line = next(ln for ln in (HERE / 'install_userspace.sh').read_text().splitlines() if 'openpilot is onroad' in ln)
+  b = tmp_path / 'bin'
+  b.mkdir()
+  (b / 'pgrep').write_text(f'#!/bin/sh\nexit {0 if manager else 1}\n')
+  (b / 'pgrep').chmod(0o755)
+  (tmp_path / 'p').mkdir()
+  if offroad is not None:
+    (tmp_path / 'p/IsOffroad').write_text(offroad)
+  lib = (HERE / 'lib.sh').read_text()
+  env = dict(os.environ, PATH=f"{b}:{os.environ['PATH']}", DPB_PARAMS=str(tmp_path / 'p'))
+  return subprocess.run(['bash', '-c', f'set -euo pipefail; YES={yes}\n{lib}\n{line}\necho go'], capture_output=True,
+                        text=True, env=env)
+
+
+@pytest.mark.parametrize('manager, offroad, yes, ok', [(True, '0', 1, False), (True, None, 1, False), (True, '1', 1, True),
+                                                       (False, '0', 1, True), (True, '0', 0, True)])
+def test_manual_install_refuses_onroad(tmp_path, manager, offroad, yes, ok):
+  r = run_onroad_check(tmp_path, manager, offroad, yes)
+  assert (r.returncode == 0 and r.stdout.strip() == 'go') == ok, (r.stdout, r.stderr)
+  if not ok:
+    assert 'openpilot is onroad' in r.stderr
+
+
+def test_onroad_check_is_before_any_change():
+  text = script_text()
+  assert text.index('openpilot is onroad') < text.index('echo "[1/4]')
+
+
 def test_radio_helper_is_installed_and_enabled():
   text = (HERE / 'install_userspace.sh').read_text()
   assert 'Experimental = true' in text
