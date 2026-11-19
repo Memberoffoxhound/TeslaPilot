@@ -116,6 +116,8 @@ function launch {
     sudo -n bash jetlink/comma/jetlink-root.sh boot /data/params/d/JetlinkLink &
     fetch_big_model &
     agnos_init
+    # dpbridge: run its installer once per setup change, before manager (no-op off a comma 4 or when absent)
+    [ -x "$DIR/tools/dpbridge/boot.py" ] && "$DIR/tools/dpbridge/boot.py" || true
   fi
 
   # write tmux scrollback to a file
