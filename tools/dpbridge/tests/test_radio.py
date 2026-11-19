@@ -61,13 +61,13 @@ def test_seed_off_after_bt_off(tmp_path):
   assert param.read_text() == "0" and any(a.startswith("stop ") for a in actions)
 
 
-def test_old_disable_with_the_toggle_off_moves_to_bt_off(tmp_path):
+def test_disable_survives_radio_with_the_toggle_off(tmp_path):
   param = tmp_path / "DpbBluetooth"
   param.write_text("0")
   (tmp_path / "dpb").mkdir()
   (tmp_path / "dpb" / "disable").write_text("")
   actions, off = run_radio(tmp_path, param)
-  assert off.exists() and not (tmp_path / "dpb/disable").exists()
+  assert (tmp_path / "dpb/disable").exists() and off.exists()  # bt_off written, kill switch kept
 
 
 def test_disable_with_the_toggle_on_is_left_alone(tmp_path):
@@ -85,7 +85,7 @@ def test_bt_unit_and_deliver_use_bt_off():
   dl = (HERE / "mac/deliver.sh").read_text()
   assert "rm -f $REMOTE/bt_off" in dl and "touch $REMOTE/bt_off" in dl and "$REMOTE/disable" not in dl
   # disable is read by the installer side only
-  assert '"$DIR/disable"' not in (HERE / "radio.sh").read_text().replace('[ -e "$DIR/disable" ]', '').replace('mv "$DIR/disable"', '')
+  assert "disable" not in (HERE / "radio.sh").read_text().replace("shellcheck disable", "").replace("$DIR/disable is only", "")
 
 
 def watch(tmp_path, param, hci0, settle="2", secs=1.5):

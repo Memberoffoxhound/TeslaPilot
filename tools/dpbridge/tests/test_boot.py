@@ -23,7 +23,8 @@ class FakeSpinner:
 
 def load(tmp_path, monkeypatch, install='echo "[1/4] x"; exit 0', state='ok', model='comma mici', slot='_a'):
   for k, v in (('DPB_DIR', tmp_path / 'data'), ('DPB_BOOT_DIR', tmp_path / 'data'), ('DPB_MODEL', tmp_path / 'model'), ('DPB_VERSION', tmp_path / 'VERSION'),
-               ('DPB_BOOT_TIMEOUT_S', '5'), ('DPB_BT_PARAM', tmp_path / 'DpbBluetooth')):
+               ('DPB_BOOT_TIMEOUT_S', '5'),
+               ('DPB_BT_PARAM', tmp_path / 'DpbBluetooth')):  # unused now, kept so a migration would show
     monkeypatch.setenv(k, str(v))
   (tmp_path / 'data').mkdir(exist_ok=True)
   (tmp_path / 'model').write_text(model)
@@ -88,29 +89,17 @@ def test_skip_on_disable_and_off_a_comma_4(tmp_path, monkeypatch):
   assert m.main(lambda: FakeSpinner()) == 0 and runs(tmp_path) == []
 
 
-@pytest.mark.parametrize('param, moved', [('0', True), ('1', False), (None, False)])
-def test_old_radio_disable_moves_to_bt_off_on_stock(tmp_path, monkeypatch, param, moved):
+@pytest.mark.parametrize('param', ['0', '1', None])
+def test_disable_survives_boot_with_bt_off(tmp_path, monkeypatch, param):
+  # disable is only ever the kill switch: never moved, whatever DpbBluetooth says
   m = load(tmp_path, monkeypatch)
   (tmp_path / 'data/disable').touch()
   if param is not None:
     (tmp_path / 'DpbBluetooth').write_text(param)
-  m.main(lambda: FakeSpinner())
-  assert (tmp_path / 'data/bt_off').exists() == moved and (tmp_path / 'data/disable').exists() != moved
-  assert runs(tmp_path) == (['--yes'] if moved else [])  # no longer stuck on "disabled"
-
-
-def test_bt_off_present_keeps_disable(tmp_path, monkeypatch):
-  m = load(tmp_path, monkeypatch)
-  (tmp_path / 'data/disable').touch()
-  (tmp_path / 'data/bt_off').touch()
-  (tmp_path / 'DpbBluetooth').write_text('0')
-  m.main(lambda: FakeSpinner())
-  assert (tmp_path / 'data/disable').exists() and runs(tmp_path) == []
-
-
-def test_migration_uses_sudo_n():
-  src = (HERE / 'boot.py').read_text()
-  assert 'SUDO = ["sudo", "-n"]' in src and '[*SUDO, "mv", d, off]' in src
+  for _ in range(2):
+    m.main(lambda: FakeSpinner())
+  assert (tmp_path / 'data/disable').exists() and not (tmp_path / 'data/bt_off').exists()
+  assert runs(tmp_path) == [] and m.skip_reason(m.setup_key()) == 'disabled'
 
 
 def test_no_network_falls_through_and_retries(tmp_path, monkeypatch):

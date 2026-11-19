@@ -86,8 +86,8 @@ the installer may flash it anywhere.
 
 Kill switch: `touch /data/dpbridge/disable` stops the first-boot run and any kernel flash (`--reflash` overrides).
 Bluetooth off is a separate file: the Settings toggle and `mac/deliver.sh disable` (car off) write
-`/data/dpbridge/bt_off`, which keeps the chip off from the next boot and nothing else. A `disable` left by an older
-build with the toggle off is moved to `bt_off` by radio.sh (dpbridge kernel) or boot.py (any kernel).
+`/data/dpbridge/bt_off`, which keeps the chip off from the next boot and nothing else.
+A device that ran an earlier dpbridge build with Bluetooth toggled off: `rm /data/dpbridge/disable` once.
 If two Bluetooth starts in a row never settle (hci0 up for 60 s), the next one switches Bluetooth off instead and
 Settings shows `off: did not start twice` under the toggle until it is switched on again.
 

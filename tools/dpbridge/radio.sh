@@ -77,11 +77,6 @@ apply() {
   fi
 }
 
-# once: older builds wrote disable for Bluetooth off; with the toggle off that was ours, not a kill switch
-if [ -e "$DIR/disable" ] && [ ! -e "$OFF" ] && [ "$(tr -d '[:space:]' < "$PARAM" 2>/dev/null || true)" = 0 ]; then
-  mv "$DIR/disable" "$OFF"
-fi
-
 once=0
 [ "${1:-}" = --once ] && once=1
 if [ "$once" = 1 ]; then
