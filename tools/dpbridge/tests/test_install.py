@@ -40,6 +40,9 @@ def test_bluez_is_the_pinned_dpbridge_build():
   assert env['BLUEZ_VER'] == '5.83' and re.fullmatch(r'[0-9a-f]{64}', env['BLUEZ_SHA'])
   assert env['BLUEZ_URL'].startswith('https://github.com/Memberoffoxhound/TeslaPilot/releases/download/')
   assert env['BLUEZ_URL'].endswith('/' + env['BLUEZ_TAR'])
+  # GPL: the source ships in the same release as the debs
+  assert env['BLUEZ_SRC_URL'].rsplit('/', 1)[0] == env['BLUEZ_URL'].rsplit('/', 1)[0]
+  assert env['BLUEZ_SRC_URL'].endswith(f"/bluez-{env['BLUEZ_VER']}.tar.xz")
   text = script_text()
   pkgs = re.search(r'^PKGS="([^"]*)"', text, re.M).group(1).split()
   assert 'bluez' not in pkgs and 'bluez-obexd' not in pkgs and 'libbluetooth3' not in pkgs
