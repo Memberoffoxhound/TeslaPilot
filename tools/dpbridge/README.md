@@ -53,15 +53,21 @@ The installer does everything, with openpilot down. After an install from comma'
 `install_userspace.sh --yes` with comma's spinner and a progress bar on screen, then writes a stamp
 (`/data/dpbridge_boot/stamp`: sha256 of the installer scripts, the pin files, the AGNOS version and the boot slot), so
 it runs again only when the code, a pin, AGNOS or the slot changes. It is skipped while `/data/dpbridge/disable`
-exists. A failure (no network) or the 20 min timeout is logged to `/data/dpbridge_boot/log`, openpilot starts anyway
-and the next boot tries again. After a flash it reboots once, without a stamp; the next boot records the result.
-By hand: `install_userspace.sh --yes` on the comma (`mac/deliver.sh install --yes` from a Mac). It prints `[1/4]` to `[4/4]` and the kernel step as
-`kernel: <step> <percent>%` (downloading, verifying, backing up, writing slot X, reading back, switching slot, rebooting).
+exists. A failure (no network) or the 20 min timeout on steps 1-3 is logged to `/data/dpbridge_boot/log`, openpilot
+starts anyway and the next boot tries again, up to 3 runs per setup (`rm /data/dpbridge_boot/fails` to retry).
+The kernel step is never timed out or stopped by a signal; its download gives up on a stalled link by itself.
+After a flash it reboots once, without a stamp; the next boot records the result.
+Do the first run parked at home on Wi-Fi: openpilot is not available for the minutes it takes, then one reboot.
+
+By hand: `install_userspace.sh --yes` on the comma (`mac/deliver.sh install --yes` from a Mac). It refuses while
+openpilot runs onroad (`IsOffroad` not 1). It prints `[1/4]` to `[4/4]` and the kernel step as
+`kernel: <step> <percent>%` (downloading, verifying, backing up, writing slot X, reading back, switching slot), then
+`kernel: rebooting 100%` from the installer.
 
 1. `[1/4]` records how the last flash went (`kernel.sh post-boot`).
 2. `[2/4]` BT firmware from the pinned release tarball. `[3/4]` BlueZ, bluez-alsa and the units.
-3. `[4/4]` on a stock kernel: fetch `boot.img` (pinned sha), write the inactive slot only, read it back, switch slots.
-   The reboot is the installer's final step. On the pinned dpbridge kernel nothing is flashed and there is no reboot.
+3. `[4/4]` apt teardown first (/ read-only again), then on a stock kernel: fetch `boot.img` (pinned sha), write the
+   inactive slot only, read it back, switch slots. The reboot is the installer's final step. On the pinned dpbridge kernel nothing is flashed and there is no reboot.
 4. After the reboot the Bluetooth toggle in Settings starts the radio. After an AGNOS update the next boot runs the
    installer again.
 
@@ -69,14 +75,17 @@ Without `--yes` it is a dry run. `kernel.sh status` prints `state=`: `ok` (pinne
 dpbridge kernel runs: restore first), `offer` (stock, install flashes), `off` (`/data/dpbridge/disable`), `failed`
 (the last try with this image, AGNOS and slot failed), `pending`, `no_space`, `unsupported_agnos`, `unsupported_device`.
 `install_userspace.sh --yes --reflash` flashes despite `off` or `failed`; without it both leave the kernel alone.
+`no_space` and `unsupported_*` are printed and skipped; the rest of the install still succeeds.
 
 Manual path (development, new kernel builds): `build_kernel.sh`, `mac/deliver.sh probe`, `qdl-check`, `push`,
 `flash` (dry run) then `flash --yes`, `reboot`, `install --yes`, `test`. Boot a new image by hand this way before
 the installer may flash it anywhere.
 
-Kill switch: `touch /data/dpbridge/disable` keeps the chip off from the next boot and stops the installer from
-flashing. `mac/deliver.sh disable` (car off) also stops the services. The Bluetooth toggle off writes the same file.
-If a Bluetooth start never settles (hci0 up for 60 s), the next boot switches Bluetooth off instead of starting it.
+Kill switch: `touch /data/dpbridge/disable` stops the first-boot run and any kernel flash (`--reflash` overrides).
+Bluetooth off is a separate file: the Settings toggle and `mac/deliver.sh disable` (car off) write
+`/data/dpbridge/bt_off`, which keeps the chip off from the next boot and nothing else.
+If two Bluetooth starts in a row never settle (hci0 up for 60 s), the next one switches Bluetooth off instead and
+Settings shows `off: did not start twice` under the toggle until it is switched on again.
 
 ## Recovery
 
