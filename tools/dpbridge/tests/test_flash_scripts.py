@@ -369,6 +369,19 @@ def test_kernel_flash_has_no_reboot_path():
   assert 'REBOOT' not in sh and 'rebooting' not in sh and '--no-reboot' not in sh
 
 
+def test_kernel_download_is_bounded(dev):
+  tmp = dev[0]
+  sha, e = kenv(dev)
+  # a curl that logs its flags, then fetches like the fake
+  real = (tmp / 'bin/curl').read_text()
+  (tmp / 'bin/curl').write_text(real.replace('out=""; url=""', f'echo "$*" > {tmp}/curl.args\nout=""; url=""', 1))
+  assert run('kernel.sh', e, 'flash', '--yes').returncode == 0
+  args = (tmp / 'curl.args').read_text().split()
+  for flag, val in (('--max-time', '1200'), ('--speed-limit', '1024'), ('--speed-time', '60'), ('--connect-timeout', '20'),
+                    ('-C', '-'), ('-o', str(dev[2] / 'boot.img.part'))):
+    assert args[args.index(flag) + 1] == val, flag
+
+
 def test_kernel_download_watcher_dies_with_the_script(dev):
   tmp = dev[0]
   sha, e = kenv(dev)

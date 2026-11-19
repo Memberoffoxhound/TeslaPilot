@@ -83,8 +83,9 @@ fetch() {
   # shellcheck disable=SC2064
   trap "kill $w 2> /dev/null || true" EXIT
   # resume a partial download; nothing is flashed until the sha matches
-  # a stalled link gives up (under 1 kB/s for 60 s), the boot-time run waits for this step without a clock
-  $CURL -fL --retry 5 --retry-delay 3 --connect-timeout 20 --speed-limit 1024 --speed-time 60 -C - -o "$IMG.part" "$BOOT_URL" || die "download failed: $BOOT_URL"
+  # download only, before any write: gives up on a stalled link (under 1 kB/s for 60 s) or after 20 min per try;
+  # -C - resumes the partial file next run
+  $CURL -fL --retry 5 --retry-delay 3 --connect-timeout 20 --speed-limit 1024 --speed-time 60 --max-time 1200 -C - -o "$IMG.part" "$BOOT_URL" || die "download failed: $BOOT_URL"
   kill "$w" 2> /dev/null || true
   wait "$w" 2> /dev/null || true
   trap - EXIT

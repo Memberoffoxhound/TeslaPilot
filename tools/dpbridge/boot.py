@@ -17,9 +17,12 @@ DIR = os.environ.get("DPB_DIR", "/data/dpbridge")
 STATE = os.environ.get("DPB_BOOT_DIR", "/data/dpbridge_boot")
 STAMP = os.path.join(STATE, "stamp")
 LOG = os.path.join(STATE, "log")
+OUT = os.path.join(STATE, "install.out")  # this run's installer output
 FAILS = os.path.join(STATE, "fails")  # "<key> <count>": gives up after MAX_FAILS runs of the same setup
 MAX_FAILS = 3
 TIMEOUT_S = float(os.environ.get("DPB_BOOT_TIMEOUT_S", "1200"))
+KERNEL_WAIT_S = float(os.environ.get("DPB_KERNEL_WAIT_S", "3600"))
+STILL = -1  # install() result: the kernel step outlived KERNEL_WAIT_S
 MODEL = os.environ.get("DPB_MODEL", "/sys/firmware/devicetree/base/model")
 VERSION = os.environ.get("DPB_VERSION", "/VERSION")
 SUDO = ["sudo"]
@@ -94,35 +97,54 @@ def install(spinner, log) -> int:
   env = dict(os.environ, DPB_REBOOT="true")  # the reboot, if any, is ours, after the stamp logic
   cmd = ["bash", INSTALL, "--yes"]
   spinner.update_progress(0, 100)
-
   kernel_step = threading.Event()
+  done = threading.Event()
 
-  def pump(out):
-    pct = 0
-    for ln in out:
-      if ln.startswith("[4/4]"):
-        kernel_step.set()
-      log.write(ln)
-      pct = progress(ln.rstrip("\n"), pct)
-      spinner.update_progress(pct, 100)
+  # output goes to a file, not a pipe: if boot.py stops waiting, the installer never writes to a closed pipe
+  def pump():
+    pct, buf = 0, ""
+    with open(OUT, errors="replace") as f:
+      while True:
+        chunk = f.read()
+        buf += chunk
+        *lines, buf = buf.split("\n")
+        for ln in lines:
+          if ln.startswith("[4/4]"):
+            kernel_step.set()
+          log.write(ln + "\n")
+          pct = progress(ln, pct)
+          spinner.update_progress(pct, 100)
+        if not chunk:
+          if done.is_set():
+            return
+          time.sleep(0.1)
 
   try:
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env,
-                         start_new_session=True)
+    with open(OUT, "w") as out:
+      p = subprocess.Popen(cmd, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env,
+                           start_new_session=True)
   except OSError as e:
     log.write(f"{e!r}\n")
     return 1
-  t = threading.Thread(target=pump, args=(p.stdout,), daemon=True)
+  t = threading.Thread(target=pump, daemon=True)
   t.start()
-  # the clock covers steps 1-3; the kernel step is never killed (its download gives up on a stalled link itself)
+  # steps 1-3: TIMEOUT_S, then killed. The kernel step is never killed: after KERNEL_WAIT_S boot.py only stops
+  # waiting and lets manager start; the flash goes on in its own session
   end = time.monotonic() + TIMEOUT_S
+  kend = None
   rc = None
-  while rc is None and (kernel_step.is_set() or time.monotonic() < end):
+  while rc is None:
+    if kernel_step.is_set():
+      kend = kend or time.monotonic() + KERNEL_WAIT_S
+      if time.monotonic() > kend:
+        break
+    elif time.monotonic() > end:
+      break
     try:
       rc = p.wait(timeout=0.2)
     except subprocess.TimeoutExpired:
       pass
-  if rc is None:
+  if rc is None and not kernel_step.is_set():
     os.killpg(p.pid, signal.SIGTERM)  # lets the installer's EXIT trap tear apt down
     try:
       p.wait(timeout=10)
@@ -130,7 +152,12 @@ def install(spinner, log) -> int:
       os.killpg(p.pid, signal.SIGKILL)
       p.wait()
     rc = 124
+  time.sleep(0.2)
+  done.set()
   t.join(timeout=5)
+  if rc is None:
+    log.write(f"kernel step still running after {KERNEL_WAIT_S:.0f} s, not waiting (output: {OUT})\n")
+    return STILL
   if rc == 124:
     log.write(f"timed out after {TIMEOUT_S:.0f} s\n")
   return rc
@@ -161,6 +188,10 @@ def main(spinner_factory=None) -> int:
       rc = install(spinner, log)
     finally:
       spinner.close()
+    if rc == STILL:
+      # no stamp, no fail count: the next boot records how the flash went
+      print("dpbridge boot: kernel step still running, starting openpilot")
+      return 0
     if rc != 0:
       n = fails(key) + 1
       put(FAILS, f"{key} {n}")
