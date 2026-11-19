@@ -1,3 +1,4 @@
+from pathlib import Path
 import threading
 from unittest import mock
 
@@ -113,3 +114,11 @@ def test_compile_cmd_uses_our_tinygrad():
   cmd = cc.compile_cmd('m.onnx', 'm.pkl')
   assert cmd[4].endswith('tinygrad_repo/examples/openpilot/compile_onnx.py') and '--out-of-band' in cmd
   assert cc.FLAGS['DEV'] == 'USB+AMD:LLVM'
+
+
+def test_compile_cmd_flags_exist_in_compile_onnx():
+  # every option we pass must be one the pinned compile_onnx.py accepts
+  cmd = cc.compile_cmd('m.onnx', 'm.pkl')
+  src = Path(cmd[4]).read_text()
+  for arg in (a for a in cmd if a.startswith('--')):
+    assert f"'{arg}'" in src, arg
