@@ -25,15 +25,27 @@ def deliver(env, *args):
 def setup_env(dev):
   tmp, parts, data, img, env = dev
   b = tmp / 'bin'
+  remote = tmp / 'remote'
   (b / 'ssh').write_text(FAKE_SSH)
   (b / 'scp').write_text(FAKE_SCP)
-  for f in ('ssh', 'scp'):
+  # only this test's remote, so a parallel suite's flash or install is ignored
+  (b / 'pgrep').write_text(f"""#!/bin/bash
+scope={str(remote)!r}
+found=1
+while read -r pid; do
+  if tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null | grep -Fq -- "$scope"; then
+    echo "$pid"
+    found=0
+  fi
+done < <(/usr/bin/pgrep "$@" || true)
+exit $found
+""")
+  for f in ('ssh', 'scp', 'pgrep'):
     (b / f).chmod(0o755)
   key = tmp / 'key'
   key.write_text('k')
   home = tmp / 'home'
   home.mkdir()
-  remote = tmp / 'remote'
   fw = tmp / 'fw'
   fw.mkdir()
   names = ('crbtfw21.tlv', 'crnv21.bin', 'LICENSE.QualcommAtheros_ath10k', 'bluetooth.img')
@@ -217,3 +229,22 @@ def test_install_other_silence_says_no_answer(dev):
   r = deliver(dict(env, DPB_POLL_S='0.2'), 'install', '--yes')
   assert r.returncode == 0, r.stderr
   assert '(no answer, still waiting)' in r.stdout and 'rebooting into' not in r.stdout
+
+
+def test_install_ignores_another_suites_install(dev):
+  tmp, parts, data, img, _ = dev
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  stub_install(remote, 'echo installed')
+  other = tmp / 'other'
+  other.mkdir()
+  (other / 'install_userspace.sh').write_text('#!/bin/bash\nsleep 30\n')
+  (other / 'install_userspace.sh').chmod(0o755)
+  p = subprocess.Popen([str(other / 'install_userspace.sh')])
+  try:
+    r = deliver(dict(env, DPB_POLL_S='0.2'), 'install', '--yes')
+    assert r.returncode == 0, r.stderr
+    assert 'already running' not in r.stderr and 'installed' in r.stdout
+  finally:
+    p.kill()
+    p.wait()
