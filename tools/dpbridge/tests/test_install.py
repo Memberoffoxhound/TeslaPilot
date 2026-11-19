@@ -139,8 +139,7 @@ def run_reboot_recheck(tmp_path, manager, offroad, yes=1):
   reboot.chmod(0o755)
   lib = (HERE / 'lib.sh').read_text()
   env = dict(os.environ, PATH=f"{b}:{os.environ['PATH']}", DPB_PARAMS=str(tmp_path / 'p'))
-  script = (f'set -euo pipefail\nYES={yes}\nSUDO=\nREBOOT={reboot}\n{lib}\n'
-            f'{onroad_fn()}\nkernel_step() {{ return 0; }}\n{after_flash_block()}')
+  script = f'set -euo pipefail\nYES={yes}\nSUDO=\nREBOOT={reboot}\n{lib}\n{onroad_fn()}\nkernel_step() {{ return 0; }}\n{after_flash_block()}'
   return subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=env)
 
 
