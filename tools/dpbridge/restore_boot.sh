@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Go back to the stock kernel: re-activate the slot that was running before flash_boot.sh.
 # --write also copies the stock kernel over the dpbridge slot, which matches the system mirrored there.
-# Prints the plan only unless --yes.
+# Sticks until install_userspace.sh runs again, which flashes dpbridge again. Prints the plan only unless --yes.
 set -euo pipefail
 YES=0; WRITE=0
 # shellcheck source=lib.sh

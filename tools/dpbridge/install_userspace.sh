@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Install the Bluetooth userspace on a comma 4 running the dpbridge kernel: firmware, the dpbridge BlueZ build,
-# bluez-alsa, bonds kept on /data, and the services that attach the chip and play A2DP on the speaker.
+# The dpbridge installer, run with openpilot down: Bluetooth firmware, the dpbridge BlueZ build, bluez-alsa,
+# bonds kept on /data, the services, and last the kernel on the inactive slot with one reboot as the final step.
+# On a stock kernel it always flashes, also after a restore; /data/dpbridge/disable or a failed try stop it unless --reflash.
 # Debs are kept on /data and installed with dpkg --ignore-depends=udev --force-confold, skipped if present.
 # Never apt-get install, never apt --fix-broken, never install udev. An AGNOS update undoes the rootfs changes.
 # Prints the plan only unless --yes.
@@ -8,19 +9,39 @@ set -euo pipefail
 YES=0
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
-[ "${1:-}" = --yes ] && YES=1
+REFLASH=0
+for a in "$@"; do
+  case $a in
+    --yes) YES=1 ;;
+    --reflash) REFLASH=1 ;;
+    *) echo "usage: install_userspace.sh [--yes] [--reflash]"; exit 2 ;;
+  esac
+done
 HERE=$(cd "$(dirname "$0")" && pwd)
 put() { echo "+ write $1"; if [ $YES = 1 ]; then $SUDO tee "$1" > /dev/null; else cat > /dev/null; fi; }
-
-# stock kernel: flash the dpbridge one (inactive slot only, one reboot); run install again after it
-WCN=${DPB_WCN:-/sys/module/hci_uart/parameters/wcn3990}
-if [ ! -e "$WCN" ]; then
-  echo "running the stock kernel, flashing the dpbridge boot.img first"
-  fl=(flash)
-  [ $YES = 1 ] && fl+=(--yes)
-  exec $SUDO bash "$HERE/kernel.sh" "${fl[@]}"
-fi
+REBOOT=${DPB_REBOOT:-reboot}
+KSH=(bash "$HERE/kernel.sh")
 [ $YES = 1 ] || echo "dry run: pass --yes to install"
+
+# the kernel step, last: flash the inactive slot when the stock kernel runs; 0 = rebooting needed
+kernel_step() {
+  local st a=(flash --no-reboot)
+  st=$($SUDO "${KSH[@]}" status | sed -n 's/^state=//p')
+  case $st in
+    ok) echo "  dpbridge kernel running"; return 1 ;;
+    outdated) echo "  an older dpbridge kernel runs: restore_boot.sh --yes, reboot, then install again"; return 1 ;;
+    off) if [ $REFLASH = 0 ]; then echo "  kernel flash is off ($DIR/disable), pass --reflash"; return 1; fi ;;
+  esac
+  [ $YES = 1 ] && a+=(--yes)
+  [ $REFLASH = 1 ] && a+=(--retry)
+  $SUDO "${KSH[@]}" "${a[@]}" || die "kernel flash failed, nothing was switched"
+  [ $YES = 1 ]
+}
+
+echo "[1/4] last kernel flash"
+if [ $YES = 1 ]; then $SUDO "${KSH[@]}" post-boot --yes; else $SUDO "${KSH[@]}" post-boot; fi
+
+echo "[2/4] BT firmware"
 
 # BT firmware and the unit scripts on /data, no Mac needed. They stay there across AGNOS updates.
 # One release tarball pinned in firmware/btfw.env (linux-firmware files and comma's bluetooth.img), each file
@@ -49,11 +70,13 @@ for f in attach.sh asound.conf firmware/firmware.sha256 firmware/qca.sha256; do
   run $SUDO install -m "$([ "${f%.sh}" != "$f" ] && echo 0755 || echo 0644)" "$HERE/$f" "$DIR/$(basename "$f")"
 done
 
+echo "[3/4] Bluetooth packages and services"
 MNT=/tmp/dpbridge-btimg
 # obexd exits without one server plugin and transport; OPP stays, rejected with no agent
 OBEX_OFF=pcsuite,ftp,irmc,pbap,mas,mns
 # umount fails once the success path has unmounted; it must not stop the teardown or the exit status
 trap 'if [ $YES = 1 ]; then $SUDO umount "$MNT" 2> /dev/null || true; $SUDO /usr/comma/apt_teardown.sh; fi' EXIT
+teardown() { if [ $YES = 1 ]; then $SUDO umount "$MNT" 2> /dev/null || true; $SUDO /usr/comma/apt_teardown.sh; fi; }
 run $SUDO /usr/comma/apt_setup.sh
 
 # WCN3990 firmware (the comma 4 has no bluetooth partition). btqca loads qca/crbtfw<rev>.tlv and qca/crnv<rev>.bin
@@ -258,5 +281,15 @@ run $SUDO systemctl stop bluetooth.service bluealsa.service bluealsa-aplay.servi
 run $SUDO systemctl enable dpbridge-radio.service
 if [ $YES = 1 ]; then
   run $SUDO systemctl restart dpbridge-radio.service || run $SUDO systemctl start dpbridge-radio.service
+fi
+
+echo "[4/4] kernel"
+if kernel_step; then
+  # the reboot is the final step, after the apt teardown
+  teardown
+  trap - EXIT
+  echo "installed. rebooting into the dpbridge kernel"
+  $SUDO "$REBOOT"
+  exit 0
 fi
 echo "installed. the Bluetooth toggle in Settings starts the radio; no deliver.sh enable needed"

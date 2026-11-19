@@ -261,8 +261,9 @@ cp "$url" "$out"
   reboot.write_text(f'#!/bin/sh\necho reboot >> {tmp}/ops.log\n')
   reboot.chmod(0o755)
   e = dict(env, DPB_KERNEL_ENV=str(tmp / 'kernel.env'), DPB_WCN=str(tmp / 'wcn3990'), DPB_REBOOT=str(reboot),
-           DPB_CURL=str(curl), DPB_FREE_MB='10000', DPB_ONROAD=str(tmp / 'onroad'))
+           DPB_CURL=str(curl), DPB_FREE_MB='10000', DPB_BOOT_ID=str(tmp / 'boot_id'))
   e.update(kw)
+  (tmp / 'boot_id').write_text('boot-1\n')
   img.unlink()
   Path(f'{img}.sha256').unlink()
   return sha, e
@@ -280,22 +281,51 @@ def test_kernel_status_offers_on_stock(dev):
   assert st['state'] == 'offer' and st['slot'] == '_a' and st['target'] == '_b' and st['image'] == 'missing' and st['sha'] == sha
 
 
-@pytest.mark.parametrize('case, state', [('wcn', 'ok'), ('agnos', 'unsupported_agnos'), ('model', 'unsupported_device'),
-                                         ('space', 'no_space'), ('onroad', 'onroad')])
+def run_on_dpbridge(tmp, parts, same=True):
+  # the running slot a holds the pinned image (same) or an older dpbridge build
+  img = (tmp / 'release/boot.img').read_bytes()
+  boot = img if same else b'ANDROID!older' + img[13:]
+  (parts / 'boot_a').write_bytes(boot + b'\0' * (4 * MB - len(boot)))
+  (tmp / 'wcn3990').write_text('1')
+
+
+@pytest.mark.parametrize('case, state', [('wcn', 'ok'), ('wcn_old', 'outdated'), ('agnos', 'unsupported_agnos'),
+                                         ('model', 'unsupported_device'), ('space', 'no_space'), ('restored', 'offer'),
+                                         ('disable', 'off'), ('pending', 'pending')])
 def test_kernel_status_states(dev, case, state):
-  tmp = dev[0]
+  tmp, parts, data, img, env = dev
   sha, e = kenv(dev)
-  if case == 'wcn':
-    (tmp / 'wcn3990').write_text('1')
+  if case in ('wcn', 'wcn_old'):
+    run_on_dpbridge(tmp, parts, same=case == 'wcn')
   elif case == 'agnos':
     (tmp / 'VERSION').write_text('20.7\n')
   elif case == 'model':
     (tmp / 'model').write_bytes(b'comma tizi\0')
   elif case == 'space':
     e['DPB_FREE_MB'] = '10'
-  elif case == 'onroad':
-    (tmp / 'onroad').write_text('1')
+  elif case == 'restored':
+    assert run('kernel.sh', e, 'flash', '--yes').returncode == 0
+    assert run('restore_boot.sh', e, '--yes').returncode == 0
+    (data / 'kernel/pending').unlink()
+  elif case == 'disable':
+    (data / 'disable').touch()
+  elif case == 'pending':
+    (data / 'kernel').mkdir()
+    (data / 'kernel/pending').write_text(f'{sha} 20.6 _a _b\n')
   assert kv(run('kernel.sh', e, 'status').stdout)['state'] == state
+
+
+def test_kernel_running_slot_is_hashed_once_per_boot(dev):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev)
+  run_on_dpbridge(tmp, parts)
+  assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'ok'
+  assert (data / 'kernel/running').read_text() == 'boot-1 ok\n'
+  # the cached answer is used for the rest of this boot
+  (data / 'kernel/running').write_text('boot-1 outdated\n')
+  assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'outdated'
+  (tmp / 'boot_id').write_text('boot-2\n')
+  assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'ok'
 
 
 def test_kernel_flash_downloads_checks_and_reboots_once(dev):
@@ -311,28 +341,55 @@ def test_kernel_flash_downloads_checks_and_reboots_once(dev):
   assert (data / 'kernel/pending').read_text().split() == [sha, '20.6', '_a', '_b']
 
 
+def test_kernel_flash_progress_lines(dev):
+  tmp = dev[0]
+  sha, e = kenv(dev)
+  r = run('kernel.sh', e, 'flash', '--yes')
+  lines = [ln.split(': ', 1)[1] for ln in r.stdout.splitlines() if ln.startswith('  kernel: ')]
+  pct = [int(ln.rsplit(' ', 1)[1].rstrip('%')) for ln in lines]
+  steps = {ln.rsplit(' ', 1)[0] for ln in lines}
+  assert pct == sorted(pct) and lines[-1] == 'rebooting 100%'
+  assert {'downloading', 'verifying', 'backing up', 'writing slot b', 'reading back', 'switching slot', 'rebooting'} <= steps
+  # dry runs print no progress
+  assert '  kernel: ' not in run('kernel.sh', e, 'flash').stdout
+
+
+def test_kernel_flash_no_reboot(dev):
+  tmp = dev[0]
+  sha, e = kenv(dev)
+  r = run('kernel.sh', e, 'flash', '--yes', '--no-reboot')
+  assert r.returncode == 0 and 'reboot' not in ops(tmp) and 'abctl --set_active 1' in ops(tmp)
+
+
 def test_kernel_flash_from_b_writes_a(dev):
   tmp, parts, data, img, env = dev
   (tmp / 'slot').write_text('_b\n')
   boot_b = (parts / 'boot_b').read_bytes()
   sha, e = kenv(dev)
-  assert run('kernel.sh', e, 'flash', '--yes').returncode == 0
+  r = run('kernel.sh', e, 'flash', '--yes')
+  assert r.returncode == 0 and '  kernel: writing slot a 80%' in r.stdout
   assert (parts / 'boot_b').read_bytes() == boot_b
   assert (parts / 'boot_a').read_bytes().startswith((tmp / 'release/boot.img').read_bytes())
   assert 'abctl --set_active 0' in ops(tmp)
 
 
-@pytest.mark.parametrize('case', ['onroad', 'bad_download', 'agnos', 'running_dpbridge', 'space', 'no_release', 'model'])
-def test_kernel_flash_refuses(dev, case):
+@pytest.mark.parametrize('case, msg', [('bad_download', 'does not match the pinned sha'),
+                                       ('short_download', 'wrong size'),
+                                       ('agnos', 'AGNOS 20.7 but the image is for 20.6'),
+                                       ('model', 'not a comma 4 (mici)'),
+                                       ('running_dpbridge', 'a dpbridge kernel is already running'),
+                                       ('space', 'not enough space'), ('no_release', 'download failed'),
+                                       ('disable', 'kernel flash is off')])
+def test_kernel_flash_refuses(dev, case, msg):
   tmp, parts, data, img, env = dev
   sha, e = kenv(dev)
-  args = ['flash', '--yes']
-  if case == 'onroad':
-    (tmp / 'onroad').write_text('1')
-  elif case == 'model':
+  if case == 'model':
     (tmp / 'model').write_bytes(b'comma tizi\0')
   elif case == 'bad_download':
-    (tmp / 'release/boot.img').write_bytes(b'ANDROID!' + bytes(MB))
+    b = (tmp / 'release/boot.img').read_bytes()
+    (tmp / 'release/boot.img').write_bytes(b[:-1] + b'x')
+  elif case == 'short_download':
+    (tmp / 'release/boot.img').write_bytes(b'ANDROID!' + bytes(10))
   elif case == 'agnos':
     (tmp / 'VERSION').write_text('20.7\n')
   elif case == 'running_dpbridge':
@@ -341,12 +398,22 @@ def test_kernel_flash_refuses(dev, case):
     e['DPB_FREE_MB'] = '10'
   elif case == 'no_release':
     (tmp / 'release/boot.img').unlink()
+  elif case == 'disable':
+    (data / 'disable').touch()
   before = snapshot(parts)
-  r = run('kernel.sh', e, *args)
-  assert r.returncode != 0 and 'refusing' in r.stderr
+  r = run('kernel.sh', e, 'flash', '--yes')
+  assert r.returncode != 0 and 'refusing' in r.stderr and msg in r.stderr, r.stderr
   assert snapshot(parts) == before
   assert not [o for o in ops(tmp) if o.startswith(('dd ', 'abctl', 'reboot'))]
-  assert not (data / 'boot.img').exists() or case not in ('bad_download',)
+  assert not (data / 'boot.img').exists() or case not in ('bad_download', 'short_download')
+
+
+def test_kernel_retry_overrides_disable(dev):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev)
+  (data / 'disable').touch()
+  assert run('kernel.sh', e, 'flash', '--yes', '--retry').returncode == 0 and ops(tmp)[-1] == 'reboot'
+  assert (data / 'disable').exists()  # the radio's switch, left alone
 
 
 def test_kernel_reflash_after_agnos_update_rotates(dev):
@@ -356,7 +423,8 @@ def test_kernel_reflash_after_agnos_update_rotates(dev):
   # AGNOS update: now running stock on b, slot a has the old dpbridge kernel
   (tmp / 'slot').write_text('_b\n')
   (parts / 'boot_b').write_bytes(b'new agnos' + bytes(4 * MB - 9))
-  (data / 'kernel/pending').unlink()
+  assert run('kernel.sh', e, 'post-boot', '--yes').returncode == 0  # the installer's first step
+  (data / 'kernel/failed').unlink()  # the update, not a failed boot, moved the slot
   assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'offer'
   open(tmp / 'ops.log', 'w').close()
   r = run('kernel.sh', e, 'flash', '--yes')
@@ -385,20 +453,22 @@ def test_kernel_post_boot(dev, booted):
   (data / 'kernel').mkdir()
   (data / 'kernel/pending').write_text(f'{sha} 20.6 _a _b\n')
   if booted:
-    (tmp / 'wcn3990').write_text('1')
-  # dry run: records nothing, installs nothing
+    run_on_dpbridge(tmp, parts)
+  # dry run: records nothing
   r = run('kernel.sh', e, 'post-boot')
   assert r.returncode == 0 and (data / 'kernel/pending').exists()
-  assert ('install_userspace.sh --yes' in r.stdout) == booted
-  if not booted:
-    assert run('kernel.sh', e, 'post-boot', '--yes').returncode == 0
-    assert (data / 'kernel/failed').exists() and not (data / 'kernel/pending').exists()
+  assert run('kernel.sh', e, 'post-boot', '--yes').returncode == 0
+  assert not (data / 'kernel/pending').exists()
+  if booted:
+    assert (data / 'kernel/ok').exists() and kv(run('kernel.sh', e, 'status').stdout)['state'] == 'ok'
+  else:
+    assert (data / 'kernel/failed').exists()
     st = kv(run('kernel.sh', e, 'status').stdout)
     assert st['last'] == 'failed' and st['state'] == 'failed'
     # no loop: the same image, AGNOS and slot is not flashed again without --retry
     before = snapshot(parts)
     r = run('kernel.sh', e, 'flash', '--yes')
-    assert r.returncode != 0 and '--retry' in r.stderr and snapshot(parts) == before
+    assert r.returncode != 0 and '--reflash' in r.stderr and snapshot(parts) == before
     # an AGNOS update moves the running slot, so it is offered again
     (tmp / 'slot').write_text('_b\n')
     assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'offer'
@@ -417,8 +487,24 @@ def test_kernel_failed_flash_is_not_repeated(dev):
   r = run('kernel.sh', dict(e, CORRUPT='boot_b'), 'flash', '--yes')
   assert r.returncode != 0 and 'readback mismatch' in r.stderr and 'reboot' not in ops(tmp)
   assert (data / 'kernel/failed').read_text().split() == [sha, '20.6', '_a']
+  assert not (data / 'kernel/pending').exists()
   assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'failed'
   assert run('kernel.sh', e, 'flash', '--yes', '--retry').returncode == 0 and ops(tmp)[-1] == 'reboot'
+
+
+def test_kernel_pending_is_written_before_any_write(dev):
+  tmp, parts, data, img, env = dev
+  sha, e = kenv(dev)
+  # power lost right after the slot switch: pending is already there for post-boot
+  e['PATH'] = f"{tmp / 'cut'}:{e['PATH']}"
+  (tmp / 'cut').mkdir()
+  (tmp / 'cut/abctl').write_text(f'#!/bin/sh\ncase $1 in --set_active) kill -9 0 ;; esac\nexec {tmp}/bin/abctl "$@"\n')
+  (tmp / 'cut/abctl').chmod(0o755)
+  # own session, so the kill takes kernel.sh and flash_boot.sh down at once and nothing else
+  subprocess.run(['bash', str(HERE / 'kernel.sh'), 'flash', '--yes'], env=e, capture_output=True, start_new_session=True)
+  assert (data / 'kernel/pending').read_text().split() == [sha, '20.6', '_a', '_b']
+  assert run('kernel.sh', e, 'post-boot', '--yes').returncode == 0
+  assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'failed'
 
 
 def test_kernel_dry_run_does_not_download(dev):
@@ -429,10 +515,33 @@ def test_kernel_dry_run_does_not_download(dev):
   assert 'curl' not in ' '.join(ops(tmp)) and not (data / 'boot.img').exists()
 
 
-def test_install_flashes_on_stock_kernel(dev):
+def test_restore_then_install_flashes_again(dev):
   tmp, parts, data, img, env = dev
   sha, e = kenv(dev)
-  r = run('install_userspace.sh', e, '--yes')
-  assert r.returncode == 0, r.stderr
-  assert 'flashing the dpbridge boot.img first' in r.stdout and ops(tmp)[-1] == 'reboot'
-  assert (parts / 'boot_b').read_bytes().startswith((tmp / 'release/boot.img').read_bytes())
+  assert run('kernel.sh', e, 'flash', '--yes').returncode == 0
+  # booted dpbridge on b, then restored to stock a and rebooted
+  (tmp / 'wcn3990').write_text('1')
+  assert run('kernel.sh', e, 'post-boot', '--yes').returncode == 0 and (data / 'kernel/ok').exists()
+  assert run('restore_boot.sh', e, '--yes').returncode == 0
+  (tmp / 'wcn3990').unlink()
+  assert 'abctl --set_active 0' in ops(tmp)
+  assert kv(run('kernel.sh', e, 'status').stdout)['state'] == 'offer'  # the next install flashes b again
+  open(tmp / 'ops.log', 'w').close()
+  assert run('kernel.sh', e, 'flash', '--yes').returncode == 0 and 'abctl --set_active 1' in ops(tmp)
+
+
+def test_rotate_refuses_on_a_dpbridge_kernel(dev):
+  tmp, parts, data, img, env = dev
+  (tmp / 'wcn3990').write_text('1')
+  before = snapshot(parts)
+  r = run('flash_boot.sh', env, '--yes', '--rotate')
+  assert r.returncode != 0 and 'a dpbridge kernel is running' in r.stderr and snapshot(parts) == before
+
+
+def test_flash_needs_block_devices_up_front(dev):
+  tmp, parts, data, img, env = dev
+  (parts / 'devcfg_b').unlink()
+  before = snapshot(parts)
+  r = run('flash_boot.sh', env, '--yes')
+  assert r.returncode != 0 and 'devcfg_b is not a block device' in r.stderr
+  assert snapshot(parts) == before and not [o for o in ops(tmp) if o.startswith('abctl')]

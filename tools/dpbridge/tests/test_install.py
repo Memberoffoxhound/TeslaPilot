@@ -191,3 +191,57 @@ def test_get_fw_refuses_bad_downloads(tmp_path):
   (tmp_path / 'b').mkdir()
   r, _ = run_get_fw(tmp_path / 'b', {**FW, 'bluetooth.img': b'not comma'}, pinned=FW)
   assert r.returncode != 0 and 'does not match firmware.sha256' in r.stderr
+
+
+def run_kernel_step(tmp_path, state, yes=1, reflash=0, flash_rc=0):
+  import os
+  text = (HERE / 'install_userspace.sh').read_text()
+  fn = text[text.index('kernel_step() {'):text.index('\n}\n', text.index('kernel_step() {')) + 3]
+  fake = tmp_path / 'kernel.sh'
+  fake.write_text(f'echo "$*" >> {tmp_path}/k.log\n[ "$1" = status ] && echo state={state}\n[ "$1" = flash ] && exit {flash_rc}\nexit 0\n')
+  lib = (HERE / 'lib.sh').read_text()
+  script = (f'set -euo pipefail\nSUDO=\nYES={yes}\nREFLASH={reflash}\n{lib}\nKSH=(bash {fake})\n{fn}\n'
+            'if kernel_step; then echo REBOOT; else echo NOREBOOT; fi\n')
+  r = subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=dict(os.environ))
+  log = (tmp_path / 'k.log').read_text().splitlines()
+  return r, log
+
+
+def test_kernel_step_flashes_stock_and_reboots_last(tmp_path):
+  r, log = run_kernel_step(tmp_path, 'offer')
+  assert r.returncode == 0 and r.stdout.strip().endswith('REBOOT') and log == ['status', 'flash --no-reboot --yes']
+
+
+def test_kernel_step_leaves_a_running_or_disabled_kernel_alone(tmp_path):
+  for st, word in (('ok', 'running'), ('outdated', 'older dpbridge kernel'), ('off', 'disable')):
+    d = tmp_path / st
+    d.mkdir()
+    r, log = run_kernel_step(d, st)
+    assert r.returncode == 0 and 'NOREBOOT' in r.stdout and word in r.stdout and log == ['status']
+
+
+def test_kernel_step_reflash_overrides_off_and_failed(tmp_path):
+  for st in ('off', 'failed'):
+    d = tmp_path / st
+    d.mkdir()
+    r, log = run_kernel_step(d, st, reflash=1)
+    assert 'REBOOT' in r.stdout and log[-1] == 'flash --no-reboot --yes --retry'
+
+
+def test_kernel_step_failure_stops_install_without_reboot(tmp_path):
+  r, log = run_kernel_step(tmp_path, 'failed', flash_rc=1)
+  assert r.returncode != 0 and 'kernel flash failed, nothing was switched' in r.stderr and 'REBOOT' not in r.stdout
+
+
+def test_kernel_step_dry_run_never_reboots(tmp_path):
+  r, log = run_kernel_step(tmp_path, 'offer', yes=0)
+  assert 'NOREBOOT' in r.stdout and log == ['status', 'flash --no-reboot']
+
+
+def test_install_steps_and_reboot_is_last():
+  text = script_text()
+  steps = re.findall(r'echo "\[(\d)/4\]', text)
+  assert steps == ['1', '2', '3', '4']
+  tail = text[text.index('echo "[4/4] kernel"'):]
+  assert tail.index('teardown') < tail.index('$SUDO "$REBOOT"')
+  assert 'post-boot' in text[:text.index('echo "[2/4]')]
