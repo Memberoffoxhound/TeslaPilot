@@ -20,9 +20,37 @@ if [ ! -e "$WCN" ]; then
   [ $YES = 1 ] && fl+=(--yes)
   exec $SUDO bash "$HERE/kernel.sh" "${fl[@]}"
 fi
-[ -x "$DIR/attach.sh" ] || die "missing $DIR/attach.sh"
-(cd "$DIR" && sha256sum -c --quiet firmware.sha256) || die "BT firmware in $DIR missing or not the pinned files, run deliver.sh push"
 [ $YES = 1 ] || echo "dry run: pass --yes to install"
+
+# BT firmware and the unit scripts on /data, no Mac needed. They stay there across AGNOS updates.
+# linux-firmware files: release tarball pinned in firmware/btfw.env. comma's bluetooth.img: its own upstream
+# URL at the pinned agnos-builder commit, not re-hosted. Both checked against firmware/firmware.sha256.
+# shellcheck source=firmware/btfw.env
+source "$HERE/firmware/btfw.env"
+fw_ok() { (cd "$DIR" && sha256sum -c --quiet "$HERE/firmware/firmware.sha256") > /dev/null 2>&1; }
+get_fw() {
+  $SUDO mkdir -p "$DIR/debs"
+  if [ ! -f "$DIR/debs/$BTFW_TAR" ] || [ "$(fsha "$DIR/debs/$BTFW_TAR")" != "$BTFW_SHA" ]; then
+    $SUDO curl -fL --retry 5 -C - -o "$DIR/debs/$BTFW_TAR.part" "$BTFW_URL" || die "firmware download failed: $BTFW_URL"
+    [ "$(fsha "$DIR/debs/$BTFW_TAR.part")" = "$BTFW_SHA" ] || { $SUDO rm -f "$DIR/debs/$BTFW_TAR.part"; die "$BTFW_TAR does not match btfw.env"; }
+    $SUDO mv "$DIR/debs/$BTFW_TAR.part" "$DIR/debs/$BTFW_TAR"
+  fi
+  $SUDO tar -xf "$DIR/debs/$BTFW_TAR" -C "$DIR"
+  if ! (cd "$DIR" && grep ' bluetooth.img$' "$HERE/firmware/firmware.sha256" | sha256sum -c --quiet) > /dev/null 2>&1; then
+    $SUDO curl -fL --retry 5 -o "$DIR/bluetooth.img" "$BTIMG_URL" || die "bluetooth.img download failed: $BTIMG_URL"
+  fi
+  fw_ok || die "BT firmware in $DIR does not match firmware.sha256"
+}
+if fw_ok; then
+  echo "  BT firmware already on /data"
+else
+  echo "+ fetch BT firmware into $DIR ($BTFW_TAR, bluetooth.img)"
+  [ $YES = 1 ] && get_fw
+fi
+run $SUDO mkdir -p "$DIR"
+for f in attach.sh asound.conf firmware/firmware.sha256 firmware/qca.sha256; do
+  run $SUDO install -m "$([ "${f%.sh}" != "$f" ] && echo 0755 || echo 0644)" "$HERE/$f" "$DIR/$(basename "$f")"
+done
 
 MNT=/tmp/dpbridge-btimg
 # obexd exits without one server plugin and transport; OPP stays, rejected with no agent
