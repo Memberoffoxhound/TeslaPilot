@@ -48,6 +48,12 @@ get() { scp -q "${SSH_OPTS[@]}" -P "$PORT" "$@"; }
 die() { echo "error: $*" >&2; exit 1; }
 local_sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 remote_sha() { r "sha256sum $1" | cut -d' ' -f1; }
+# / is read-only on AGNOS: open it for systemctl, always close it again, keep systemctl's rc
+units() {
+  echo "sudo mount -o remount,rw / && { sudo systemctl $1 --now $UNITS; rc=\$?; \
+sudo mount -o remount,ro / || { echo 'warning: / is still rw until the next reboot'; }; exit \$rc; }"
+}
+UNITS="dpbridge-bt bluetooth bluealsa bluealsa-aplay"
 
 reach() {
   [ -f "$KEY" ] || die "no SSH key at $KEY (use -i)"
@@ -148,13 +154,13 @@ case $CMD in
   enable)
     reach
     dev "bash $REMOTE/audio.sh on"  # car off only; soundd and micd pick it up when they next start
-    r "rm -f $REMOTE/disable && sudo systemctl enable --now dpbridge-bt bluetooth bluealsa bluealsa-aplay"
+    r "rm -f $REMOTE/disable && $(units enable)"
     ;;
   disable)
     reach
     # audio first: if it refuses (car on), Bluetooth stays up rather than leaving soundd on dmix without it
     dev "bash $REMOTE/audio.sh off"
-    r "touch $REMOTE/disable && sudo systemctl disable --now dpbridge-bt bluetooth bluealsa bluealsa-aplay"
+    r "touch $REMOTE/disable && $(units disable)"
     ;;
   restore) reach; dev "bash $REMOTE/restore_boot.sh $ARGS" ;;
   test)
