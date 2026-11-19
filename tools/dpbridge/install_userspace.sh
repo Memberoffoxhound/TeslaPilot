@@ -22,8 +22,8 @@ put() { echo "+ write $1"; if [ $YES = 1 ]; then $SUDO tee "$1" > /dev/null; els
 REBOOT=${DPB_REBOOT:-reboot}
 KSH=(bash "$HERE/kernel.sh")
 [ $YES = 1 ] || echo "dry run: pass --yes to install"
-# by hand over ssh: never while driving (boot.py runs before manager, so it passes)
-if [ $YES = 1 ] && pgrep -f system/manager/manager.py > /dev/null && [ "$(cat "${DPB_PARAMS:-/data/params/d}/IsOffroad" 2> /dev/null)" != 1 ]; then die "openpilot is onroad, park and retry"; fi
+# by hand over ssh: never while driving. launch runs `python3 ./manager.py` (boot.py runs before it, so passes)
+if [ $YES = 1 ] && pgrep -f '(^|/)manager\.py( |$)' > /dev/null && [ "$(cat "${DPB_PARAMS:-/data/params/d}/IsOffroad" 2> /dev/null)" != 1 ]; then die "openpilot is onroad, park and retry"; fi
 
 # the kernel step, last: flash the inactive slot when the stock kernel runs; 0 = rebooting needed
 kernel_step() {

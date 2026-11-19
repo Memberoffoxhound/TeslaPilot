@@ -77,6 +77,37 @@ def test_manual_install_refuses_onroad(tmp_path, manager, offroad, yes, ok):
     assert 'openpilot is onroad' in r.stderr
 
 
+@pytest.mark.parametrize('offroad, ok', [('0', False), ('1', True)])
+def test_onroad_check_finds_the_real_manager(tmp_path, offroad, ok):
+  # the real pgrep against a process started the way launch_chffrplus.sh starts it: cd .../system/manager; ./manager.py
+  import os
+  import sys
+  import time
+  line = next(ln for ln in (HERE / 'install_userspace.sh').read_text().splitlines() if 'openpilot is onroad' in ln)
+  mgr = tmp_path / 'openpilot/system/manager'
+  mgr.mkdir(parents=True)
+  (mgr / 'manager.py').write_text(f'#!{sys.executable}\nimport time\ntime.sleep(30)\n')
+  (mgr / 'manager.py').chmod(0o755)
+  (tmp_path / 'p').mkdir()
+  (tmp_path / 'p/IsOffroad').write_text(offroad)
+  lib = (HERE / 'lib.sh').read_text()
+  env = dict(os.environ, DPB_PARAMS=str(tmp_path / 'p'))
+  script = f'set -euo pipefail; YES=1\n{lib}\n{line}\necho go'
+  p = subprocess.Popen(['./manager.py'], cwd=mgr)
+  try:
+    time.sleep(0.3)
+    cmd = open(f'/proc/{p.pid}/cmdline').read().replace('\0', ' ')
+    assert cmd.endswith('./manager.py ') and 'system/manager/manager.py' not in cmd
+    r = subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=env)
+    assert (r.returncode == 0 and r.stdout.strip() == 'go') == ok, (r.stdout, r.stderr)
+  finally:
+    p.kill()
+    p.wait()
+  # no manager: passes, and the pattern does not match boot.py or this test
+  r = subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=env)
+  assert r.returncode == 0 and r.stdout.strip() == 'go', r.stderr
+
+
 def test_onroad_check_is_before_any_change():
   text = script_text()
   assert text.index('openpilot is onroad') < text.index('echo "[1/4]')
