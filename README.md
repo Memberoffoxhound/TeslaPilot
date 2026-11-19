@@ -78,6 +78,16 @@ The driving model doesn't know your set speed, so it often drives slower than yo
 
 Off by default. Turn it on in **Settings → toggles → set speed assist**. It needs openpilot longitudinal control (**Settings → developer → alpha longitudinal**) and does nothing without it. When it's on, the icon above shows on Home. Tap it to get back to the toggle.
 
+### TITS
+
+**T.I.T.S. - Trajectory Independent Torque Steering.** Tesla gave you ASS (Actually Smart Summon). TeslaPilot gives you T.I.T.S.
+
+Credit: ported from [sunnypilot](https://github.com/sunnypilot/sunnypilot)'s MADS, see [Credits](#credits).
+
+Off by default. Turn it on in **Settings → toggles → TITS**. With TITS on, TeslaPilot keeps steering when you cancel cruise while you handle speed. Engage cruise again to get speed control back. On a Tesla, pressing the brake still turns both off. Only the TITS options that work on your car show under the toggle.
+
+When TITS is on, its badge shows on Home next to LONG. Tap it to get back to the toggle. Onroad, the wheel's rim lights up in your theme color while TITS steers on its own.
+
 ### Big model on a chestnut or Jetlink (optional)
 
 Credit: [Zeph Leggett / zoompilot](https://github.com/zoompilot): [zoompilot/jetlink](https://github.com/zoompilot/jetlink) (MIT) and the wiring in [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot). TeslaPilot's adapter and model picker follow the same layout, so future Jetlink updates are easy to bring over.
@@ -179,12 +189,15 @@ TeslaPilot is built on the work of these people and projects. Thank you!
 | Set Speed Assist | Zeph Leggett / zoompilot | [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot), [sunnypilot/sunnypilot#2083](https://github.com/sunnypilot/sunnypilot/pull/2083) |
 | Jetlink big model | Zeph Leggett / zoompilot (MIT) | [zoompilot/jetlink](https://github.com/zoompilot/jetlink), [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot) |
 | Model picker | zoompilot's wiring of sunnypilot's model manager | [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot) |
+| TITS (MADS) | sunnypilot | [sunnypilot/sunnypilot](https://github.com/sunnypilot/sunnypilot), [sunnypilot/opendbc](https://github.com/sunnypilot/opendbc), [sunnypilot/panda](https://github.com/sunnypilot/panda) |
 | Step aside, fingerprint fallback, Tesla theme, drive stats, web page | Memberoffoxhound | [TeslaPilot](https://github.com/Memberoffoxhound/TeslaPilot) |
 | TESLA font (wordmark) | KAYOver, based on TeslaNikolaCaps by Shane Milburn | [dafont](https://www.dafont.com/tesla.font) |
 | Inter font | Rasmus Andersson | [rsms/inter](https://github.com/rsms/inter) |
 | Time zone table (`tzgrid.bin`) | timezone-boundary-builder by Evan Siroky, from OpenStreetMap data | [evansiroky/timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder) |
 | First day of the week (`weekstart.json`) | Unicode CLDR | [cldr.unicode.org](https://cldr.unicode.org/) |
 | Everything else | comma.ai openpilot, opendbc, panda | [commaai/openpilot](https://github.com/commaai/openpilot) |
+
+TITS: This project uses software from Haibin Wen and SUNNYPILOT LLC and is licensed under a custom license requiring permission for use.
 
 ## License
 
@@ -193,6 +206,7 @@ openpilot and TeslaPilot are released under the [MIT license](LICENSE). Some par
 - **Jetlink** ([zoompilot/jetlink](https://github.com/zoompilot/jetlink)): MIT, Copyright (c) 2026 Zeph Leggett. See `jetlink_repo/LICENSE`.
 - **TESLA font**: [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/), non-commercial use only. See `openpilot/selfdrive/assets/fonts/TESLA-LICENSE.txt`.
 - **Inter font**: [SIL Open Font License 1.1](https://openfontlicense.org).
+- **TITS** (MADS port): sunnypilot's license, kept in each repo with ported code as `LICENSE.sunnypilot`.
 - **Time zone table** (`openpilot/selfdrive/ui/tripstats/tzgrid.bin`): built from [timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder) data, © OpenStreetMap contributors, under the [Open Database License (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/).
 - **First day of the week** (`openpilot/selfdrive/ui/tripstats/weekstart.json`): from Unicode CLDR data, © Unicode, Inc., under the [Unicode License v3](https://www.unicode.org/license.txt).
 
