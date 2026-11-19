@@ -8,6 +8,10 @@ B=$DIR/backup
 die() { echo "refusing: $*" >&2; exit 1; }
 # no network or the release is not there yet: 75 (EX_TEMPFAIL), boot.py retries without counting it
 dl_fail() { echo "refusing: download failed: $*" >&2; exit 75; }
+# firmware and BlueZ downloads: give up on a stalled link (under 1 kB/s for 60 s) or after 10 min per try
+DL_OPTS=(-fL --retry 2 --retry-delay 3 --connect-timeout 20 --speed-limit 1024 --speed-time 60 --max-time 600 -C -)
+# apt the same way: a stalled mirror fails instead of hanging
+APT_OPTS=(-o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Retries=1)
 run() { echo "+ $*"; if [ "$YES" = 1 ]; then "$@"; fi; }
 size() { $SUDO blockdev --getsize64 "$1"; }
 fsha() { sha256sum < "$1" | cut -d' ' -f1; }

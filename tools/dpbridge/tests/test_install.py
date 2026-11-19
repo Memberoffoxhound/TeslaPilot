@@ -376,3 +376,28 @@ def test_install_steps_and_reboot_is_last():
   assert tail.index('teardown') < tail.index('$SUDO "$REBOOT"')
   assert tail.index('progress rebooting 100') < tail.index('$SUDO "$REBOOT"')  # the last progress line
   assert 'post-boot' in text[:text.index('echo "[2/4]')]
+
+
+def test_small_downloads_are_bounded(tmp_path):
+  # btfw: the real curl call gets the stall flags and a 10 min cap per try
+  logcurl = ('#!/bin/bash\necho "$*" > ' + f'{tmp_path}/args\n' +
+             'for a; do case $a in file://*) u=${a#file://} ;; esac; done\n'
+             'while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; shift; done\ncp "$u" "$out"\n')
+  r, _ = run_get_fw(tmp_path, FW, curl=logcurl)
+  assert r.returncode == 0, r.stderr
+  args = (tmp_path / 'args').read_text().split()
+  for flag, val in (('--max-time', '600'), ('--retry', '2'), ('--speed-limit', '1024'), ('--speed-time', '60'),
+                    ('--connect-timeout', '20'), ('-C', '-')):
+    assert args[args.index(flag) + 1] == val, flag
+  text = (HERE / 'install_userspace.sh').read_text()
+  assert text.count('$SUDO curl "${DL_OPTS[@]}" -o ') == 2  # btfw and BlueZ
+  assert '$SUDO apt-get "${APT_OPTS[@]}" update' in text and '$SUDO apt-get "${APT_OPTS[@]}" download "$p"' in text
+  assert not re.search(r'curl -fL|\$SUDO apt-get (update|download)', text)
+
+
+def test_apt_has_a_timeout():
+  lib = (HERE / 'lib.sh').read_text()
+  r = subprocess.run(['bash', '-c', f'{lib}\necho "${{APT_OPTS[*]}}"'], capture_output=True, text=True)
+  opts = r.stdout.split()
+  assert {'Acquire::http::Timeout=20', 'Acquire::https::Timeout=20', 'Acquire::Retries=1'} <= set(opts)
+  assert opts.count('-o') == 3

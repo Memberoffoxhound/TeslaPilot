@@ -60,7 +60,7 @@ fw_ok() { (cd "$DIR" && sha256sum -c --quiet "$HERE/firmware/firmware.sha256") >
 get_fw() {
   $SUDO mkdir -p "$DIR/debs"
   if [ ! -f "$DIR/debs/$BTFW_TAR" ] || [ "$(fsha "$DIR/debs/$BTFW_TAR")" != "$BTFW_SHA" ]; then
-    $SUDO curl -fL --retry 5 -C - -o "$DIR/debs/$BTFW_TAR.part" "$BTFW_URL" || dl_fail "firmware $BTFW_URL"
+    $SUDO curl "${DL_OPTS[@]}" -o "$DIR/debs/$BTFW_TAR.part" "$BTFW_URL" || dl_fail "firmware $BTFW_URL"
     [ "$(fsha "$DIR/debs/$BTFW_TAR.part")" = "$BTFW_SHA" ] || { $SUDO rm -f "$DIR/debs/$BTFW_TAR.part"; die "$BTFW_TAR does not match btfw.env"; }
     $SUDO mv "$DIR/debs/$BTFW_TAR.part" "$DIR/debs/$BTFW_TAR"
   fi
@@ -129,7 +129,7 @@ $L/alsa-lib/libasound_module_pcm_bluealsa.so $L/libical.so.3 $L/libldacBT_abr.so
 bluez_debs() {
   $SUDO mkdir -p "$DEBS"
   if [ ! -f "$DEBS/$BLUEZ_TAR" ] || [ "$(fsha "$DEBS/$BLUEZ_TAR")" != "$BLUEZ_SHA" ]; then
-    $SUDO curl -fL --retry 5 --retry-delay 3 -C - -o "$DEBS/$BLUEZ_TAR.part" "$BLUEZ_URL" || dl_fail "BlueZ $BLUEZ_URL"
+    $SUDO curl "${DL_OPTS[@]}" -o "$DEBS/$BLUEZ_TAR.part" "$BLUEZ_URL" || dl_fail "BlueZ $BLUEZ_URL"
     [ "$(fsha "$DEBS/$BLUEZ_TAR.part")" = "$BLUEZ_SHA" ] || { $SUDO rm -f "$DEBS/$BLUEZ_TAR.part"; die "$BLUEZ_TAR does not match bluez.env"; }
     $SUDO mv "$DEBS/$BLUEZ_TAR.part" "$DEBS/$BLUEZ_TAR"
   fi
@@ -143,11 +143,11 @@ bluez_debs() {
 apt_debs() {
   local p
   for p in $PKGS; do
-    compgen -G "$DEBS/apt/${p}_*_arm64.deb" > /dev/null || { $SUDO apt-get update || dl_fail "apt-get update"; break; }
+    compgen -G "$DEBS/apt/${p}_*_arm64.deb" > /dev/null || { $SUDO apt-get "${APT_OPTS[@]}" update || dl_fail "apt-get update"; break; }
   done
   $SUDO mkdir -p "$DEBS/apt"
   for p in $PKGS; do
-    compgen -G "$DEBS/apt/${p}_*_arm64.deb" > /dev/null || (cd "$DEBS/apt" && $SUDO apt-get download "$p") || dl_fail "apt-get download $p"
+    compgen -G "$DEBS/apt/${p}_*_arm64.deb" > /dev/null || (cd "$DEBS/apt" && $SUDO apt-get "${APT_OPTS[@]}" download "$p") || dl_fail "apt-get download $p"
   done
 }
 
