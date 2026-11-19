@@ -19,11 +19,14 @@ case ${1:-} in
   --addr)
     a=$(addr)
     # the kernel only takes it while hci0 is powered off, which it is between setup and bluetoothd
-    for _ in $(seq 40); do
-      [ -e /sys/class/bluetooth/hci0 ] && btmgmt --index 0 public-addr "$a" > /dev/null 2>&1 && exit 0
-      sleep 0.5
-    done
-    echo "could not set address $a" >&2; exit 1 ;;
+    for _ in $(seq 40); do [ -e /sys/class/bluetooth/hci0 ] && break; sleep 0.5; done
+    # btmgmt can hang waiting for its reply, so bound it and never fail the service over the address
+    if [ -e /sys/class/bluetooth/hci0 ] && timeout 10 btmgmt --index 0 public-addr "$a" > /dev/null 2>&1; then
+      echo "address $a set"
+    else
+      echo "could not set address $a, keeping the chip default" >&2
+    fi
+    exit 0 ;;
 esac
 
 [ -e /lib/firmware/qca/crbtfw21.tlv ] || { echo "no BT firmware, run install_userspace.sh"; exit 1; }

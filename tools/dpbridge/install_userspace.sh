@@ -93,6 +93,8 @@ ExecStartPost=-$DIR/attach.sh --addr
 ExecStopPost=-/bin/umount /var/lib/bluetooth
 Restart=on-failure
 RestartSec=5
+# setup takes about 2 s and --addr at most 30 s
+TimeoutStartSec=60
 
 [Install]
 WantedBy=multi-user.target
@@ -117,7 +119,11 @@ UNIT
 put /etc/systemd/system/bluealsa-aplay.service.d/dpbridge.conf <<UNIT
 [Unit]
 ConditionPathIsSymbolicLink=/etc/asound.conf
+# start once the controller and bluealsa are up
+After=dpbridge-bt.service bluetooth.service bluealsa.service
+Requires=bluealsa.service
 [Service]
+RestartSec=5
 ExecStartPre=-/usr/bin/aplay -q -D dpb_a2dp -t raw -f S16_LE -r 48000 -c 2 -s 1 /dev/zero
 ExecStartPre=/usr/bin/amixer -c0 -q cset name='dpbridge A2DP Playback Volume' 0%
 ExecStart=

@@ -155,6 +155,12 @@ case $CMD in
     reach
     dev "bash $REMOTE/audio.sh on"  # car off only; soundd and micd pick it up when they next start
     r "rm -f $REMOTE/disable && $(units enable)"
+    # systemctl can return 0 with failed starts, so check each unit
+    if ! r "for _ in \$(seq 15); do systemctl is-active --quiet $UNITS && exit 0; sleep 2; done; \
+systemctl is-active $UNITS | paste -sd' '; exit 1"; then
+      die "not all of $UNITS are active, see journalctl -b -u dpbridge-bt -u bluetooth -u bluealsa -u bluealsa-aplay"
+    fi
+    echo "all active: $UNITS"
     ;;
   disable)
     reach
