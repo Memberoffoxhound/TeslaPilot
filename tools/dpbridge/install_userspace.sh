@@ -31,6 +31,7 @@ kernel_step() {
     ok) echo "  dpbridge kernel running"; return 1 ;;
     outdated) echo "  an older dpbridge kernel runs: restore_boot.sh --yes, reboot, then install again"; return 1 ;;
     off) if [ $REFLASH = 0 ]; then echo "  kernel flash is off ($DIR/disable), pass --reflash"; return 1; fi ;;
+    failed) if [ $REFLASH = 0 ]; then echo "  the last flash failed and was kept off, pass --reflash"; return 1; fi ;;
   esac
   [ $YES = 1 ] && a+=(--yes)
   [ $REFLASH = 1 ] && a+=(--retry)

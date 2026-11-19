@@ -215,7 +215,8 @@ def test_kernel_step_flashes_stock_and_reboots_last(tmp_path):
 
 
 def test_kernel_step_leaves_a_running_or_disabled_kernel_alone(tmp_path):
-  for st, word in (('ok', 'running'), ('outdated', 'older dpbridge kernel'), ('off', 'disable')):
+  for st, word in (('ok', 'running'), ('outdated', 'older dpbridge kernel'), ('off', 'disable'),
+                   ('failed', 'last flash failed')):
     d = tmp_path / st
     d.mkdir()
     r, log = run_kernel_step(d, st)
@@ -231,7 +232,7 @@ def test_kernel_step_reflash_overrides_off_and_failed(tmp_path):
 
 
 def test_kernel_step_failure_stops_install_without_reboot(tmp_path):
-  r, log = run_kernel_step(tmp_path, 'failed', flash_rc=1)
+  r, log = run_kernel_step(tmp_path, 'offer', flash_rc=1)
   assert r.returncode != 0 and 'kernel flash failed, nothing was switched' in r.stderr and 'REBOOT' not in r.stdout
 
 
