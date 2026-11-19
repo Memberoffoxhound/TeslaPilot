@@ -63,7 +63,7 @@ reach() {
 # run a device script detached, so a dropped SSH session can't stop it halfway; poll until <name>.rc appears.
 # Stops waiting if the job is gone without one (reboot, power cut) or after DPB_<NAME>_MAX_S (default $4 s)
 detached() {
-  local name=$1 pat="[${2:0:1}]${2:1}" cmd=$3 v out end max
+  local name=$1 pat="[${2:0:1}]${2:1}" cmd=$3 v out end max last=""
   v="DPB_$(echo "$1" | tr '[:lower:]' '[:upper:]')_MAX_S"  # macOS bash 3.2: no ${x^^}
   max=${!v:-$4}
   r "pgrep -f $pat" > /dev/null && die "already running: $name"
@@ -81,8 +81,10 @@ detached() {
         die "$name stopped without a result, see $REMOTE/$name.log (the slot switch is the last write)"
       fi
       echo "$out"
+      last=$out
     else
-      echo "(no answer, still waiting)"
+      # the installer's own reboot: its last line, then no answer until the comma is back
+      if grep -q 'kernel: rebooting 100%$' <<< "$last"; then echo "(rebooting into the new kernel)"; else echo "(no answer, still waiting)"; fi
     fi
   done
   r "cat $REMOTE/$name.log"

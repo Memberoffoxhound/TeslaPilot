@@ -190,3 +190,30 @@ def test_install_refuses_a_second_run(dev):
     assert r.returncode != 0 and 'already running: install' in r.stderr
   finally:
     p.wait(timeout=20)
+
+
+def ssh_down_while(env, remote):
+  # ssh fails (255) while $remote/down exists, like a comma that is rebooting
+  b = Path(env['PATH'].split(':')[0])
+  ssh = (b / 'ssh').read_text()
+  (b / 'ssh').write_text(ssh.replace('shift\n[ $# -eq 0 ]', f'shift\n[ -e {remote}/down ] && exit 255\n[ $# -eq 0 ]', 1))
+
+
+def test_install_reboot_says_rebooting(dev):
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  ssh_down_while(env, remote)
+  stub_install(remote, f'echo "  kernel: rebooting 100%"; sleep 0.6; touch {remote}/down; sleep 1.5; rm {remote}/down')
+  r = deliver(dict(env, DPB_POLL_S='0.2'), 'install', '--yes')
+  assert r.returncode == 0, r.stderr
+  assert '(rebooting into the new kernel)' in r.stdout and 'no answer' not in r.stdout
+
+
+def test_install_other_silence_says_no_answer(dev):
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  ssh_down_while(env, remote)
+  stub_install(remote, f'echo "[3/4] services"; sleep 0.6; touch {remote}/down; sleep 1.5; rm {remote}/down')
+  r = deliver(dict(env, DPB_POLL_S='0.2'), 'install', '--yes')
+  assert r.returncode == 0, r.stderr
+  assert '(no answer, still waiting)' in r.stdout and 'rebooting into' not in r.stdout

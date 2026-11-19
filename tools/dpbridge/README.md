@@ -66,7 +66,8 @@ By hand: `install_userspace.sh --yes` on the comma, or `mac/deliver.sh install -
 detached from SSH (log in `install.log`) so a dropped session can't stop a flash. It refuses while openpilot runs
 onroad (`./manager.py` running and `IsOffroad` not 1). It prints `[1/4]` to `[4/4]` and the kernel step as
 `kernel: <step> <percent>%` (downloading, verifying, backing up, writing slot X, reading back, switching slot), then
-`kernel: rebooting 100%` from the installer.
+`kernel: rebooting 100%` from the installer; deliver.sh then shows `(rebooting into the new kernel)` until the
+comma answers again.
 
 1. `[1/4]` records how the last flash went (`kernel.sh post-boot`).
 2. `[2/4]` BT firmware from the pinned release tarball. `[3/4]` BlueZ, bluez-alsa and the units.
