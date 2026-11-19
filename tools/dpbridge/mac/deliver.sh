@@ -137,7 +137,13 @@ case $CMD in
     # if this hangs or SSH dies: reboot, nothing runs on its own at boot yet
     r "sudo timeout 20 $REMOTE/attach.sh & sleep 15; ls /sys/class/bluetooth; btmgmt info | head -5; \
       dmesg | grep -iE 'qca|bluetooth' | tail -20; dmesg | grep -i 'controller version'; ip -br addr show wlan0; wait" 2>&1 | tee "$OUT/attach.txt" || true
-    echo "saved $OUT/attach.txt. hci0 listed and wlan0 UP: run enable (controller version: the rom rev picks the firmware)"
+    # hci0 shows up even when setup failed, only a btmgmt controller means the chip came up
+    n=$(sed -n 's/^Index list with \([0-9]*\) item.*/\1/p' "$OUT/attach.txt" | tail -1)
+    if [ "${n:-0}" -ge 1 ]; then
+      echo "saved $OUT/attach.txt. btmgmt lists $n controller(s): if wlan0 is UP, run enable"
+    else
+      echo "saved $OUT/attach.txt. chip did not respond, do not enable (btmgmt lists no controller)"
+    fi
     ;;
   enable)
     reach
