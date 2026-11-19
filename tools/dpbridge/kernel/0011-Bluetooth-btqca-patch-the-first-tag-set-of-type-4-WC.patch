@@ -1,0 +1,36 @@
+From e4ab79ced8f227651b61356fe9ede4673b426be0 Mon Sep 17 00:00:00 2001
+From: Memberoffoxhound <Memberoffoxhound@users.noreply.github.com>
+Date: Thu, 19 Nov 2026 01:48:50 -0600
+Subject: [PATCH] Bluetooth: btqca: patch the first tag set of type 4 WCN3990
+ NVM files
+
+---
+ drivers/bluetooth/btqca.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/drivers/bluetooth/btqca.c b/drivers/bluetooth/btqca.c
+index 18321c9d..8518d82b 100644
+--- a/drivers/bluetooth/btqca.c
++++ b/drivers/bluetooth/btqca.c
+@@ -128,6 +128,18 @@ static void rome_tlv_check_data(struct rome_config *config,
+ 	type_len = le32_to_cpu(tlv->type_len);
+ 	length = (type_len >> 8) & 0x00ffffff;
+ 
++	/* WCN3990 NVM files wrap several tag sets in a type 4 header, the
++	 * tags to patch are in the first set
++	 */
++	if (config->type == TLV_TYPE_NVM && (type_len & 0xff) == 4 &&
++	    fw->size >= 2 * sizeof(*tlv)) {
++		tlv++;
++		type_len = le32_to_cpu(tlv->type_len);
++		length = (type_len >> 8) & 0x00ffffff;
++		if (length > fw->size - 2 * sizeof(*tlv))
++			length = 0;
++	}
++
+ 	BT_DBG("TLV Type\t\t : 0x%x", type_len & 0x000000ff);
+ 	BT_DBG("Length\t\t : %d bytes", length);
+ 
+-- 
+2.47.3
+
