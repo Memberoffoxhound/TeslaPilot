@@ -25,7 +25,8 @@ KERNEL_WAIT_S = float(os.environ.get("DPB_KERNEL_WAIT_S", "3600"))
 STILL = -1  # install() result: the kernel step outlived KERNEL_WAIT_S
 MODEL = os.environ.get("DPB_MODEL", "/sys/firmware/devicetree/base/model")
 VERSION = os.environ.get("DPB_VERSION", "/VERSION")
-SUDO = ["sudo"]
+SUDO = ["sudo", "-n"]
+BT_PARAM = os.environ.get("DPB_BT_PARAM", "/data/params/d/DpbBluetooth")
 INSTALL = os.path.join(HERE, "install_userspace.sh")
 KERNEL = os.path.join(HERE, "kernel.sh")
 REBOOT = ["sudo", "reboot"]
@@ -58,6 +59,16 @@ def setup_key() -> str:
     h.update(f.encode() + b"\0" + open(os.path.join(HERE, f), "rb").read() + b"\0")
   h.update(f"agnos={read(VERSION)} slot={slot()}".encode())
   return h.hexdigest()
+
+
+def migrate_bt_off():
+  # older builds wrote disable for Bluetooth off (radio.sh moves it too, but only on a dpbridge kernel)
+  d, off = os.path.join(DIR, "disable"), os.path.join(DIR, "bt_off")
+  if os.path.exists(d) and not os.path.exists(off) and read(BT_PARAM) == "0":
+    try:
+      subprocess.run([*SUDO, "mv", d, off], capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+      pass
 
 
 def skip_reason(key: str) -> str | None:
@@ -173,6 +184,8 @@ def kernel_state() -> str:
 
 
 def main(spinner_factory=None) -> int:
+  if "mici" in read(MODEL):
+    migrate_bt_off()
   key = setup_key()
   why = skip_reason(key)
   if why is not None:
