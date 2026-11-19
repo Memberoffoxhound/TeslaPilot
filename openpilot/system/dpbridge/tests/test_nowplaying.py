@@ -244,6 +244,7 @@ def test_fetch_art_uses_bip_avrcp_psm_and_thumbnail(tmp_path):
   assert mac == "AA:BB:CC:DD:EE:FF" and opts == {"Target": ("s", "bip-avrcp"), "PSM": ("q", 0x1001)}
   assert obex.calls[1][1][1] == "1000001"
   assert not (tmp_path / "st" / "art").exists()
+  assert (tmp_path / "st").stat().st_mode & 0o777 == 0o700  # not world writable in /dev/shm
 
 
 def test_fetch_art_placeholder_without_obexport_or_on_error(tmp_path):

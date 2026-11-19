@@ -344,9 +344,9 @@ def fetch_art(bz, player: str, handle: str, dest: str, log, conn_fn=_obex_conn, 
       new_method_call(client, "CreateSession", "sa{sv}", (mac, {"Target": ("s", "bip-avrcp"), "PSM": ("q", int(port))})),
       timeout=5,
     ))[0]
-    # obexd writes as root; stage in our own dir, then copy so the UI file is ours
-    os.makedirs(staging, exist_ok=True)
-    os.chmod(staging, 0o777)
+    # obexd writes as root, which needs no permission; the dir is ours only, then copy so the UI file is ours
+    os.makedirs(staging, mode=0o700, exist_ok=True)
+    os.chmod(staging, 0o700)
     tmp = os.path.join(staging, "art")
     if os.path.exists(tmp):
       os.unlink(tmp)
