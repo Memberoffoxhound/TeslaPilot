@@ -1,0 +1,152 @@
+# boot.py: the first-boot run of the installer before manager.
+import importlib.util
+import re
+import subprocess
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parents[1]
+ROOT = HERE.parents[1]
+
+
+class FakeSpinner:
+  def __init__(self):
+    self.seen, self.closed = [], False
+
+  def update_progress(self, cur, total):
+    self.seen.append(round(100 * cur / total))
+
+  def close(self):
+    self.closed = True
+
+
+def load(tmp_path, monkeypatch, install='echo "[1/4] x"; exit 0', state='ok', model='comma mici', slot='_a'):
+  for k, v in (('DPB_DIR', tmp_path / 'data'), ('DPB_BOOT_DIR', tmp_path / 'data'), ('DPB_MODEL', tmp_path / 'model'), ('DPB_VERSION', tmp_path / 'VERSION'),
+               ('DPB_BOOT_TIMEOUT_S', '5')):
+    monkeypatch.setenv(k, str(v))
+  (tmp_path / 'data').mkdir(exist_ok=True)
+  (tmp_path / 'model').write_text(model)
+  (tmp_path / 'VERSION').write_text('20.6')
+  spec = importlib.util.spec_from_file_location('dpb_boot', HERE / 'boot.py')
+  m = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(m)
+  (tmp_path / 'install.sh').write_text(f'echo "$*" >> {tmp_path}/runs\n{install}\n')
+  (tmp_path / 'kernel.sh').write_text(f'echo state={state}\n')
+  (tmp_path / 'reboot').write_text(f'echo reboot >> {tmp_path}/reboots\n')
+  m.INSTALL, m.KERNEL, m.SUDO = str(tmp_path / 'install.sh'), str(tmp_path / 'kernel.sh'), []
+  m.REBOOT = ['bash', str(tmp_path / 'reboot')]
+  m.slot = lambda: slot
+  return m
+
+
+def runs(tmp_path):
+  p = tmp_path / 'runs'
+  return p.read_text().splitlines() if p.exists() else []
+
+
+def test_runs_once_then_stamp_skips(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  sp = FakeSpinner()
+  assert m.main(lambda: sp) == 0
+  assert runs(tmp_path) == ['--yes'] and sp.closed
+  assert (tmp_path / 'data/stamp').read_text() == m.setup_key()
+  assert m.main(lambda: FakeSpinner()) == 0
+  assert runs(tmp_path) == ['--yes']  # second boot: nothing to do
+
+
+def test_stamp_changes_with_pins_agnos_and_slot(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  k = m.setup_key()
+  (tmp_path / 'VERSION').write_text('20.7')
+  assert m.setup_key() != k
+  (tmp_path / 'VERSION').write_text('20.6')
+  m.slot = lambda: '_b'
+  assert m.setup_key() != k
+  m.slot = lambda: '_a'
+  assert m.setup_key() == k
+  # every pin file is part of the key
+  assert {'firmware/kernel.env', 'firmware/btfw.env', 'bluez/bluez.env', 'firmware/firmware.sha256'} <= set(m.KEY_FILES)
+  for f in m.KEY_FILES:
+    assert (HERE / f).is_file(), f
+
+
+def test_pin_change_reruns(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  (tmp_path / 'data/stamp').write_text('an older setup')
+  m.main(lambda: FakeSpinner())
+  assert runs(tmp_path) == ['--yes']
+
+
+def test_skip_on_disable_and_off_a_comma_4(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  (tmp_path / 'data/disable').touch()
+  assert m.main(lambda: FakeSpinner()) == 0 and runs(tmp_path) == []
+  assert not (tmp_path / 'data/stamp').exists()
+  m = load(tmp_path, monkeypatch, model='comma tici')
+  (tmp_path / 'data/disable').unlink()
+  assert m.main(lambda: FakeSpinner()) == 0 and runs(tmp_path) == []
+
+
+def test_no_network_falls_through_and_retries(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, install='echo "[2/4] BT firmware"; echo "firmware download failed" >&2; exit 1')
+  assert m.main(lambda: FakeSpinner()) == 0
+  assert not (tmp_path / 'data/stamp').exists()
+  assert 'install failed (1)' in (tmp_path / 'data/log').read_text()
+  assert 'firmware download failed' in (tmp_path / 'data/log').read_text()
+  m.main(lambda: FakeSpinner())
+  assert runs(tmp_path) == ['--yes', '--yes']  # next boot tries again
+  assert not (tmp_path / 'reboots').exists()
+
+
+def test_hung_install_times_out(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, install='sleep 60')
+  m.TIMEOUT_S = 0.5
+  sp = FakeSpinner()
+  assert m.main(lambda: sp) == 0 and sp.closed
+  assert 'timed out' in (tmp_path / 'data/log').read_text()
+  assert not (tmp_path / 'data/stamp').exists()
+
+
+def test_reboots_only_after_a_flash(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, install='echo "[4/4] kernel"; echo "  kernel: writing slot b 55%"', state='pending')
+  sp = FakeSpinner()
+  m.main(lambda: sp)
+  assert (tmp_path / 'reboots').read_text().splitlines() == ['reboot']
+  assert not (tmp_path / 'data/stamp').exists()  # the new slot changes the key anyway
+  assert sp.seen[-1] == 20 + 55 * 80 // 100
+  for st in ('ok', 'off', 'failed', 'outdated'):
+    d = tmp_path / st
+    d.mkdir()
+    m = load(d, monkeypatch, state=st)
+    m.main(lambda: FakeSpinner())
+    assert not (d / 'reboots').exists() and (d / 'data/stamp').exists()
+
+
+def test_installer_reboot_is_left_to_boot(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, install='echo "REBOOT=$DPB_REBOOT"')
+  m.main(lambda: FakeSpinner())
+  assert 'REBOOT=true' in (tmp_path / 'data/log').read_text()
+
+
+def test_progress_bar_only_grows():
+  spec = importlib.util.spec_from_file_location('dpb_boot2', HERE / 'boot.py')
+  m = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(m)
+  pct, seen = 0, []
+  for ln in ('[1/4] last kernel flash', '[2/4] BT firmware', 'noise 99%', '[3/4] Bluetooth packages and services',
+             '[4/4] kernel', '  kernel: downloading 8%', '  kernel: verifying 40', '  kernel: verifying 40%',
+             '  kernel: switching slot 98%'):
+    pct = m.progress(ln, pct)
+    seen.append(pct)
+  assert seen == sorted(seen) and seen[0] == 0 and seen[3] == 13 and seen[4] == 20 and seen[-1] == 98
+
+
+def test_crash_never_stops_openpilot(tmp_path):
+  r = subprocess.run(['python3', str(HERE / 'boot.py')], capture_output=True, text=True,
+                     env={'PATH': '/usr/bin:/bin', 'DPB_DIR': str(tmp_path), 'DPB_BOOT_DIR': str(tmp_path), 'DPB_MODEL': str(tmp_path / 'none')})
+  assert r.returncode == 0 and 'skip, not a comma 4' in r.stdout
+
+
+def test_spinner_is_comma_s():
+  text = (HERE / 'boot.py').read_text()
+  assert 'from openpilot.common.spinner import Spinner' in text
+  assert re.search(r'DPB_REBOOT="true"', text)

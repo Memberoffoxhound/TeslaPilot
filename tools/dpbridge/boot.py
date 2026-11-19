@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+# First boot after a dpbridge install (or a change to its pins): run install_userspace.sh once, before manager,
+# with comma's spinner on screen. Never blocks openpilot: any failure or the timeout is logged and boot goes on;
+# it tries again next boot. Reboots only when the installer flashed the kernel (state=pending).
+import hashlib
+import os
+import re
+import signal
+import subprocess
+import sys
+import threading
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+DIR = os.environ.get("DPB_DIR", "/data/dpbridge")
+# own dir: $DIR is root's, this runs as the comma user
+STATE = os.environ.get("DPB_BOOT_DIR", "/data/dpbridge_boot")
+STAMP = os.path.join(STATE, "stamp")
+LOG = os.path.join(STATE, "log")
+TIMEOUT_S = float(os.environ.get("DPB_BOOT_TIMEOUT_S", "1200"))
+MODEL = os.environ.get("DPB_MODEL", "/sys/firmware/devicetree/base/model")
+VERSION = os.environ.get("DPB_VERSION", "/VERSION")
+SUDO = ["sudo"]
+INSTALL = os.path.join(HERE, "install_userspace.sh")
+KERNEL = os.path.join(HERE, "kernel.sh")
+REBOOT = ["sudo", "reboot"]
+# what the install depends on; a change here (code or a pinned sha) runs it again
+KEY_FILES = ("install_userspace.sh", "kernel.sh", "lib.sh", "flash_boot.sh", "radio.sh", "attach.sh", "asound.conf",
+             "firmware/kernel.env", "firmware/btfw.env", "firmware/firmware.sha256", "firmware/qca.sha256", "bluez/bluez.env")
+STEP = re.compile(r"^\[(\d)/(\d)\] ")
+KPCT = re.compile(r"^  kernel: .* (\d+)%$")
+
+
+def read(path: str) -> str:
+  try:
+    with open(path, "rb") as f:
+      return f.read().replace(b"\0", b"").decode(errors="replace").strip()
+  except OSError:
+    return ""
+
+
+def slot() -> str:
+  try:
+    return subprocess.run(["abctl", "--boot_slot"], capture_output=True, text=True, timeout=10).stdout.strip()
+  except (OSError, subprocess.SubprocessError):
+    return ""
+
+
+def setup_key() -> str:
+  # AGNOS version and slot too: an AGNOS update undoes the rootfs part, the flash reboot moves the slot
+  h = hashlib.sha256()
+  for f in KEY_FILES:
+    h.update(f.encode() + b"\0" + open(os.path.join(HERE, f), "rb").read() + b"\0")
+  h.update(f"agnos={read(VERSION)} slot={slot()}".encode())
+  return h.hexdigest()
+
+
+def skip_reason(key: str) -> str | None:
+  if "mici" not in read(MODEL):
+    return "not a comma 4"
+  if os.path.exists(os.path.join(DIR, "disable")):
+    return "disabled"
+  if read(STAMP) == key:
+    return "up to date"
+  return None
+
+
+def progress(line: str, cur: int) -> int:
+  # overall bar: steps 1-3 share 0-20%, then the kernel step's own percent fills the rest
+  if m := STEP.match(line):
+    n, total = int(m.group(1)), int(m.group(2))
+    return max(cur, 20 * (n - 1) // (total - 1))
+  if m := KPCT.match(line):
+    return max(cur, 20 + int(m.group(1)) * 80 // 100)
+  return cur
+
+
+def install(spinner, log) -> int:
+  env = dict(os.environ, DPB_REBOOT="true")  # the reboot, if any, is ours, after the stamp logic
+  cmd = ["bash", INSTALL, "--yes"]
+  spinner.update_progress(0, 100)
+
+  def pump(out):
+    pct = 0
+    for ln in out:
+      log.write(ln)
+      pct = progress(ln.rstrip("\n"), pct)
+      spinner.update_progress(pct, 100)
+
+  try:
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, env=env,
+                         start_new_session=True)
+  except OSError as e:
+    log.write(f"{e!r}\n")
+    return 1
+  t = threading.Thread(target=pump, args=(p.stdout,), daemon=True)
+  t.start()
+  try:
+    rc = p.wait(timeout=TIMEOUT_S)
+  except subprocess.TimeoutExpired:
+    os.killpg(p.pid, signal.SIGTERM)  # lets the installer's EXIT trap tear apt down
+    try:
+      p.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+      os.killpg(p.pid, signal.SIGKILL)
+      p.wait()
+    rc = 124
+  t.join(timeout=5)
+  if rc == 124:
+    log.write(f"timed out after {TIMEOUT_S:.0f} s\n")
+  return rc
+
+
+def kernel_state() -> str:
+  try:
+    out = subprocess.run([*SUDO, "bash", KERNEL, "status"], capture_output=True, text=True,
+                         timeout=120).stdout
+  except (OSError, subprocess.SubprocessError):
+    return ""
+  return next((ln[6:] for ln in out.splitlines() if ln.startswith("state=")), "")
+
+
+def main(spinner_factory=None) -> int:
+  key = setup_key()
+  why = skip_reason(key)
+  if why is not None:
+    print(f"dpbridge boot: skip, {why}")
+    return 0
+  if spinner_factory is None:
+    from openpilot.common.spinner import Spinner as spinner_factory
+  os.makedirs(STATE, exist_ok=True)
+  with open(LOG, "a", buffering=1) as log:
+    log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} key {key[:12]}\n")
+    spinner = spinner_factory()
+    try:
+      rc = install(spinner, log)
+    finally:
+      spinner.close()
+    if rc != 0:
+      log.write(f"install failed ({rc}), openpilot starts anyway, next boot tries again\n")
+      print(f"dpbridge boot: install failed ({rc}), see {LOG}")
+      return 0
+    if kernel_state() == "pending":
+      # flashed: the one reboot, no stamp (the new slot changes the key, so the next boot records the result)
+      log.write("flashed, rebooting\n")
+      log.flush()
+      subprocess.run(REBOOT)
+      return 0
+    with open(STAMP + ".tmp", "w") as f:
+      f.write(key)
+    os.replace(STAMP + ".tmp", STAMP)
+    log.write("done\n")
+  return 0
+
+
+if __name__ == "__main__":
+  try:
+    sys.exit(main())
+  except Exception as e:  # never stop openpilot from starting
+    print(f"dpbridge boot: {e!r}")
+    sys.exit(0)
