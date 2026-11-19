@@ -50,11 +50,11 @@ jobs:
           echo "merge-base with commaai/opendbc master: $BASE"
           ../.github/fork-safety/check.sh check "$BASE" ../.github/fork-safety/opendbc.allow opendbc/safety
 
-      - name: panda submodule stays commaai/panda
+      - name: panda submodule is the TeslaPilot panda fork
         run: |
           set -euo pipefail
-          grep -E 'url = .*/commaai/panda.git' .gitmodules
-          echo "panda submodule URL is stock commaai/panda"
+          grep -E 'url = \.\./panda\.git$' .gitmodules
+          echo "panda submodule is ../panda.git (comma panda plus the reviewed TITS commit)"
 
   opendbc-safety-tests:
     name: comma safety tests (100% coverage) and MISRA
