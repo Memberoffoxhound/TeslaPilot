@@ -18,9 +18,9 @@ Nothing here talks to the car or changes panda safety.
 | `probe_ro.sh` | comma | read-only probe: kernel config, UART node, rfkill, firmware, A/B sizes, modules, audio |
 | `flash_boot.sh` | comma | comma 4 on AGNOS 20.6 only. Backs up both boot slots, marks the other slot unbootable, mirrors the partitions AGNOS updates (xbl xbl_config abl aop devcfg system) into it, writes `boot.img` there, reads everything back from flash, switches to it. Dry run unless `--yes` |
 | `restore_boot.sh` | comma | switches back to the stock slot (`--write` also puts the stock kernel on the other slot) |
-| `install_userspace.sh` | comma | flashes the kernel first if the stock one runs (`kernel.sh`), then pinned BT firmware, the dpbridge BlueZ build (`bluez/bluez.env`), bluez-alsa from noble, all debs kept in `/data/dpbridge/debs` so an AGNOS update reinstalls offline (dpkg, skip udev, skip what is already installed), services incl. `dpbridge-obex` for cover art. Leaves audio alone. Dry run unless `--yes` |
+| `install_userspace.sh` | comma | the installer: pinned BT firmware, the dpbridge BlueZ build (`bluez/bluez.env`), bluez-alsa from noble, all debs kept in `/data/dpbridge/debs` so an AGNOS update reinstalls offline (dpkg, skip udev, skip what is already installed), services incl. `dpbridge-obex` for cover art, then the kernel (`kernel.sh`) when the stock one runs and a reboot last. Leaves audio alone. Dry run unless `--yes` |
 | `bluez/build_bluez.sh` | noble arm64 root | BlueZ 5.83 as three debs plus a tarball: experimental API, obexd with the BIP client, no Evolution libs. The tarball is a release asset; its sha is in `bluez/bluez.env` |
-| `kernel.sh` | comma | automatic kernel flash, run only by `install_userspace.sh` on a stock kernel: status, fetch `boot.img` from the release (sha in `firmware/kernel.env`), `flash_boot.sh --rotate` on the inactive slot only, one reboot, then `install_userspace.sh` |
+| `kernel.sh` | comma | automatic kernel flash, run only by `install_userspace.sh` on a stock kernel: status, fetch `boot.img` from the release (sha in `firmware/kernel.env`), `flash_boot.sh --rotate` on the inactive slot only; `post-boot` records the result on the next install |
 | `firmware/firmware.sha256` | both | sha256 of `qca/crbtfw21.tlv`, `qca/crnv21.bin` and its license from linux-firmware f859d9f, and of comma's `firmware/bluetooth.img` from agnos-builder 140ed0c; `mac/make_bundle.sh` and `make_btfw.sh` fetch and check them |
 | `firmware/qca.sha256` | comma | the six files installed in `/lib/firmware/qca`: rev 21 from linux-firmware, revs 11 and 20 from `bluetooth.img`. btqca picks by the chip's revision. Fallback if linux-firmware's rev 21 misbehaves: comma's own rev 21 pair from the same image (crbtfw21.tlv 2a42859081393ca6a50a177773385eac4fcabb9f21fc1b78299ed35bf8a598c4, crnv21.bin 18cc38fff25a6a56bc163f1874184da93d90882dc047c9f0c534ed9888c543b3): add both names to `comma_fw` in install and swap the two hashes here |
 | `firmware/make_btfw.sh`, `firmware/btfw.env` | dev box, comma | linux-firmware's rev 21 pair and license plus comma's `bluetooth.img` as one reproducible release tarball (sha in `btfw.env`). `install_userspace.sh` fetches it into `/data/dpbridge`, so a fresh device needs no Mac |
@@ -47,21 +47,28 @@ config is untouched.
 
 ## Steps
 
-1. Build: `tools/dpbridge/build_kernel.sh` (prints the boot.img sha256).
-2. Probe (read only): `mac/deliver.sh probe`. Check `comma mici`, AGNOS 20.6, the `bt_wcn3990` node and equal A/B sizes.
-3. Prove QDL works on this comma before anything is written: `mac/deliver.sh qdl-check` (cabling in Recovery 3).
-4. Copy: `mac/deliver.sh push`. It refuses without a matching `boot.img.sha256`.
-5. Dry run: `mac/deliver.sh flash`. Read the plan: it must write the other slot only.
-6. Flash: `mac/deliver.sh flash --yes`. It runs detached on the comma, so a dropped SSH session can't stop it.
-   It also pulls the boot backups to `~/dpbridge-backup/<date>/`.
-7. `mac/deliver.sh reboot`, wait a minute, then `mac/deliver.sh probe` again: kernel config shows BT, UART node `ok`.
-8. Userspace: `mac/deliver.sh install`, then `mac/deliver.sh install --yes`. Nothing starts on its own yet.
-9. First chip bring-up by hand: `mac/deliver.sh attach`. If it hangs or SSH dies, reboot: nothing runs at boot.
-   Only if hci0 came up and wlan0 is still UP: with the car off, `mac/deliver.sh enable`, then `mac/deliver.sh reboot`.
-10. Test: `mac/deliver.sh test`. Pair in Settings > bluetooth, then rerun for the manual rows.
+The installer does everything, with openpilot down: `install_userspace.sh --yes` on the comma
+(`mac/deliver.sh install --yes` from a Mac). It prints `[1/4]` to `[4/4]` and the kernel step as
+`kernel: <step> <percent>%` (downloading, verifying, backing up, writing slot X, reading back, switching slot, rebooting).
 
-Kill switch: `touch /data/dpbridge/disable` keeps the chip off from the next boot. `mac/deliver.sh disable` (car off)
-also stops the services.
+1. `[1/4]` records how the last flash went (`kernel.sh post-boot`).
+2. `[2/4]` BT firmware from the pinned release tarball. `[3/4]` BlueZ, bluez-alsa and the units.
+3. `[4/4]` on a stock kernel: fetch `boot.img` (pinned sha), write the inactive slot only, read it back, switch slots.
+   The reboot is the installer's final step. On the pinned dpbridge kernel nothing is flashed and there is no reboot.
+4. After the reboot the Bluetooth toggle in Settings starts the radio. Run the installer again after an AGNOS update.
+
+Without `--yes` it is a dry run. `kernel.sh status` prints `state=`: `ok` (pinned kernel runs), `outdated` (an older
+dpbridge kernel runs: restore first), `offer` (stock, install flashes), `off` (`/data/dpbridge/disable`), `failed`
+(the last try with this image, AGNOS and slot failed), `pending`, `no_space`, `unsupported_agnos`, `unsupported_device`.
+`install_userspace.sh --yes --reflash` flashes despite `off` or `failed`.
+
+Manual path (development, new kernel builds): `build_kernel.sh`, `mac/deliver.sh probe`, `qdl-check`, `push`,
+`flash` (dry run) then `flash --yes`, `reboot`, `install --yes`, `test`. Boot a new image by hand this way before
+the installer may flash it anywhere.
+
+Kill switch: `touch /data/dpbridge/disable` keeps the chip off from the next boot and stops the installer from
+flashing. `mac/deliver.sh disable` (car off) also stops the services. The Bluetooth toggle off writes the same file.
+If a Bluetooth start never settles (hci0 up for 60 s), the next boot switches Bluetooth off instead of starting it.
 
 ## Recovery
 
@@ -69,6 +76,8 @@ From best to worst. `S` is the stock slot letter from `~/dpbridge-backup/<date>/
 `O` is the other one.
 
 1. It boots and SSH works: `mac/deliver.sh restore --yes`, then `mac/deliver.sh reboot`. The stock slot was never written.
+   The restore sticks until the installer runs again: on a stock kernel the installer always flashes dpbridge
+   (inactive slot only), also after a restore. To keep stock while installing, `touch /data/dpbridge/disable` first.
 2. It does not boot: the bootloader should fall back to the stock slot after failed tries
    (not verified on a comma 4). Leave it powered for a few minutes.
 3. QDL, keeps your data: side USB-C to the Mac first, then power on the top port (30 W or more).
