@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Automatic kernel flash, run by install_userspace.sh and by kerneld (offroad). No menu: every check is here.
+# Kernel flash, run only by install_userspace.sh (openpilot is down). No menu: every check is here.
 #   status              key=value lines (state=ok|offer|failed|pending|onroad|no_space|unsupported_*)
 #   fetch               get boot.img from the release, checked against the pinned sha
 #   flash [--yes] [--retry]  inactive slot only, read back, then one reboot. A failed try for this

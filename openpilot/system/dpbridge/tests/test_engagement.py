@@ -23,7 +23,7 @@ def not_running_filter() -> ast.SetComp:
 
 
 def test_every_dpbridge_process_is_exempt():
-  assert dpbridge_procs() == PROCESSES == {'btagentd', 'dpb_a2dp', 'dpb_nowplaying', 'dpb_kernel', 'dashkitd'}
+  assert dpbridge_procs() == PROCESSES == {'btagentd', 'dpb_a2dp', 'dpb_nowplaying', 'dashkitd'}
 
 
 def test_selfdrived_skips_dpbridge_processes():

@@ -12,7 +12,7 @@ source "$(dirname "$0")/lib.sh"
 HERE=$(cd "$(dirname "$0")" && pwd)
 put() { echo "+ write $1"; if [ $YES = 1 ]; then $SUDO tee "$1" > /dev/null; else cat > /dev/null; fi; }
 
-# stock kernel: flash the dpbridge one (inactive slot only, one reboot, parked only); kerneld runs this again after
+# stock kernel: flash the dpbridge one (inactive slot only, one reboot); run install again after it
 WCN=${DPB_WCN:-/sys/module/hci_uart/parameters/wcn3990}
 if [ ! -e "$WCN" ]; then
   echo "running the stock kernel, flashing the dpbridge boot.img first"

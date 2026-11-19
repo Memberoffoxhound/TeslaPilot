@@ -143,8 +143,6 @@ procs = [
   RestartingPythonProcess("dpb_a2dp", "openpilot.system.dpbridge.a2dp", bluetooth, enabled=not PC),
   RestartingPythonProcess("dpb_nowplaying", "openpilot.system.dpbridge.nowplaying", bluetooth, enabled=not PC),
   RestartingPythonProcess("dashkitd", "openpilot.system.dpbridge.dashkitd", dashkit, enabled=not PC),
-  # dpbridge: flashes the kernel on its own when the stock one runs, offroad only
-  RestartingPythonProcess("dpb_kernel", "openpilot.system.dpbridge.kerneld", only_offroad, enabled=not PC),
 
   # debug procs
   PythonProcess("webrtcd", "openpilot.system.webrtc.webrtcd", or_(livestream, notcar)),
