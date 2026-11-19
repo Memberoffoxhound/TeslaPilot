@@ -15,13 +15,14 @@ from openpilot.selfdrive.modelmanager import CHESTNUT_FAILED as FAILED, CHESTNUT
 
 ROOT = Path(__file__).resolve().parents[3]
 # upstream's on-device chestnut flags, SConscript before #38930
+# compile args follow the pinned compile_onnx.py; --device-input went with #38933
 FLAGS = {'DEBUG': '1', 'DEV': 'USB+AMD:LLVM', 'FRAME_DEV': 'CPU', 'FLOAT16': '1', 'JIT_BATCH_SIZE': '0', 'GMMU': '0',
          'TC_OPT': '2', 'TC_MIN_GLOBALS': '32'}
 
 
 def compile_cmd(onnx: Path, pkl: Path) -> list[str]:
   return ['taskset', '-c', '7', sys.executable, str(ROOT / 'tinygrad_repo/examples/openpilot/compile_onnx.py'), str(onnx), str(pkl),
-          '--device-input', '*', '--out-of-band', '--benchmark-runs', '1']
+          '--out-of-band', '--benchmark-runs', '1']
 
 
 def fetch_onnx(ref: str, dest: Path, progress, should_stop) -> Path:
