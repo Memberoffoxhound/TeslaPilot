@@ -75,7 +75,13 @@ run $SUDO mkdir -p "$DIR/bluetooth"
 
 # shows up on phones as car audio
 run $SUDO sed -i 's/^#\? *Class *=.*/Class = 0x240414/' /etc/bluetooth/main.conf
-if [ $YES = 1 ]; then grep -q '^Class = 0x240414' /etc/bluetooth/main.conf || die "Class not set in main.conf"; fi
+# 5.72 has no MediaPlayer1 ObexPort; Experimental + obexd still enable whatever this build exposes
+run $SUDO sed -i 's/^#\? *Experimental *=.*/Experimental = true/' /etc/bluetooth/main.conf
+if [ $YES = 1 ]; then
+  grep -q '^Experimental = true' /etc/bluetooth/main.conf || echo 'Experimental = true' | $SUDO tee -a /etc/bluetooth/main.conf >/dev/null
+  grep -q '^Class = 0x240414' /etc/bluetooth/main.conf || die "Class not set in main.conf"
+  grep -q '^Experimental = true' /etc/bluetooth/main.conf || die "Experimental not set in main.conf"
+fi
 
 put /etc/systemd/system/dpbridge-bt.service <<UNIT
 [Unit]
@@ -134,9 +140,34 @@ ExecStart=
 ExecStart=/usr/bin/bluealsa-aplay -D dpb_a2dp
 UNIT
 
+# radio helper: the Settings toggle starts and stops the four units; no remount for start/stop
+HERE=$(dirname "$0")
+if [ -x "$HERE/radio.sh" ]; then
+  run $SUDO cp "$HERE/radio.sh" "$DIR/radio.sh"
+  run $SUDO chmod 0755 "$DIR/radio.sh"
+fi
+put /etc/systemd/system/dpbridge-radio.service <<UNIT
+[Unit]
+Description=dpbridge: start or stop Bluetooth from DpbBluetooth
+After=local-fs.target
+ConditionPathExists=/sys/module/hci_uart/parameters/wcn3990
+
+[Service]
+Type=simple
+ExecStart=$DIR/radio.sh --watch
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
 run $SUDO systemctl daemon-reload
-# apt enables these on install and they pull in dpbridge-bt, so they stay off until deliver.sh enable
+# apt enables these on install and they pull in dpbridge-bt; the helper starts them when the toggle is on
 run $SUDO systemctl disable bluetooth.service bluealsa.service bluealsa-aplay.service
 run $SUDO systemctl stop bluetooth.service bluealsa.service bluealsa-aplay.service
-# nothing is enabled: the first chip bring-up is done by hand, so a hang there can't loop every boot
-echo "installed, not enabled. next: deliver.sh attach; if hci0 came up and SSH still works: deliver.sh enable"
+run $SUDO systemctl enable dpbridge-radio.service
+if [ $YES = 1 ]; then
+  run $SUDO systemctl restart dpbridge-radio.service || run $SUDO systemctl start dpbridge-radio.service
+fi
+echo "installed. the Bluetooth toggle in Settings starts the radio; no deliver.sh enable needed"
