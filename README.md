@@ -54,7 +54,7 @@ On newer Tesla firmware, the steering message is read correctly, so stock lane k
 
 Credit: [rav4kumar](https://github.com/rav4kumar)'s automatic lane change in sunnypilot ([sunnypilot/sunnypilot#653](https://github.com/sunnypilot/sunnypilot/pull/653)), with [Jason Wen / sunnyhaibin](https://github.com/sunnyhaibin).
 
-Off by default. Turn it on in **Settings → toggles → auto lane change**. Then the blinker alone starts a lane change, no wheel nudge needed, as long as you're above 25 mph and Tesla's blind-spot monitor says the lane is clear.
+Off by default. Turn it on in **Settings → toggles → auto lane change**. Then the blinker alone starts a lane change, no wheel nudge needed, as long as you're above 45 mph and Tesla's blind-spot monitor says the lane is clear.
 
 ### Set Speed Assist
 
