@@ -128,3 +128,12 @@ def test_home_icon_next_to_wifi():
   assert 0 <= wifi < icon < long
   assert "set_visible(self._bt_on and bt_kernel())" in src
   assert "set_opacity(0.9 if self._bt_connected else 0.5)" in src
+
+
+def test_set_up_entry_only_after_not_now_on_stock():
+  src = (SETTINGS / "settings.py").read_text()
+  assert 'set_visible(lambda: not bt_supported() and declined())' in src
+  i = src.index("def set_up_bt():")
+  body = src[i:src.index("\n\n", i)]
+  assert "clear_declined()" in body and '"DoReboot", True' in body
+  assert 'EngagedConfirmationButton("bluetooth", "reboot"' in src  # slide to reboot, not while engaged

@@ -5,6 +5,31 @@ import os
 import subprocess
 import sys
 import time
+import types
+
+
+class FakeParams:
+  store: dict = {}
+
+  def __init__(self, *a, **kw):
+    pass
+
+  def get(self, k, *a, **kw):
+    return self.store.get(k)
+
+  def get_bool(self, k, *a, **kw):
+    return bool(self.store.get(k))
+
+  def put(self, k, v, *a, **kw):
+    self.store[k] = v
+
+  put_bool = put
+
+  def remove(self, k, *a, **kw):
+    self.store.pop(k, None)
+
+
+sys.modules.setdefault("openpilot.common.params", types.SimpleNamespace(Params=FakeParams))  # no libparams needed
 
 import numpy as np
 import pyray as rl
@@ -14,6 +39,8 @@ from openpilot.system.dpbridge import kernel_page
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/tmp/dpbridge-kernel-shots"
 os.environ.setdefault("SCALE", "1")
+
+
 SIZE = f"{gui_app._scaled_width}x{gui_app._scaled_height}"
 kernel_page.answer = lambda word: None
 
@@ -40,13 +67,43 @@ def fresh():
   return page
 
 
+def settings_shots():
+  # the entry that brings the page back after "not now": stock kernel, declined
+  from openpilot.selfdrive.ui.mici.layouts.settings import settings
+  from openpilot.selfdrive.ui.ui_state import ui_state
+  ui_state.initial_cruise_speed = 0.0  # no params on a PC
+  settings.bt_supported = lambda: False
+  settings.declined = lambda: True
+  gui_app._nav_stack.clear()
+  page = settings.SettingsLayout()
+  gui_app.push_widget(page)
+  frames(30)
+  btn = page._bt_setup_btn
+  page._scroller.scroll_to((btn.rect.x + btn.rect.width / 2) - (page.rect.x + page.rect.width / 2), smooth=False)
+  frames(20)
+  save("settings_set_up")
+  btn._click_callback()
+  frames(40)
+  save("settings_set_up_slider")
+
+
 def main():
   os.makedirs(OUT, exist_ok=True)
   xvfb = None
   if not hasattr(rl, "cpu"):
     os.environ["DISPLAY"] = ":88"
-    xvfb = subprocess.Popen(["Xvfb", ":88", "-nocursor", "-screen", "0", f"{SIZE}x24"], stderr=subprocess.DEVNULL)
+    xvfb = subprocess.Popen(["Xvfb", ":88", "-nocursor", "-screen", "0", f"{SIZE}x24"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(1)
+  try:
+    shots()
+  finally:
+    gui_app.close()
+    if xvfb:
+      xvfb.terminate()
+  print("\n".join(sorted(os.path.join(OUT, f) for f in os.listdir(OUT))))
+
+
+def shots():
   gui_app.init_window("dpbridge kernel")
   page = fresh()
   page.command("ask")
@@ -76,10 +133,7 @@ def main():
     page.command(f"note {note}")
     frames(5)
     save(name)
-  gui_app.close()
-  if xvfb:
-    xvfb.terminate()
-  print("\n".join(sorted(os.path.join(OUT, f) for f in os.listdir(OUT))))
+  settings_shots()
 
 
 if __name__ == "__main__":

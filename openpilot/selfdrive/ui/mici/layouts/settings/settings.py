@@ -3,13 +3,14 @@ from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigParamControl
 from openpilot.selfdrive.ui.mici.layouts.settings.toggles import TogglesLayoutMici, ThemeLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.network.network_layout import NetworkLayoutMici
-from openpilot.selfdrive.ui.mici.layouts.settings.device.device_layout import DeviceLayoutMici
+from openpilot.selfdrive.ui.mici.layouts.settings.device.device_layout import DeviceLayoutMici, EngagedConfirmationButton
 from openpilot.selfdrive.ui.mici.layouts.settings.developer import DeveloperLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.software import SoftwareLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.firehose import FirehoseLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.stats import StatsLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.models import ModelsLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.bluetooth import BluetoothUIMici, bt_supported
+from openpilot.system.dpbridge.kernel_ok import clear_declined, declined
 from openpilot.system.dpbridge.radio_status import off_reason, read as read_bt_radio
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 
@@ -60,6 +61,16 @@ class SettingsLayout(NavScroller):
     self._devices_btn.set_click_callback(lambda: gui_app.push_widget(bluetooth_panel))
     self._devices_btn.set_visible(lambda: bt_supported() and self._params.get_bool("DpbBluetooth"))
 
+    # stock kernel after "not now" on the boot page: reboot so it asks again
+    def set_up_bt():
+      clear_declined()
+      self._params.put_bool("DoReboot", True, block=True)
+
+    self._bt_setup_btn = EngagedConfirmationButton("bluetooth", "reboot", gui_app.texture("icons_mici/settings/network/bluetooth.png", 32, 48),
+                                                   set_up_bt, exit_on_confirm=False)
+    self._bt_setup_btn.set_value("tap to set up")
+    self._bt_setup_btn.set_visible(lambda: not bt_supported() and declined())
+
     self._device_panel = DeviceLayoutMici()
     self._device_button = SettingsBigButton("device", "", gui_app.texture("icons_mici/settings/device_icon.png", 72, 58))
     self._device_button.set_click_callback(lambda: gui_app.push_widget(self._device_panel))
@@ -84,6 +95,7 @@ class SettingsLayout(NavScroller):
       network_btn,
       self._bt_toggle,
       self._devices_btn,
+      self._bt_setup_btn,
       self._device_button,
       software_btn,
       firehose_btn,
