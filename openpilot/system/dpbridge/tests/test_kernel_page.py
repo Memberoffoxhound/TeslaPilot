@@ -74,4 +74,31 @@ def test_page_process_takes_commands_and_exits_at_eof(xvfb):
   p.stdin.close()
   p.wait(timeout=20)
   out, err = p.stdout.read(), p.stderr.read()
-  assert p.returncode == 0 and out == "", err[-2000:]
+  assert p.returncode == 0 and out == "", err[-2000:]  # only answers on stdout
+
+
+def test_answers_have_their_own_fd():
+  src = (PKG / "kernel_page.py").read_text()
+  assert "os.dup2(2, 1)" in src and "file=ANSWER" in src
+
+
+def test_accept_and_not_now_answer_once(xvfb):
+  code = """
+from openpilot.system.ui.lib.application import gui_app
+gui_app.init_window("t")
+from openpilot.system.dpbridge import kernel_page
+said = []
+kernel_page.answer = said.append
+for word in ("accept", "later"):
+  page = kernel_page.KernelPage()
+  page.command("ask")
+  assert page._view is page._consent
+  page._on_accept() if word == "accept" else page._done("later")
+  page._on_accept()  # a second slide answers nothing more
+  assert said[-1] == word
+  assert page._view is (page._progress if word == "accept" else None)
+assert said == ["accept", "later"], said
+print("ok")
+"""
+  r = subprocess.run([sys.executable, "-c", code], env=xvfb, capture_output=True, text=True, timeout=60)
+  assert r.returncode == 0 and "ok" in r.stdout, r.stderr[-2000:]

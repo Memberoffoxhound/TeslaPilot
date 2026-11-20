@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # dpbridge kernel consent and install progress, run by tools/dpbridge/boot.py before manager (no Params, nothing built).
 # stdin: "ask", "wait <s>", "step <pct> <title>", "note <title>|<text>". stdout: "accept" or "later".
+import os
 import select
 import sys
 import time
@@ -19,8 +20,11 @@ ICONS = {"warning": ("icons_mici/setup/warning.png", 64, 58), "red": ("icons_mic
          "restore": ("icons_mici/setup/restore.png", 64, 64)}
 
 
+ANSWER = sys.stdout  # main() moves it off fd 1, so library logs can't fill boot.py's pipe
+
+
 def answer(word: str):
-  print(word, flush=True)
+  print(word, file=ANSWER, flush=True)
 
 
 class ConsentPage(Scroller):
@@ -75,14 +79,17 @@ class KernelPage(Widget):
     self._view: Widget | None = None
 
   def _on_accept(self):
-    self._done("accept")
-    self._progress.set("starting", "0%")
-    self._view = self._progress
+    if self._done("accept"):
+      self._progress.set("starting", "0%")
+      self._view = self._progress
 
-  def _done(self, word: str):
-    if self._view is self._consent:
-      self._view = None
-      answer(word)
+  def _done(self, word: str) -> bool:
+    # one answer per question
+    if self._view is not self._consent:
+      return False
+    self._view = None
+    answer(word)
+    return True
 
   def command(self, line: str):
     cmd, _, arg = line.partition(" ")
@@ -123,6 +130,10 @@ def read_lines() -> list[str] | None:
 
 
 def main():
+  global ANSWER
+  ANSWER = os.fdopen(os.dup(1), "w")
+  os.dup2(2, 1)
+  sys.stdout = sys.stderr
   gui_app.init_window("dpbridge kernel")
   page = KernelPage()
   gui_app.push_widget(page)
