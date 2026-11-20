@@ -122,3 +122,35 @@ def test_compile_cmd_flags_exist_in_compile_onnx():
   src = Path(cmd[4]).read_text()
   for arg in (a for a in cmd if a.startswith('--')):
     assert f"'{arg}'" in src, arg
+
+
+def test_compile_env_has_tinygrad_repo_first(monkeypatch):
+  monkeypatch.setenv('PYTHONPATH', '/x')
+  env = cc.compile_env()
+  assert env['PYTHONPATH'].split(':') == [str(cc.ROOT / 'tinygrad_repo'), '/x']
+  assert Path(env['PYTHONPATH'].split(':')[0], 'examples/openpilot/compile_onnx.py').is_file()
+  assert all(env[k] == v for k, v in cc.FLAGS.items())
+
+
+def test_compile_env_without_pythonpath(monkeypatch):
+  monkeypatch.delenv('PYTHONPATH', raising=False)
+  assert cc.compile_env()['PYTHONPATH'] == str(cc.ROOT / 'tinygrad_repo')
+
+
+def test_taskset_includes_an_always_online_core():
+  cmd = cc.compile_cmd('m.onnx', 'm.pkl')
+  assert cmd[:3] == ['taskset', '-c', '0-7']
+  lo, hi = map(int, cmd[2].split('-'))
+  assert lo == 0 and hi == 7  # cpu0 is never offline
+
+
+def test_popen_gets_compile_env():
+  seen = {}
+  c, procs = rig()
+  inner = c.popen
+  def popen(cmd, **kw):
+    seen.update(kw)
+    return inner(cmd, **kw)
+  c.popen = popen
+  run(c)
+  assert seen['env']['PYTHONPATH'].startswith(str(cc.ROOT / 'tinygrad_repo')) and seen['cwd'] == str(cc.ROOT)
