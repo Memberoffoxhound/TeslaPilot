@@ -12,25 +12,23 @@ try:
 except (ImportError, OSError):
   _STUB = types.ModuleType("openpilot.common.params")
 
+from openpilot.conftest import FakeParams
 
-class FakeParams:
-  def __init__(self, *a, **k):
-    pass
 
-  def get_bool(self, key, *a, **k):
-    return key == "AutoLaneChangeEnabled"
+def AlcParams(*a, **k):
+  return FakeParams(AutoLaneChangeEnabled=True)
 
 
 @pytest.fixture
 def dh_module(monkeypatch):
   if _STUB is not None:
-    _STUB.Params = FakeParams
+    _STUB.Params = AlcParams
     monkeypatch.setitem(sys.modules, "openpilot.common.params", _STUB)
     for m in ("openpilot.selfdrive.controls.lib.auto_lane_change", "openpilot.selfdrive.controls.lib.desire_helper"):
       sys.modules.pop(m, None)
   from openpilot.selfdrive.controls.lib import auto_lane_change as alc
   from openpilot.selfdrive.controls.lib import desire_helper as dh
-  monkeypatch.setattr(alc, "Params", FakeParams)
+  monkeypatch.setattr(alc, "Params", AlcParams)
   return dh, alc
 
 

@@ -1,6 +1,7 @@
 from openpilot.cereal import custom, log
 from opendbc.car import structs
 from opendbc.sunnypilot.structs import CarParamsSP
+from openpilot.conftest import FakeParams
 from openpilot.selfdrive.selfdrived.events import Events
 from openpilot.selfdrive.selfdrived.state import StateMachine
 from openpilot.sunnypilot.mads.mads import ModularAssistiveDrivingSystem
@@ -9,17 +10,6 @@ from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
 EventName = log.OnroadEvent.EventName
 EventNameSP = custom.OnroadEventSP.EventName
 ButtonType = structs.CarState.ButtonEvent.Type
-
-
-class FakeParams:
-  def __init__(self, values):
-    self.values = values
-
-  def get_bool(self, key, block=False):
-    return bool(self.values.get(key, False))
-
-  def get(self, key, block=False, return_default=False):
-    return self.values.get(key, 0)
 
 
 class FakeSelfdrive:

@@ -1,15 +1,5 @@
+from openpilot.conftest import FakeParams
 from openpilot.system.hardware.accel_detect import AccelDetect, GRACE_S, PROBE_S, ABSENT_S
-
-
-class FakeParams(dict):
-  def get(self, key):
-    return super().get(key)
-
-  def put(self, key, value):
-    self[key] = value
-
-  def get_bool(self, key):
-    return bool(super().get(key, False))
 
 
 class Rig:

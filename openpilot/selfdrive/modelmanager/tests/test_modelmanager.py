@@ -19,6 +19,8 @@ from unittest import mock
 
 import pytest
 
+from openpilot.conftest import setup_params_root
+
 from openpilot.selfdrive import jetlink_adapter as ja
 from openpilot.selfdrive import modelmanager as mm
 from openpilot.selfdrive.modelmanager import store
@@ -43,15 +45,13 @@ CATALOG = {'tinygrad_ref': 'x', 'bundles': [bundle(REF_A, 'Alpha', 1), bundle(RE
 
 @pytest.fixture(autouse=True)
 def params_root(tmp_path, monkeypatch):
-  monkeypatch.setenv('PARAMS_ROOT', str(tmp_path))
-  monkeypatch.delenv('OPENPILOT_PREFIX', raising=False)
   store._store.clear()
   # no params library here: Params() fails and every read is the file
   monkeypatch.setattr(store, '_params', mock.Mock(side_effect=ImportError('no params_pyx')))
   monkeypatch.setattr(ja, 'accel_mode', lambda chestnut=None: 'none')
   monkeypatch.setattr(ja, 'big_catalog', lambda selector: (_ for _ in ()).throw(AssertionError('big_catalog')))
   monkeypatch.setattr(ja, 'listed_ref', lambda ref: None)
-  return tmp_path / 'd'
+  return setup_params_root(tmp_path, monkeypatch)
 
 
 class Clock:

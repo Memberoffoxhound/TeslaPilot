@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from openpilot.conftest import setup_params_root
+
 from openpilot.selfdrive import jetlink_adapter as ja
 from openpilot.system.hardware import jetlink_power as jp
 
@@ -14,15 +16,13 @@ ROOT = Path(__file__).resolve().parents[4]
 
 @pytest.fixture(autouse=True)
 def params_root(tmp_path, monkeypatch):
-  monkeypatch.setenv('PARAMS_ROOT', str(tmp_path))
-  monkeypatch.delenv('OPENPILOT_PREFIX', raising=False)
   # zoompilot: SHUTDOWN_REQUEST lives in jetlink.comma.gadget, not the adapter
   try:
     import jetlink.comma.gadget as gadget
     monkeypatch.setattr(gadget, 'SHUTDOWN_REQUEST', tmp_path / 'no-request')
   except Exception:
     pass
-  return tmp_path / 'd'
+  return setup_params_root(tmp_path, monkeypatch)
 
 
 class Clock:

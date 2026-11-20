@@ -5,27 +5,17 @@ from opendbc.car.hyundai.values import HyundaiFlags
 from opendbc.car.volkswagen.values import VolkswagenFlags
 from opendbc.sunnypilot.structs import CarParamsSP
 from opendbc.sunnypilot.car.tesla.values import TeslaFlagsSP
+from openpilot.conftest import FakeParams
 from openpilot.sunnypilot.mads.helpers import MadsSteeringModeOnBrake, mads_has_button, mads_main_reported, read_steering_mode_param, \
                                              set_car_specific_params
 
 BUS = int(TeslaFlagsSP.HAS_VEHICLE_BUS)
 
+_MADS = dict(MadsSteeringMode=0, MadsUnifiedEngagementMode=False, MadsMainCruiseAllowed=True, TeslaMadsScreenButton=0)
 
-class FakeParams:
-  def __init__(self, **values):
-    self.values = {"MadsSteeringMode": 0, "MadsUnifiedEngagementMode": False, "MadsMainCruiseAllowed": True, "TeslaMadsScreenButton": 0}
-    self.values.update(values)
 
-  def get(self, key, return_default=False, block=False):
-    return self.values.get(key)
-
-  def put(self, key, value, block=False):
-    self.values[key] = value
-
-  put_bool = put
-
-  def remove(self, key):
-    self.values.pop(key, None)
+def FakeMadsParams(**values):
+  return FakeParams(**_MADS, **values)
 
 
 def car(brand, flags=0, sp_flags=0):
@@ -38,7 +28,7 @@ def car(brand, flags=0, sp_flags=0):
 @pytest.mark.parametrize("sp_flags, screen", [(0, 0), (BUS, 0), (BUS, 1), (BUS, 3)])
 def test_tesla_brake_always_disengages(sp_flags, screen):
   CP, CP_SP = car("tesla", sp_flags=sp_flags)
-  params = FakeParams(TeslaMadsScreenButton=screen)
+  params = FakeMadsParams(TeslaMadsScreenButton=screen)
   assert read_steering_mode_param(CP, CP_SP, params) == MadsSteeringModeOnBrake.DISENGAGE
   set_car_specific_params(CP, CP_SP, params)
   assert params.values["MadsSteeringMode"] == 2
@@ -47,7 +37,7 @@ def test_tesla_brake_always_disengages(sp_flags, screen):
 
 def test_brake_mode_kept_elsewhere():
   CP, CP_SP = car("toyota")
-  assert read_steering_mode_param(CP, CP_SP, FakeParams(MadsSteeringMode=0)) == MadsSteeringModeOnBrake.REMAIN_ACTIVE
+  assert read_steering_mode_param(CP, CP_SP, FakeMadsParams(MadsSteeringMode=0)) == MadsSteeringModeOnBrake.REMAIN_ACTIVE
 
 
 @pytest.mark.parametrize("brand, flags, main", [
@@ -68,7 +58,7 @@ def test_has_button():
 @pytest.mark.parametrize("brand", ["psa", "byd", "mg"])
 def test_cruise_only_brands_force_unified(brand):
   CP, CP_SP = car(brand)
-  params = FakeParams()
+  params = FakeMadsParams()
   set_car_specific_params(CP, CP_SP, params)
   assert params.values["MadsUnifiedEngagementMode"] is True
   assert "MadsMainCruiseAllowed" not in params.values
@@ -77,6 +67,6 @@ def test_cruise_only_brands_force_unified(brand):
 
 def test_main_brand_untouched():
   CP, CP_SP = car("toyota")
-  params = FakeParams()
+  params = FakeMadsParams()
   set_car_specific_params(CP, CP_SP, params)
-  assert params.values == FakeParams().values
+  assert params.values == FakeMadsParams().values

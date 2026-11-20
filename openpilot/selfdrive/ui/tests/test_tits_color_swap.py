@@ -7,6 +7,8 @@ import textwrap
 
 import pytest
 
+from openpilot.conftest import PARAMS_PROBE_STUB
+
 WHITE = [242, 242, 242]
 LANES = [(40, 200), (120, 230), (416, 306), (500, 340)]  # probe lane lines: near x, far x
 
@@ -19,15 +21,7 @@ PROBE = textwrap.dedent('''
   import json, sys, types
   from types import SimpleNamespace
   import numpy as np
-  # libparams_c.so isn't needed to draw, so a stand-in Params
-  m = types.ModuleType("openpilot.common.params")
-  class Params:
-    def __init__(self, *a, **k): pass
-    def get_bool(self, *a, **k): return False
-    def get(self, *a, **k): return None
-    def __getattr__(self, n): return lambda *a, **k: None
-  m.Params = Params
-  sys.modules["openpilot.common.params"] = m
+  {PARAMS_PROBE_STUB}
 
   import raylib_nb as rl
   from openpilot.cereal import log, custom
@@ -132,7 +126,7 @@ PROBE = textwrap.dedent('''
   ss.enabled, ss.state = True, OP.enabled
   out["tesla_engaged"] = run(fps)[-1]
   print("RESULT" + json.dumps(out))
-''')
+''').replace("{PARAMS_PROBE_STUB}", PARAMS_PROBE_STUB)
 
 
 @pytest.fixture(scope="module")

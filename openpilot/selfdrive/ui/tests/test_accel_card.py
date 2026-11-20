@@ -1,12 +1,5 @@
+from openpilot.conftest import FakeParams
 from openpilot.selfdrive.ui.mici.layouts import accel_card as ac
-
-
-class FakeParams(dict):
-  def get(self, key):
-    return super().get(key)
-
-  def put(self, key, value):
-    self[key] = value
 
 
 def test_card_pages():

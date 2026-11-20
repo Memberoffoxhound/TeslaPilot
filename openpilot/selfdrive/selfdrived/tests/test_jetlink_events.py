@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from openpilot.conftest import setup_params_root
+
 from openpilot.cereal import log
 from openpilot.common.realtime import DT_CTRL
 from openpilot.selfdrive import jetlink_adapter as ja
@@ -19,9 +21,7 @@ OFFER_TICKS, HANDBACK_TICKS, SWITCHING_TICKS = round(3. / DT_CTRL), round(5. / D
 
 @pytest.fixture(autouse=True)
 def params_root(tmp_path, monkeypatch):
-  monkeypatch.setenv('PARAMS_ROOT', str(tmp_path))
-  monkeypatch.delenv('OPENPILOT_PREFIX', raising=False)
-  return tmp_path / 'd'
+  return setup_params_root(tmp_path, monkeypatch)
 
 
 class SM(dict):

@@ -9,6 +9,7 @@ import pytest
 
 from openpilot.selfdrive.car import park_offroad as po
 from openpilot.selfdrive.car import tesla_step_aside as tsa
+from openpilot.conftest import FakeParams
 
 FIXTURES = Path(__file__).parent / "fixtures"
 OP = Path(__file__).resolve().parents[3]
@@ -425,26 +426,6 @@ def test_first_run_n_stays_offroad_r_returns():
 
 
 # -- hooks ---------------------------------------------------------------------------
-
-class FakeParams:
-  def __init__(self, root, d):
-    self.root, self.d = root, dict(d)
-
-  def get_param_path(self):
-    return str(self.root)
-
-  def check_key(self, key):
-    return key
-
-  def get(self, key, return_default=False):
-    return self.d.get(key)
-
-  def put_bool(self, key, value, block=False):
-    self.d[key] = value
-
-  def put(self, key, value, block=False):
-    self.d[key] = value
-
 
 def test_not_parked_hook(tmp_path):
   p = FakeParams(tmp_path, {})
