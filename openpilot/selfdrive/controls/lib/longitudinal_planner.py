@@ -52,11 +52,8 @@ class LongitudinalPlanner:
     self.a_desired_trajectory = np.zeros(CONTROL_N)
     self.j_desired_trajectory = np.zeros(CONTROL_N)
 
-  def _read_braking(self):
-    self.a_cruise_min = max(cruise_min_from_params(self.params), A_CRUISE_MIN)
-
   def on_drive_start(self):
-    self._read_braking()
+    self.a_cruise_min = max(cruise_min_from_params(self.params), A_CRUISE_MIN)
 
   def update(self, sm):
     v_ego = sm['carState'].vEgo
