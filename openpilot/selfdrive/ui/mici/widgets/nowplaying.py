@@ -19,6 +19,15 @@ BTN_BG = rl.Color(40, 40, 40, 255)
 ERROR = rl.Color(230, 200, 180, 255)
 
 
+def _tri(*pts: tuple[float, float]):
+  # raylib_nb has no draw_triangle: fill row by row
+  edges = [(pts[i], pts[(i + 1) % 3]) for i in range(3)]
+  for y in range(int(min(p[1] for p in pts)), int(max(p[1] for p in pts)) + 1):
+    xs = [a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1]) for a, b in edges if a[1] != b[1] and min(a[1], b[1]) <= y <= max(a[1], b[1])]
+    if xs:
+      rl.draw_line(int(min(xs)), y, int(max(xs)) + 1, y, WHITE)
+
+
 def _ellipsize(font, text: str, size: int, width: float) -> str:
   if not text or measure_text_cached(font, text, size).x <= width:
     return text
@@ -107,11 +116,11 @@ class NowPlayingCard(Widget):
   def _draw_prev(self, r: rl.Rectangle):
     cy, mid, s = r.y + r.height / 2, r.x + r.width / 2, r.width / 48.0
     rl.draw_rectangle(int(mid - 12 * s), int(cy - 10 * s), max(3, int(4 * s)), max(16, int(20 * s)), WHITE)
-    rl.draw_triangle(rl.Vector2(mid + 14 * s, cy - 12 * s), rl.Vector2(mid + 14 * s, cy + 12 * s), rl.Vector2(mid - 6 * s, cy), WHITE)
+    _tri((mid + 14 * s, cy - 12 * s), (mid + 14 * s, cy + 12 * s), (mid - 6 * s, cy))
 
   def _draw_next(self, r: rl.Rectangle):
     cy, mid, s = r.y + r.height / 2, r.x + r.width / 2, r.width / 48.0
-    rl.draw_triangle(rl.Vector2(mid - 14 * s, cy - 12 * s), rl.Vector2(mid - 14 * s, cy + 12 * s), rl.Vector2(mid + 6 * s, cy), WHITE)
+    _tri((mid - 14 * s, cy - 12 * s), (mid - 14 * s, cy + 12 * s), (mid + 6 * s, cy))
     rl.draw_rectangle(int(mid + 10 * s), int(cy - 10 * s), max(3, int(4 * s)), max(16, int(20 * s)), WHITE)
 
   def _draw_play_pause(self, r: rl.Rectangle, playing: bool):
@@ -120,7 +129,7 @@ class NowPlayingCard(Widget):
       rl.draw_rectangle(int(mid - 11 * s), int(cy - 13 * s), max(5, int(7 * s)), max(18, int(26 * s)), WHITE)
       rl.draw_rectangle(int(mid + 4 * s), int(cy - 13 * s), max(5, int(7 * s)), max(18, int(26 * s)), WHITE)
     else:
-      rl.draw_triangle(rl.Vector2(mid - 10 * s, cy - 14 * s), rl.Vector2(mid - 10 * s, cy + 14 * s), rl.Vector2(mid + 16 * s, cy), WHITE)
+      _tri((mid - 10 * s, cy - 14 * s), (mid - 10 * s, cy + 14 * s), (mid + 16 * s, cy))
 
   def _handle_mouse_release(self, mouse_pos):
     if ui_state.engaged:
