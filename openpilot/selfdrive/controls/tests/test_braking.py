@@ -1,6 +1,6 @@
 from openpilot.conftest import FakeParams
 from openpilot.selfdrive.controls.lib.cruise_braking import (
-  A_CRUISE_MIN, A_CRUISE_MIN_SOFT, braking_enabled, braking_visible, clamp_cruise_min, cruise_min_from_params)
+  A_CRUISE_MIN, A_CRUISE_MIN_SOFT, clamp_cruise_min, cruise_min_from_params)
 
 
 def test_default_unset_params_are_firm():
@@ -23,11 +23,6 @@ def test_cruise_min_never_below_firm_floor():
   assert clamp_cruise_min(-2.0) == A_CRUISE_MIN
   assert clamp_cruise_min(-1.2) == A_CRUISE_MIN
   assert clamp_cruise_min(-0.5) == -0.5
-
-
-def test_braking_toggle_hidden_without_longitudinal():
-  assert braking_visible(True) is True
-  assert braking_visible(False) is False
 
 
 def test_unknown_key_defaults_to_firm():
@@ -85,7 +80,3 @@ def test_get_cruise_accel_clamp_from_prev_min(params_root):
   assert a == -1.2
 
 
-def test_braking_toggle_disabled_onroad():
-  assert braking_enabled(False) is True
-  assert braking_enabled(True) is False
-  assert braking_visible(True) is True

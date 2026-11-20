@@ -25,11 +25,3 @@ def cruise_min_from_params(params) -> float:
 
 def clamp_cruise_min(a_cruise_min: float) -> float:
   return max(a_cruise_min, A_CRUISE_MIN)
-
-
-def braking_visible(has_longitudinal_control: bool) -> bool:
-  return bool(has_longitudinal_control)
-
-
-def braking_enabled(started: bool) -> bool:
-  return not started
