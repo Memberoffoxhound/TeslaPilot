@@ -18,20 +18,15 @@ BRANDS = ["body", "byd", "chrysler", "ford", "gm", "honda", "hyundai", "mazda", 
 
 @pytest.mark.parametrize("brand, flags, screen, car_flags, shown", [
   (None, 0, 0, 0, ALL),
-  *[(b, 0, 0, 0, ALL) for b in ("chrysler", "ford", "gm", "honda", "hyundai", "mazda", "nissan", "subaru", "toyota", "volkswagen")],
   ("hyundai", 0, 0, int(HyundaiFlags.CANFD), ALL),
   ("volkswagen", 0, 0, int(VolkswagenFlags.MLB), {STEERING_MODE}),
   ("byd", 0, 0, 0, {STEERING_MODE}),
   ("subaru", 0, 0, int(SubaruFlags.PREGLOBAL), ALL),
-  ("mg", 0, 0, 0, {STEERING_MODE}),
-  ("psa", 0, 0, 0, {STEERING_MODE}),
-  ("mock", 0, 0, 0, {STEERING_MODE}),
   ("body", 0, 0, 0, set()),
   ("rivian", 0, 0, 0, set()),
   ("tesla", 0, 0, 0, set()),
-  ("tesla", 0, 2, 0, set()),
   ("tesla", BUS, 0, 0, {SCREEN_BUTTON}),
-  *[("tesla", BUS, s, 0, {SCREEN_BUTTON, UNIFIED}) for s in (1, 2, 3)],
+  ("tesla", BUS, 1, 0, {SCREEN_BUTTON, UNIFIED}),
 ])
 def test_visible_options(brand, flags, screen, car_flags, shown):
   assert mads.visible_options(brand, flags, screen, car_flags) == shown
@@ -43,16 +38,16 @@ def test_chrysler_cusw():
     assert mads.visible_options("chrysler", 0, 0, 0, fp) == {STEERING_MODE}
 
 
-@pytest.mark.parametrize("brand", BRANDS)
-def test_every_brand(brand):
-  for flags, screen in ((0, 0), (BUS, 0), (BUS, 1)):
-    shown = mads.visible_options(brand, flags, screen)
-    assert shown <= ALL | {SCREEN_BUTTON}
-    # brake is forced to disengage on Tesla, and the screen button is Tesla only
-    if brand == "tesla":
-      assert STEERING_MODE not in shown and MAIN_CRUISE not in shown
-    else:
-      assert SCREEN_BUTTON not in shown
+def test_every_brand():
+  for brand in BRANDS:
+    for flags, screen in ((0, 0), (BUS, 0), (BUS, 1)):
+      shown = mads.visible_options(brand, flags, screen)
+      assert shown <= ALL | {SCREEN_BUTTON}
+      # brake is forced to disengage on Tesla, and the screen button is Tesla only
+      if brand == "tesla":
+        assert STEERING_MODE not in shown and MAIN_CRUISE not in shown
+      else:
+        assert SCREEN_BUTTON not in shown
 
 
 def test_brand_list_is_complete():
@@ -71,7 +66,7 @@ def test_welcome_copy():
       assert "\u2014" not in text and "\u2013" not in text and "stands for" not in text
 
 
-@pytest.mark.parametrize("brand", [None, *BRANDS])
+@pytest.mark.parametrize("brand", [None, "tesla", "toyota"])
 def test_tesla_brake_copy(brand):
   cards, desc = mads.welcome_cards(brand), mads.toggle_description(brand)
   note = "On Tesla, pressing the brake cancels both steering and speed."

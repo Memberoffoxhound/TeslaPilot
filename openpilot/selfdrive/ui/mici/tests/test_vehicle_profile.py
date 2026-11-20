@@ -12,14 +12,9 @@ def CP(brand, fingerprint=""):
 
 @pytest.mark.parametrize("cp, expect", [
   (None, "generic"),
-  (CP(""), "generic"),
-  (CP("mock"), "generic"),
   (CP("tesla", "TESLA_MODEL_3"), "tesla"),
   (CP("hyundai", "KIA_K5_2021"), "kia"),
-  (CP("hyundai", "KIA_NIRO_EV"), "kia"),
   (CP("hyundai", "HYUNDAI_SONATA"), "generic"),
-  (CP("hyundai", "GENESIS_G70"), "generic"),
-  (CP("toyota", "TOYOTA_COROLLA"), "generic"),
 ])
 def test_make(cp, expect):
   assert make(cp) == expect

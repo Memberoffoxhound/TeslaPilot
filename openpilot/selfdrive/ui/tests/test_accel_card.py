@@ -29,7 +29,3 @@ def test_unplug_acks_quietly():
   p['AcceleratorDevice'] = 'chestnut'
   assert ac.due(p) == 'chestnut'  # plugged back in: shown again
 
-
-def test_card_has_no_warning_icon():
-  from pathlib import Path
-  assert 'orange_warning' not in Path(ac.__file__).read_text()

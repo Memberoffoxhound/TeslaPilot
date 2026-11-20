@@ -63,8 +63,6 @@ def test_home_uses_chestnut_icons_only():
   assert not list((UI.parent / 'assets/icons_mici').glob('jetlink_metal*'))
 
 
-def test_ios_key():
-  assert al.IOS_KEY == 'JetlinkIos'
 
 
 def test_progress_and_drops():

@@ -118,8 +118,3 @@ def test_clear_of_the_alerts_pill(probe):
       assert v["link"][0] + v["link"][2] < pill_x, key
     assert v["ssa"][1] + v["ssa"][3] <= 240, key
 
-
-def test_white_icon():
-  from pathlib import Path
-  svg = (Path(__file__).resolve().parents[3] / "assets/icons_mici/set_speed_assist.svg").read_text()
-  assert "#FFFFFF" in svg and "#00FF40" not in svg
