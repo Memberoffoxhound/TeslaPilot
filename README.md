@@ -66,22 +66,22 @@ The driving model doesn't know your set speed, so it often drives slower than yo
 
 Off by default. Turn it on in **Settings → toggles → set speed assist**. It needs openpilot longitudinal control (**Settings → developer → alpha longitudinal**) and does nothing without it. When it's on, the icon above shows on Home. Tap it to get back to the toggle.
 
-### TITS
+### MADS
 
-**T.I.T.S. - Trajectory Independent Torque Steering.** Tesla gave you ASS (Actually Smart Summon). TeslaPilot gives you T.I.T.S.
+**MADS - Modular Assistive Driving System.**
 
 Credit: ported from [sunnypilot](https://github.com/sunnypilot/sunnypilot)'s MADS, see [Credits](#credits).
 
-Off by default. Turn it on in **Settings → toggles → TITS**. With TITS on, TeslaPilot keeps steering when you cancel cruise while you handle speed. Engage cruise again to get speed control back. On a Tesla, pressing the brake still turns both off. Only the TITS options that work on your car show under the toggle.
+Off by default. Turn it on in **Settings → toggles → MADS**. With MADS on, TeslaPilot keeps steering when you cancel cruise while you handle speed. Engage cruise again to get speed control back. On a Tesla, pressing the brake still turns both off. Only the MADS options that work on your car show under the toggle.
 
 The Home badge and onroad wheel. Colors are for the default Tesla theme; with the openpilot theme, blue is green.
 
 | | |
 |:---:|:---|
-| <img src="docs/screenshots/icon-tits.png" height="80" alt="TITS"> | **TITS**: shows on Home while TITS is on. Tap to open the toggle. |
+| <img src="docs/screenshots/icon-mads.png" height="80" alt="MADS"> | **MADS**: shows on Home while MADS is on. Tap to open the toggle. |
 | <img src="docs/screenshots/icon-wheel-engaged.png" height="80" alt="Engaged"> | **Blue**: openpilot is engaged. |
-| <img src="docs/screenshots/icon-wheel-tits.png" height="80" alt="TITS steering"> | **Blue rim**: TITS is steering. You handle speed. |
-| <img src="docs/screenshots/icon-wheel-tits-paused.png" height="80" alt="TITS paused"> | **Dim rim**: TITS is on but not steering, like in Park or Reverse. |
+| <img src="docs/screenshots/icon-wheel-mads.png" height="80" alt="MADS steering"> | **Blue rim**: MADS is steering. You handle speed. |
+| <img src="docs/screenshots/icon-wheel-mads-paused.png" height="80" alt="MADS paused"> | **Dim rim**: MADS is on but not steering, like in Park or Reverse. |
 | <img src="docs/screenshots/icon-wheel-override.png" height="80" alt="Override"> | **White**: you're overriding, like with the gas pedal. |
 | <img src="docs/screenshots/icon-wheel-off.png" height="80" alt="Off"> | **Gray**: nothing is steering. |
 
@@ -139,7 +139,7 @@ The badge at the bottom of Home shows who handles gas and brake:
 |:---:|:---|
 | <img src="docs/screenshots/icon-tacc.png" height="80" alt="TACC"> | **TACC**: Tesla handles gas and brake. openpilot steers. |
 | <img src="docs/screenshots/icon-long.png" height="80" alt="LONG"> | **LONG**: openpilot handles gas and brake (alpha, **Settings → developer → alpha longitudinal**). |
-| <img src="docs/screenshots/icon-tits.png" height="80" alt="TITS"> | **TITS**: shows next to LONG or TACC when TITS is on. |
+| <img src="docs/screenshots/icon-mads.png" height="80" alt="MADS"> | **MADS**: shows next to LONG or TACC when MADS is on. |
 
 On other cars it shows **SCC** for a Kia and **STOCK / ACC** for everything else.
 
@@ -187,7 +187,7 @@ TeslaPilot is built on the work of these people and projects. Thank you!
 | Set Speed Assist | Zeph Leggett / zoompilot | [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot), [sunnypilot/sunnypilot#2083](https://github.com/sunnypilot/sunnypilot/pull/2083) |
 | Jetlink big model | Zeph Leggett / zoompilot (MIT) | [zoompilot/jetlink](https://github.com/zoompilot/jetlink), [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot) |
 | Model picker | zoompilot's wiring of sunnypilot's model manager | [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot) |
-| TITS (MADS) | sunnypilot | [sunnypilot/sunnypilot](https://github.com/sunnypilot/sunnypilot), [sunnypilot/opendbc](https://github.com/sunnypilot/opendbc), [sunnypilot/panda](https://github.com/sunnypilot/panda) |
+| MADS | sunnypilot | [sunnypilot/sunnypilot](https://github.com/sunnypilot/sunnypilot), [sunnypilot/opendbc](https://github.com/sunnypilot/opendbc), [sunnypilot/panda](https://github.com/sunnypilot/panda) |
 | Step aside, fingerprint fallback, Tesla theme, drive stats, web page | Memberoffoxhound | [TeslaPilot](https://github.com/Memberoffoxhound/TeslaPilot) |
 | TESLA font (wordmark) | KAYOver, based on TeslaNikolaCaps by Shane Milburn | [dafont](https://www.dafont.com/tesla.font) |
 | Inter font | Rasmus Andersson | [rsms/inter](https://github.com/rsms/inter) |
@@ -195,7 +195,7 @@ TeslaPilot is built on the work of these people and projects. Thank you!
 | First day of the week (`weekstart.json`) | Unicode CLDR | [cldr.unicode.org](https://cldr.unicode.org/) |
 | Everything else | comma.ai openpilot, opendbc, panda | [commaai/openpilot](https://github.com/commaai/openpilot) |
 
-TITS: This project uses software from Haibin Wen and SUNNYPILOT LLC and is licensed under a custom license requiring permission for use.
+MADS: This project uses software from Haibin Wen and SUNNYPILOT LLC and is licensed under a custom license requiring permission for use.
 
 ## License
 
@@ -204,7 +204,7 @@ openpilot and TeslaPilot are released under the [MIT license](LICENSE). Some par
 - **Jetlink** ([zoompilot/jetlink](https://github.com/zoompilot/jetlink)): MIT, Copyright (c) 2026 Zeph Leggett. See `jetlink_repo/LICENSE`.
 - **TESLA font**: [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/), non-commercial use only. See `openpilot/selfdrive/assets/fonts/TESLA-LICENSE.txt`.
 - **Inter font**: [SIL Open Font License 1.1](https://openfontlicense.org).
-- **TITS** (MADS port): sunnypilot's license, kept in each repo with ported code as `LICENSE.sunnypilot`.
+- **MADS** port: sunnypilot's license, kept in each repo with ported code as `LICENSE.sunnypilot`.
 - **Time zone table** (`openpilot/selfdrive/ui/tripstats/tzgrid.bin`): built from [timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder) data, © OpenStreetMap contributors, under the [Open Database License (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/).
 - **First day of the week** (`openpilot/selfdrive/ui/tripstats/weekstart.json`): from Unicode CLDR data, © Unicode, Inc., under the [Unicode License v3](https://www.unicode.org/license.txt).
 
