@@ -28,3 +28,11 @@ def test_cruise_min_never_below_firm_floor():
 def test_braking_toggle_hidden_without_longitudinal():
   assert braking_visible(True) is True
   assert braking_visible(False) is False
+
+
+def test_unknown_key_defaults_to_firm():
+  from openpilot.common.params import UnknownKeyName
+  class Boom:
+    def get(self, *a, **k):
+      raise UnknownKeyName(b"BrakingFirm")
+  assert cruise_min_from_params(Boom()) == A_CRUISE_MIN == -1.2

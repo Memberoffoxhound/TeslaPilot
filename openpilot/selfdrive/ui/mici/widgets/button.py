@@ -13,9 +13,10 @@ if TYPE_CHECKING:
   from openpilot.common.params import Params
 else:
   try:
-    from openpilot.common.params import Params
+    from openpilot.common.params import Params, UnknownKeyName
   except (ImportError, OSError):
     Params = None
+    UnknownKeyName = type("UnknownKeyName", (Exception,), {})
 
 COMPLICATION_SIZE    = 36
 LABEL_COLOR          = rl.Color(255, 255, 255, int(255 * 0.9))
@@ -456,7 +457,10 @@ class BigMultiBoolParamToggle(BigMultiToggle):
     self._load_value()
 
   def _firm(self) -> bool:
-    val = self._params.get(self._param, return_default=True)
+    try:
+      val = self._params.get(self._param, return_default=True)
+    except UnknownKeyName:
+      return self._default
     if val is None or val == "" or val == b"":
       return self._default
     if isinstance(val, (bytes, bytearray)):

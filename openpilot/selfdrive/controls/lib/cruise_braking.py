@@ -1,3 +1,5 @@
+from openpilot.common.params import UnknownKeyName
+
 A_CRUISE_MIN = -1.2
 A_CRUISE_MIN_SOFT = -0.5
 BRAKING_FIRM_PARAM = "BrakingFirm"
@@ -6,7 +8,7 @@ BRAKING_FIRM_PARAM = "BrakingFirm"
 def cruise_min_from_params(params) -> float:
   try:
     val = params.get(BRAKING_FIRM_PARAM, return_default=True)
-  except (KeyError, OSError, TypeError, AttributeError):
+  except (KeyError, OSError, TypeError, AttributeError, UnknownKeyName):
     return A_CRUISE_MIN
   if val is None or val == "" or val == b"":
     firm = True
