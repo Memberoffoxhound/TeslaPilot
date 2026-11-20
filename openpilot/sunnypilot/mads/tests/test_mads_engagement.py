@@ -136,12 +136,12 @@ class TestBrakeAllModes:
     assert self._brake(2) == ((False, False), (False, False))
 
 
-def test_disengage_on_accelerator_follows_selfdrive(monkeypatch):
-  # Params() at init is True; the live selfdrive copy is then flipped to False
-  monkeypatch.setattr("openpilot.sunnypilot.mads.mads.Params", lambda *a, **k: FakeParams(DisengageOnAccelerator=True))
+def test_disengage_on_accelerator_follows_selfdrive():
   sd = FakeSelfdrive("toyota", mads_on=True)
-  sd.disengage_on_accelerator = False
   sd.CS_prev.gasPressed = False
   CS = car_state(gas=True)
   sd.events.add(EventName.pedalPressed)
+  sd.disengage_on_accelerator = True
+  assert not sd.mads.pedal_pressed_non_gas_pressed(CS)
+  sd.disengage_on_accelerator = False
   assert sd.mads.pedal_pressed_non_gas_pressed(CS)
