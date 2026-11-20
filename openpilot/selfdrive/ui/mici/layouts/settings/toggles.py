@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
 from openpilot.cereal import log
-from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigToggle, BigButton, GreyBigButton
+from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigToggle, BigButton
 from openpilot.selfdrive.ui.mici.widgets.dialog import SettingDescriptionDialog, wire_confirm
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.system.ui.lib.application import gui_app, MousePos
@@ -17,7 +17,6 @@ from openpilot.selfdrive.ui.mici.layouts.settings.initial_cruise_speed import In
 from openpilot.selfdrive.ui import mads
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
-TITS_CARD_FONT = 30
 
 
 class AutoLaneChangeConfirmPage(NavScroller):
@@ -46,23 +45,10 @@ class ParkOffroadConfirmPage(NavScroller):
     ], on_confirm)
 
 
-class _TitsTitleCard(GreyBigButton):
-  # the expansion with the ASS line under it, smaller to fit one card
-  def __init__(self, title: str, under: str):
-    super().__init__(title, under)
-    self._label.set_font_size(TITS_CARD_FONT)
-    self._sub_label.set_font_size(TITS_CARD_FONT)
-
-  def _get_label_font_size(self):
-    return TITS_CARD_FONT
-
-
 class TitsConfirmPage(NavScroller):
   def __init__(self, on_confirm: Callable[[], None], brand: str | None = None):
     super().__init__()
-    cards = mads.welcome_cards(brand)
-    title, under = cards[0]
-    wire_confirm(self, "enabling\nTITS", [_TitsTitleCard(title, under), *cards[1:]], on_confirm)
+    wire_confirm(self, "enabling\nMADS", mads.welcome_cards(brand), on_confirm)
 
 
 class _ParamCycle(BigButton):
@@ -120,23 +106,23 @@ class TogglesLayoutMici(NavScroller):
     self._initial_cruise_speed = InitialCruiseSpeedButton()
 
     # TITS (MADS), changes only offroad; sub-options only for the car's brand
-    self._tits_btn = BigToggle("TITS", initial_state=ui_state.params.get_bool("Mads"), toggle_callback=self._on_tits,
+    self._tits_btn = BigToggle("MADS", initial_state=ui_state.params.get_bool("Mads"), toggle_callback=self._on_tits,
                                description=mads.toggle_description(None))
     # Tesla adds the brake note, so read the brand when the description opens
-    self._tits_btn.set_long_press_callback(lambda: gui_app.push_widget(SettingDescriptionDialog("TITS", mads.toggle_description(self._brand()))))
-    self._tits_main_cruise = BigParamControl("TITS with main cruise", mads.MAIN_CRUISE,
-                                             description="Turning main cruise on also turns TITS on.\n" +
-                                                         "Without a TITS button on the wheel, turning this off keeps TITS from engaging.")
-    self._tits_unified = BigParamControl("TITS with cruise", mads.UNIFIED,
-                                         description="Engaging cruise also engages TITS.\n" +
-                                                     "TITS then stays on until you turn it off with its button or turn the car off.")
-    self._tits_brake = BigMultiParamToggle("TITS on brake", mads.STEERING_MODE, mads.STEERING_MODES,
-                                           description="Remain active: TITS keeps steering while you brake.\n" +
-                                                       "Pause: TITS pauses while you brake and resumes after.\n" +
-                                                       "Disengage: braking turns TITS off.")
-    self._tits_screen = BigMultiParamToggle("TITS screen button", mads.SCREEN_BUTTON, mads.SCREEN_BUTTONS,
+    self._tits_btn.set_long_press_callback(lambda: gui_app.push_widget(SettingDescriptionDialog("MADS", mads.toggle_description(self._brand()))))
+    self._tits_main_cruise = BigParamControl("MADS with main cruise", mads.MAIN_CRUISE,
+                                             description="Turning main cruise on also turns MADS on.\n" +
+                                                         "Without a MADS button on the wheel, turning this off keeps MADS from engaging.")
+    self._tits_unified = BigParamControl("MADS with cruise", mads.UNIFIED,
+                                         description="Engaging cruise also engages MADS.\n" +
+                                                     "MADS then stays on until you turn it off with its button or turn the car off.")
+    self._tits_brake = BigMultiParamToggle("MADS on brake", mads.STEERING_MODE, mads.STEERING_MODES,
+                                           description="Remain active: MADS keeps steering while you brake.\n" +
+                                                       "Pause: MADS pauses while you brake and resumes after.\n" +
+                                                       "Disengage: braking turns MADS off.")
+    self._tits_screen = BigMultiParamToggle("MADS screen button", mads.SCREEN_BUTTON, mads.SCREEN_BUTTONS,
                                             select_callback=lambda _: self._refresh_tits(),
-                                            description="Touch the Tesla screen with this many fingers to turn TITS on or off.")
+                                            description="Touch the Tesla screen with this many fingers to turn MADS on or off.")
     self._tits_visible: set[str] = set()
     for key, w in ((mads.MAIN_CRUISE, self._tits_main_cruise), (mads.UNIFIED, self._tits_unified),
                    (mads.STEERING_MODE, self._tits_brake), (mads.SCREEN_BUTTON, self._tits_screen)):

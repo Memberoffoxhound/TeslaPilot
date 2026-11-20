@@ -266,7 +266,7 @@ class TitsBadge(Widget):
   def _render(self, _) -> None:
     x, y = self.rect.x, self.rect.y
     rl.draw_texture_ex(self._wheel, rl.Vector2(x, y + (self.H - self._wheel.height) / 2), 0.0, 1.0, WHITE)
-    draw_vertical_label(_label_font(), "TITS", x + self.WHEEL + VLABEL_GAP, y)
+    draw_vertical_label(_label_font(), "MADS", x + self.WHEEL + VLABEL_GAP, y)
 
 
 class MiciHomeLayout(Widget):

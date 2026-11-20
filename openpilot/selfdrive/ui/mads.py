@@ -2,9 +2,9 @@
 from opendbc.sunnypilot.car.tesla.values import MadsScreenButtonType, TeslaFlagsSP
 from openpilot.sunnypilot.mads.helpers import MADS_NO_ACC_MAIN_BUTTON, get_mads_limited_brands, mads_has_button, mads_main_reported
 
-TITS_TITLE = "TITS - Trajectory Independent Torque Steering"
+TITS_TITLE = "MADS - Modular Assistive Driving System"
 TITS_WELCOME: list = [
-  ("TITS - Trajectory\nIndependent Torque Steering", "Tesla gave you ASS.\nTeslaPilot gives you TITS."),
+  "MADS - Modular Assistive Driving System",
   "TeslaPilot will continue steering when you cancel cruise while you handle speed.",
   "Engage cruise again to get speed control back.",
 ]

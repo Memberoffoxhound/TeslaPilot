@@ -64,10 +64,8 @@ def test_brand_list_is_complete():
 
 
 def test_welcome_copy():
-  assert mads.TITS_TITLE == "TITS - Trajectory Independent Torque Steering"
-  title, under = mads.TITS_WELCOME[0]
-  assert title.replace("\n", " ") == mads.TITS_TITLE
-  assert under.replace("\n", " ") == "Tesla gave you ASS. TeslaPilot gives you TITS."
+  assert mads.TITS_TITLE == "MADS - Modular Assistive Driving System"
+  assert mads.TITS_WELCOME[0] == mads.TITS_TITLE
   for card in mads.TITS_WELCOME:
     for text in (card if isinstance(card, tuple) else (card,)):
       assert "\u2014" not in text and "\u2013" not in text and "stands for" not in text
