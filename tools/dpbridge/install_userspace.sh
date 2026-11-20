@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The dpbridge installer, run with openpilot down: Bluetooth firmware, the dpbridge BlueZ build, bluez-alsa,
 # bonds kept on /data, the services, and last the kernel on the inactive slot with one reboot as the final step.
-# On a stock kernel it always flashes, also after a restore; /data/dpbridge/disable or a failed try stop it unless --reflash.
+# On a stock kernel it flashes only with --accept-kernel (the user read kernel_warning.txt), also after a restore;
+# /data/dpbridge/disable or a failed try stop it unless --reflash.
 # Debs are kept on /data and installed with dpkg --ignore-depends=udev --force-confold, skipped if present.
 # Never apt-get install, never apt --fix-broken, never install udev. An AGNOS update undoes the rootfs changes.
 # Prints the plan only unless --yes.
@@ -10,11 +11,13 @@ YES=0
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 REFLASH=0
+ACCEPT=0
 for a in "$@"; do
   case $a in
     --yes) YES=1 ;;
     --reflash) REFLASH=1 ;;
-    *) echo "usage: install_userspace.sh [--yes] [--reflash]"; exit 2 ;;
+    --accept-kernel) ACCEPT=1 ;;
+    *) echo "usage: install_userspace.sh [--yes] [--reflash] [--accept-kernel]"; exit 2 ;;
   esac
 done
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -40,6 +43,7 @@ kernel_step() {
     # nothing to flash here; the rest of the install still counts
     unsupported_agnos | unsupported_device | no_space) echo "  kernel: $st, not flashed"; return 1 ;;
   esac
+  if [ $YES = 1 ] && [ $ACCEPT = 0 ]; then echo "  kernel: needs consent, not flashed (pass --accept-kernel)"; return 1; fi
   [ $YES = 1 ] && a+=(--yes)
   [ $REFLASH = 1 ] && a+=(--retry)
   local rc=0
@@ -48,6 +52,9 @@ kernel_step() {
   [ $rc = 0 ] || die "kernel flash failed, see kernel.sh status"
   [ $YES = 1 ]
 }
+
+# the warning the user agrees to, whenever this run could flash
+if [ "$($SUDO "${KSH[@]}" status | sed -n 's/^state=//p')" = offer ]; then warning_text "$HERE/kernel_warning.txt"; fi
 
 echo "[1/4] last kernel flash"
 if [ $YES = 1 ]; then $SUDO "${KSH[@]}" post-boot --yes; else $SUDO "${KSH[@]}" post-boot; fi

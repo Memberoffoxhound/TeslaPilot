@@ -18,8 +18,9 @@ exec cp "${a[@]}"
 '''
 
 
-def deliver(env, *args):
-  return subprocess.run(['bash', str(HERE / 'mac/deliver.sh'), '-i', env['KEYFILE'], *args], env=env, capture_output=True, text=True)
+def deliver(env, *args, answer='yes\n'):
+  return subprocess.run(['bash', str(HERE / 'mac/deliver.sh'), '-i', env['KEYFILE'], *args], env=env, capture_output=True, text=True,
+                        input=answer)
 
 
 def setup_env(dev):
@@ -173,6 +174,38 @@ def test_install_yes_runs_detached_from_ssh(dev):
   assert int((remote / 'sid').read_text()) != os.getsid(0)
 
 
+def test_install_yes_shows_the_warning_and_needs_a_typed_yes(dev):
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  assert (remote / 'kernel_warning.txt').exists()
+  stub_install(remote, 'echo installed')
+  for answer in ('no\n', ''):
+    r = deliver(dict(env, DPB_POLL_S='0.2'), 'install', '--yes', answer=answer)
+    assert r.returncode != 0 and 'not confirmed, nothing was run' in r.stderr
+    assert 'caution: a bad flash can brick the comma' in r.stdout and not (remote / 'install.log').exists()
+  r = deliver(dict(env, DPB_POLL_S='0.2'), 'install', '--yes')
+  assert r.returncode == 0 and 'type yes to flash the kernel' in r.stdout
+  assert 'args --yes --accept-kernel' in (remote / 'install.log').read_text()
+
+
+def test_install_accept_kernel_skips_the_prompt(dev):
+  env, remote, home = setup_env(dev)
+  assert deliver(env, 'push').returncode == 0
+  stub_install(remote, 'echo installed')
+  r = deliver(dict(env, DPB_POLL_S='0.2'), 'install', '--yes', '--accept-kernel', answer='')
+  assert r.returncode == 0 and 'type yes' not in r.stdout and 'custom kernel required' in r.stdout
+  assert 'args --yes --accept-kernel' in (remote / 'install.log').read_text()
+
+
+def test_mac_and_comma_print_the_same_warning():
+  def fn(path):
+    t = (HERE / path).read_text()
+    i = t.index('warning_text() {')
+    return t[i:t.index('\n}\n', i)]
+  assert fn('mac/deliver.sh') == fn('lib.sh')
+  assert 'kernel_warning.txt' in (HERE / 'mac/make_bundle.sh').read_text()
+
+
 def test_install_failure_is_reported(dev):
   env, remote, home = setup_env(dev)
   assert deliver(env, 'push').returncode == 0
@@ -194,7 +227,9 @@ def test_install_refuses_a_second_run(dev):
   assert deliver(env, 'push').returncode == 0
   stub_install(remote, 'sleep 3')
   p = subprocess.Popen(['bash', str(HERE / 'mac/deliver.sh'), '-i', env['KEYFILE'], 'install', '--yes'],
-                       env=dict(env, DPB_POLL_S='0.2'), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                       env=dict(env, DPB_POLL_S='0.2'), stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+  p.stdin.write(b'yes\n')
+  p.stdin.close()
   try:
     import time
     time.sleep(1)

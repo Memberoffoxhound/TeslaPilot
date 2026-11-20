@@ -1,0 +1,35 @@
+# The dpbridge kernel warning: one card per block. Shown on the comma before the first flash
+# (openpilot/system/dpbridge/kernel_page.py) and printed by install_userspace.sh and mac/deliver.sh.
+# "title:" is a card's bold title (\n breaks the line on screen), "icon:" its icon, the rest its text.
+
+title: custom kernel\nrequired
+icon: warning
+for Bluetooth
+
+This branch needs its own kernel to turn on Bluetooth.
+
+title: caution: a bad\nflash can brick\nthe comma
+icon: red
+
+Recovery may need QDL mode and a full reflash that wipes your data.
+
+title: fallbacks if\nsomething fails
+icon: restore
+
+Both boot slots are backed up first.
+
+Only the unused slot is written. The running one is not.
+
+Every write is read back before the slot switches.
+
+If it won't boot, it should go back to stock. Not yet tested.
+
+title: go back to stock\nlater over SSH
+icon: restore
+restore_boot.sh
+
+title: last resort: full\nreflash, wipes data
+icon: restore
+flash.comma.ai
+
+Takes a few minutes and one reboot. Stay parked.

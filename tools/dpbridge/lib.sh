@@ -36,3 +36,9 @@ slot_num() { case $1 in _a) echo 0 ;; _b) echo 1 ;; *) die "unknown slot '$1'" ;
 # kernel flash step and percent, one line each in the installer output
 progress() { if [ "$YES" = 1 ]; then echo "  kernel: $1 $2%"; fi; }
 other() { case $1 in _a) echo _b ;; _b) echo _a ;; *) die "unknown slot '$1'" ;; esac; }
+
+# kernel_warning.txt as plain text: titles on their own line, card text indented under them or as "- " lines
+warning_text() {
+  awk '/^#/ || /^icon:/ {next} /^title:/ {sub(/^title: */, ""); gsub(/\\n/, " "); print; t=1; next}
+       NF {print (t ? "  " : "- ") $0; next} {t=0}' "$1"
+}

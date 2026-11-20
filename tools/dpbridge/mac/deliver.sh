@@ -8,7 +8,8 @@
 #   qdl-check    read-only QDL test on the Mac: proves the rescue path works on this comma before any flash
 #   flash        flash_boot.sh as a dry run; with --yes it flashes detached from SSH, then pulls the boot backups
 #   backup-pull  copy /data/dpbridge/backup to ~/dpbridge-backup/<date>/ and check sha256
-#   install      install_userspace.sh (dry run unless --yes; with --yes detached from SSH, log in install.log)
+#   install      install_userspace.sh (dry run unless --yes; with --yes it shows the kernel warning, asks for a
+#                typed yes, then runs detached from SSH with --accept-kernel, log in install.log)
 #   attach       one manual chip bring-up for 20 s, output saved to ~/dpbridge-backup/<date>/attach.txt
 #   enable       car off: start Bluetooth on every boot (after attach looked good); A2DP plays through soundd;
 #                disable turns it off again
@@ -46,6 +47,11 @@ dev() { r "export DPB_DIR=$REMOTE; $*"; }  # a device script, told where it live
 put() { scp -q "${SSH_OPTS[@]}" -P "$PORT" "$@"; }
 get() { scp -q "${SSH_OPTS[@]}" -P "$PORT" "$@"; }
 die() { echo "error: $*" >&2; exit 1; }
+# kernel_warning.txt as plain text, as lib.sh prints it on the comma
+warning_text() {
+  awk '/^#/ || /^icon:/ {next} /^title:/ {sub(/^title: */, ""); gsub(/\\n/, " "); print; t=1; next}
+       NF {print (t ? "  " : "- ") $0; next} {t=0}' "$1"
+}
 local_sha() { shasum -a 256 "$1" | cut -d' ' -f1; }
 remote_sha() { r "sha256sum $1" | cut -d' ' -f1; }
 # / is read-only on AGNOS: open it for systemctl, always close it again, keep systemctl's rc
@@ -125,7 +131,7 @@ case $CMD in
     push_file "$BOOT"
     for f in firmware.sha256 qca.sha256 $(awk '{print $2}' "$FW/firmware.sha256"); do push_file "$FW/$f"; done
     push_file "$BOOT.sha256"
-    for f in "$SRC"/*.sh "$SRC"/*.py "$SRC/asound.conf"; do push_file "$f"; done
+    for f in "$SRC"/*.sh "$SRC"/*.py "$SRC/asound.conf" "$SRC/kernel_warning.txt"; do push_file "$f"; done
     r "chmod +x $REMOTE/*.sh $REMOTE/*.py"
     if [ -f "$HERE/dpbridge.bundle" ]; then push_file "$HERE/dpbridge.bundle"; fi
     ;;
@@ -149,7 +155,21 @@ case $CMD in
   install)
     reach
     case " $ARGS " in
-      *" --yes "*) detached install install_userspace.sh "bash $REMOTE/install_userspace.sh $ARGS" 7200 ;;
+      *" --yes "*)
+        # the same warning as the comma's first-boot page; the kernel flashes only after a typed yes
+        echo "This installs a custom kernel to enable Bluetooth."
+        warning_text "$SRC/kernel_warning.txt"
+        case " $ARGS " in
+          *" --accept-kernel "*) ;;
+          *)
+            printf 'type yes to flash the kernel: '
+            read -r ans || ans=""
+            [ "$ans" = yes ] || die "not confirmed, nothing was run"
+            ARGS="$ARGS --accept-kernel"
+            ;;
+        esac
+        detached install install_userspace.sh "bash $REMOTE/install_userspace.sh $ARGS" 7200
+        ;;
       *) dev "bash $REMOTE/install_userspace.sh $ARGS" ;;
     esac
     ;;

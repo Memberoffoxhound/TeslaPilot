@@ -366,14 +366,14 @@ def test_downloads_exit_75(tmp_path):
   assert r.returncode == 75 and 'download failed: https://x' in r.stderr and 'no' not in r.stdout
 
 
-def run_kernel_step(tmp_path, state, yes=1, reflash=0, flash_rc=0):
+def run_kernel_step(tmp_path, state, yes=1, reflash=0, flash_rc=0, accept=1):
   import os
   text = (HERE / 'install_userspace.sh').read_text()
   fn = text[text.index('kernel_step() {'):text.index('\n}\n', text.index('kernel_step() {')) + 3]
   fake = tmp_path / 'kernel.sh'
   fake.write_text(f'echo "$*" >> {tmp_path}/k.log\n[ "$1" = status ] && echo state={state}\n[ "$1" = flash ] && exit {flash_rc}\nexit 0\n')
   lib = (HERE / 'lib.sh').read_text()
-  script = (f'set -euo pipefail\nSUDO=\nYES={yes}\nREFLASH={reflash}\n{lib}\nKSH=(bash {fake})\n{fn}\n' +
+  script = (f'set -euo pipefail\nSUDO=\nYES={yes}\nREFLASH={reflash}\nACCEPT={accept}\n{lib}\nKSH=(bash {fake})\n{fn}\n' +
             'if kernel_step; then echo REBOOT; else echo NOREBOOT; fi\n')
   r = subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=dict(os.environ))
   log = (tmp_path / 'k.log').read_text().splitlines()
@@ -409,6 +409,33 @@ def test_kernel_step_reflash_overrides_off_and_failed(tmp_path):
     d.mkdir()
     r, log = run_kernel_step(d, st, reflash=1)
     assert 'REBOOT' in r.stdout and log[-1] == 'flash --yes --retry'
+
+
+def test_kernel_step_needs_consent_to_flash(tmp_path):
+  # --yes alone never flashes, --reflash included; the rest of the install still succeeds
+  for st, reflash in (('offer', 0), ('off', 1), ('failed', 1)):
+    d = tmp_path / st
+    d.mkdir()
+    r, log = run_kernel_step(d, st, reflash=reflash, accept=0)
+    assert r.returncode == 0 and 'NOREBOOT' in r.stdout and 'needs consent, not flashed' in r.stdout and log == ['status']
+  r, log = run_kernel_step(tmp_path, 'offer', yes=0, accept=0)  # the dry run still shows the plan
+  assert log == ['status', 'flash']
+
+
+def test_accept_kernel_flag_and_warning():
+  text = script_text()
+  assert '--accept-kernel) ACCEPT=1' in text and 'ACCEPT=0' in text
+  pre = text[:text.index('echo "[1/4]')]
+  assert 'warning_text "$HERE/kernel_warning.txt"' in pre and '= offer ]' in pre
+
+
+def test_warning_text_is_plain(tmp_path):
+  lib = (HERE / 'lib.sh').read_text()
+  r = subprocess.run(['bash', '-c', f'{lib}\nwarning_text {HERE}/kernel_warning.txt'], capture_output=True, text=True)
+  out = r.stdout.splitlines()
+  assert r.returncode == 0 and out[0] == 'custom kernel required' and out[1] == '  for Bluetooth'
+  assert '- Recovery may need QDL mode and a full reflash that wipes your data.' in out
+  assert not any(ln.startswith(('#', 'icon:', 'title:')) or '\\n' in ln or ln == '' for ln in out)
 
 
 def test_kernel_step_failure_stops_install_without_reboot(tmp_path):
