@@ -17,6 +17,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"AthenadRecentlyViewedRoutes", {PERSISTENT, STRING}},
     {"AutoLaneChangeEnabled", {PERSISTENT, BOOL, "0"}},
     {"BootCount", {PERSISTENT, INT}},
+    {"BrakingFirm", {PERSISTENT, BOOL, "1"}},
     {"CalibrationParams", {PERSISTENT, BYTES}},
     {"CameraDebugExpGain", {CLEAR_ON_MANAGER_START, STRING}},
     {"CameraDebugExpTime", {CLEAR_ON_MANAGER_START, STRING}},

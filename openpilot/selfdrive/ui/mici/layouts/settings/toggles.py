@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
 from openpilot.cereal import log
-from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigToggle, BigButton
+from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigMultiBoolParamToggle, BigToggle, BigButton
 from openpilot.selfdrive.ui.mici.widgets.dialog import SettingDescriptionDialog, wire_confirm
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.system.ui.lib.application import gui_app, MousePos
@@ -15,8 +15,10 @@ from openpilot.selfdrive.car import tesla_step_aside, park_offroad
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.layouts.settings.initial_cruise_speed import InitialCruiseSpeedButton
 from openpilot.selfdrive.ui import mads
+from openpilot.selfdrive.controls.lib.cruise_braking import braking_visible
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
+
 
 
 class AutoLaneChangeConfirmPage(NavScroller):
@@ -103,6 +105,11 @@ class TogglesLayoutMici(NavScroller):
                                                    "when the driving model would drive slower. The model still decides when to slow down.\n" +
                                                    "Needs openpilot longitudinal control.")
     self._ssa_toggle.set_enabled(lambda: ui_state.has_longitudinal_control)
+    self._braking_toggle = BigMultiBoolParamToggle("Braking", "BrakingFirm", ["soft", "firm"],
+                                                   description="Firm is the default. Cruise may slow more quickly to hold the set speed, down to -1.2 m/s².\n" +
+                                                               "Soft eases off more gently, down to -0.5 m/s².\n" +
+                                                               "Only with openpilot longitudinal control.")
+    self._braking_toggle.set_visible(lambda: braking_visible(ui_state.has_longitudinal_control))
     self._initial_cruise_speed = InitialCruiseSpeedButton()
 
     # MADS, changes only offroad; sub-options only for the car's brand
@@ -164,6 +171,7 @@ class TogglesLayoutMici(NavScroller):
       self._alc_btn,
       self._personality_toggle,
       self._ssa_toggle,
+      self._braking_toggle,
       self._initial_cruise_speed,
       self._mads_btn,
       self._mads_main_cruise,
@@ -265,6 +273,8 @@ class TogglesLayoutMici(NavScroller):
 
     if ui_state.CP is not None:
       self._personality_toggle.set_visible(ui_state.has_longitudinal_control)
+    self._braking_toggle.set_visible(braking_visible(ui_state.has_longitudinal_control))
+    self._braking_toggle._load_value()
     self._ssa_toggle.set_value("" if ui_state.has_longitudinal_control else "needs op long")
 
     self._mads_brake._load_value()

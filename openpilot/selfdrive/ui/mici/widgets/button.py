@@ -444,6 +444,35 @@ class BigMultiParamToggle(BigMultiToggle):
     self._params.put(self._param, new_idx)
 
 
+class BigMultiBoolParamToggle(BigMultiToggle):
+  def __init__(self, text: str, param: str, options: list[str], toggle_callback: Callable | None = None,
+               select_callback: Callable | None = None, *, description: str = "", description_icon: Union[rl.Texture, None] = None,
+               default: bool = True):
+    assert Params is not None
+    super().__init__(text, options, toggle_callback, select_callback, description=description, description_icon=description_icon)
+    self._param = param
+    self._default = default
+    self._params = Params()
+    self._load_value()
+
+  def _firm(self) -> bool:
+    val = self._params.get(self._param, return_default=True)
+    if val is None or val == "" or val == b"":
+      return self._default
+    if isinstance(val, (bytes, bytearray)):
+      return val not in (b"0", b"")
+    if isinstance(val, str):
+      return val not in ("0", "")
+    return bool(val)
+
+  def _load_value(self):
+    self.set_value(self._options[int(self._firm())])
+
+  def _handle_mouse_release(self, mouse_pos: MousePos):
+    super()._handle_mouse_release(mouse_pos)
+    self._params.put_bool(self._param, bool(self._options.index(self.value)), block=True)
+
+
 class BigParamControl(BigToggle):
   def __init__(self, text: str, param: str, toggle_callback: Callable | None = None, *, description: str = "",
                description_icon: Union[rl.Texture, None] = None):
