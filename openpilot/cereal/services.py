@@ -94,6 +94,11 @@ _services: dict[str, tuple] = {
   "livestreamWideRoadEncodeData": (False, 20., None, QueueSize.MEDIUM),
   "livestreamNarrowRoadEncodeData": (False, 20., None, QueueSize.MEDIUM),
   "livestreamCabinEncodeData": (False, 20., None, QueueSize.MEDIUM),
+  # MADS
+  "selfdriveStateSP": (True, 100., 10),
+  "onroadEventsSP": (True, 1., 1),
+  "carParamsSP": (True, 0.02, 1),
+
   "customReservedRawData0": (True, 0.),
 }
 SERVICE_LIST = {name: Service(*vals) for

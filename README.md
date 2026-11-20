@@ -54,7 +54,7 @@ On newer Tesla firmware, the steering message is read correctly, so stock lane k
 
 Credit: [rav4kumar](https://github.com/rav4kumar)'s automatic lane change in sunnypilot ([sunnypilot/sunnypilot#653](https://github.com/sunnypilot/sunnypilot/pull/653)), with [Jason Wen / sunnyhaibin](https://github.com/sunnyhaibin).
 
-Off by default. Turn it on in **Settings → toggles → auto lane change**. Then the blinker alone starts a lane change, no wheel nudge needed, as long as you're above 25 mph and Tesla's blind-spot monitor says the lane is clear.
+Off by default. Turn it on in **Settings → toggles → auto lane change**. Then the blinker alone starts a lane change, no wheel nudge needed, as long as you're above 45 mph and Tesla's blind-spot monitor says the lane is clear.
 
 ### Set Speed Assist
 
@@ -65,6 +65,25 @@ Credit: Zeph Leggett, ported from [zoompilot](https://github.com/zoompilot/zoomp
 The driving model doesn't know your set speed, so it often drives slower than you asked for, or hangs back farther from the car ahead than your following distance. Set Speed Assist adds just enough gas to get you up to your set speed, or close up to your normal following distance. It only ever adds gas, never takes any away, and the model still decides when to slow down.
 
 Off by default. Turn it on in **Settings → toggles → set speed assist**. It needs openpilot longitudinal control (**Settings → developer → alpha longitudinal**) and does nothing without it. When it's on, the icon above shows on Home. Tap it to get back to the toggle.
+
+### MADS
+
+**MADS - Modular Assistive Driving System.**
+
+Credit: ported from [sunnypilot](https://github.com/sunnypilot/sunnypilot)'s MADS, see [Credits](#credits).
+
+Off by default. Turn it on in **Settings → toggles → MADS**. With MADS on, TeslaPilot keeps steering when you cancel cruise while you handle speed. Engage cruise again to get speed control back. On a Tesla, pressing the brake still turns both off. Only the MADS options that work on your car show under the toggle.
+
+The Home badge and onroad wheel. Colors are for the default Tesla theme; with the openpilot theme, blue is green.
+
+| | |
+|:---:|:---|
+| <img src="docs/screenshots/icon-mads.png" height="80" alt="MADS"> | **MADS**: shows on Home while MADS is on. Tap to open the toggle. |
+| <img src="docs/screenshots/icon-wheel-engaged.png" height="80" alt="Engaged"> | **Blue**: openpilot is engaged. |
+| <img src="docs/screenshots/icon-wheel-mads.png" height="80" alt="MADS steering"> | **Blue rim**: MADS is steering. You handle speed. |
+| <img src="docs/screenshots/icon-wheel-mads-paused.png" height="80" alt="MADS paused"> | **Dim rim**: MADS is on but not steering, like in Park or Reverse. |
+| <img src="docs/screenshots/icon-wheel-override.png" height="80" alt="Override"> | **White**: you're overriding, like with the gas pedal. |
+| <img src="docs/screenshots/icon-wheel-off.png" height="80" alt="Off"> | **Gray**: nothing is steering. |
 
 ### Big model on a chestnut or Jetlink (optional)
 
@@ -114,12 +133,13 @@ Your drive stats stay on the comma and nothing gets uploaded. Turn them on with 
 
 **Ending a drive on a Tesla (Tesla only).** A Tesla has no ignition to turn off, so openpilot would stay onroad in Park. With **go offroad in park** on, shifting into Park brings up the card and the comma goes offroad. Shift to R or D to start a new drive.
 
-The badge at the bottom of Home shows who's handling gas and brake:
+The badge at the bottom of Home shows who handles gas and brake:
 
 | | |
 |:---:|:---|
-| <img src="docs/screenshots/icon-tacc.png" height="80" alt="TACC"> | **TACC**: Tesla controls gas and brake, and openpilot steers. |
-| <img src="docs/screenshots/icon-long.png" height="80" alt="LONG"> | **LONG**: openpilot controls gas and brake (alpha, **Settings → developer → alpha longitudinal**). |
+| <img src="docs/screenshots/icon-tacc.png" height="80" alt="TACC"> | **TACC**: Tesla handles gas and brake. openpilot steers. |
+| <img src="docs/screenshots/icon-long.png" height="80" alt="LONG"> | **LONG**: openpilot handles gas and brake (alpha, **Settings → developer → alpha longitudinal**). |
+| <img src="docs/screenshots/icon-mads.png" height="80" alt="MADS"> | **MADS**: shows next to LONG or TACC when MADS is on. |
 
 On other cars it shows **SCC** for a Kia and **STOCK / ACC** for everything else.
 
@@ -167,12 +187,15 @@ TeslaPilot is built on the work of these people and projects. Thank you!
 | Set Speed Assist | Zeph Leggett / zoompilot | [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot), [sunnypilot/sunnypilot#2083](https://github.com/sunnypilot/sunnypilot/pull/2083) |
 | Jetlink big model | Zeph Leggett / zoompilot (MIT) | [zoompilot/jetlink](https://github.com/zoompilot/jetlink), [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot) |
 | Model picker | zoompilot's wiring of sunnypilot's model manager | [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot) |
+| MADS | sunnypilot | [sunnypilot/sunnypilot](https://github.com/sunnypilot/sunnypilot), [sunnypilot/opendbc](https://github.com/sunnypilot/opendbc), [sunnypilot/panda](https://github.com/sunnypilot/panda) |
 | Step aside, fingerprint fallback, Tesla theme, drive stats, web page | Memberoffoxhound | [TeslaPilot](https://github.com/Memberoffoxhound/TeslaPilot) |
 | TESLA font (wordmark) | KAYOver, based on TeslaNikolaCaps by Shane Milburn | [dafont](https://www.dafont.com/tesla.font) |
 | Inter font | Rasmus Andersson | [rsms/inter](https://github.com/rsms/inter) |
 | Time zone table (`tzgrid.bin`) | timezone-boundary-builder by Evan Siroky, from OpenStreetMap data | [evansiroky/timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder) |
 | First day of the week (`weekstart.json`) | Unicode CLDR | [cldr.unicode.org](https://cldr.unicode.org/) |
 | Everything else | comma.ai openpilot, opendbc, panda | [commaai/openpilot](https://github.com/commaai/openpilot) |
+
+MADS: This project uses software from Haibin Wen and SUNNYPILOT LLC and is licensed under a custom license requiring permission for use.
 
 ## License
 
@@ -181,6 +204,7 @@ openpilot and TeslaPilot are released under the [MIT license](LICENSE). Some par
 - **Jetlink** ([zoompilot/jetlink](https://github.com/zoompilot/jetlink)): MIT, Copyright (c) 2026 Zeph Leggett. See `jetlink_repo/LICENSE`.
 - **TESLA font**: [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/), non-commercial use only. See `openpilot/selfdrive/assets/fonts/TESLA-LICENSE.txt`.
 - **Inter font**: [SIL Open Font License 1.1](https://openfontlicense.org).
+- **MADS** port: sunnypilot's license, kept in each repo with ported code as `LICENSE.sunnypilot`.
 - **Time zone table** (`openpilot/selfdrive/ui/tripstats/tzgrid.bin`): built from [timezone-boundary-builder](https://github.com/evansiroky/timezone-boundary-builder) data, © OpenStreetMap contributors, under the [Open Database License (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/).
 - **First day of the week** (`openpilot/selfdrive/ui/tripstats/weekstart.json`): from Unicode CLDR data, © Unicode, Inc., under the [Unicode License v3](https://www.unicode.org/license.txt).
 

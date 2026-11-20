@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from openpilot.conftest import FakeParams as _FakeParams
+
 from openpilot.selfdrive.car import tesla_step_aside as tsa
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -157,29 +159,9 @@ def test_is_park():
 
 # -- params -------------------------------------------------------------------
 
-class FakeParams:
-  """Params with a key list; unknown keys raise like a stale params library."""
-  def __init__(self, root, keys=(tsa.PARAM_ENABLED, tsa.PARAM_STEPPED, "OnroadCycleRequested")):
-    self.root, self.keys, self.store = str(root), set(keys), {}
-    self.defaults = {tsa.PARAM_ENABLED: True}
 
-  def check_key(self, key):
-    if key not in self.keys:
-      raise KeyError(key)
-    return key
-
-  def get(self, key, return_default=False):
-    self.check_key(key)
-    if key in self.store:
-      return self.store[key]
-    return self.defaults.get(key) if return_default else None
-
-  def put_bool(self, key, val, block=False):
-    self.check_key(key)
-    self.store[key] = bool(val)
-
-  def get_param_path(self, key=""):
-    return os.path.join(self.root, key)
+def FakeParams(root, keys=(tsa.PARAM_ENABLED, tsa.PARAM_STEPPED, "OnroadCycleRequested"), **kw):
+  return _FakeParams(root, keys=keys, defaults={tsa.PARAM_ENABLED: True}, **kw)
 
 
 def test_param_defaults(tmp_path):

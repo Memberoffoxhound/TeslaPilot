@@ -17,13 +17,6 @@ HERE = Path(__file__).resolve().parents[1]
 OFFER_TICKS, HANDBACK_TICKS, SWITCHING_TICKS = round(3. / DT_CTRL), round(5. / DT_CTRL), round(1. / DT_CTRL)
 
 
-@pytest.fixture(autouse=True)
-def params_root(tmp_path, monkeypatch):
-  monkeypatch.setenv('PARAMS_ROOT', str(tmp_path))
-  monkeypatch.delenv('OPENPILOT_PREFIX', raising=False)
-  return tmp_path / 'd'
-
-
 class SM(dict):
   def __init__(self, big=False):
     super().__init__(modelV2=SimpleNamespace(big=big))

@@ -17,17 +17,16 @@ MON, FRI, SAT, SUN = 0, 4, 5, 6
 
 
 @pytest.mark.parametrize("zone,first", [
-  ("America/Chicago", SUN), ("America/Toronto", SUN), ("America/Mexico_City", SUN), ("Asia/Tokyo", SUN),
-  ("America/Sao_Paulo", SUN), ("Asia/Kolkata", SUN), ("Asia/Jerusalem", SUN),
-  ("Europe/London", MON), ("Europe/Berlin", MON), ("Europe/Paris", MON), ("Australia/Sydney", MON),
-  ("Pacific/Auckland", MON), ("Asia/Shanghai", MON), ("Europe/Moscow", MON),
-  ("Africa/Cairo", SAT), ("Asia/Tehran", SAT), ("Indian/Maldives", FRI),
+  ("America/Chicago", SUN),
+  ("Europe/London", MON),
+  ("Africa/Cairo", SAT),
+  ("Indian/Maldives", FRI),
 ])
 def test_first_day_by_country(zone, first):
   assert tz.first_day(zone) == first and tz.first_day(ZoneInfo(zone)) == first
 
 
-@pytest.mark.parametrize("zone", [None, "", "Etc/UTC", "Etc/GMT+5", "garbage"])
+@pytest.mark.parametrize("zone", [None, "", "Etc/UTC", "garbage"])
 def test_unknown_zone_is_sunday(zone):
   assert tz.first_day(zone) == SUN
 

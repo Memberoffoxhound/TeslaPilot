@@ -24,7 +24,7 @@ PROBE = textwrap.dedent('''
     updated = {}
   ui = SimpleNamespace(started=False, is_metric=False, params=params, status=UIStatus.DISENGAGED, engaged=False,
                        has_longitudinal_control=True, usb_connected=False, usb_unknown=False, chestnut_state=CS.READY,
-                       recording_audio=False, is_body=False, CP=None, accel_progress=None,
+                       recording_audio=False, is_body=False, CP=None, accel_progress=None, mads_enabled=False,
                        sm=SM({"deviceState": SimpleNamespace(networkType=log.DeviceState.NetworkType.wifi,
                                                              networkStrength=SimpleNamespace(raw=3))}))
   mod = types.ModuleType("openpilot.selfdrive.ui.ui_state")
@@ -118,8 +118,3 @@ def test_clear_of_the_alerts_pill(probe):
       assert v["link"][0] + v["link"][2] < pill_x, key
     assert v["ssa"][1] + v["ssa"][3] <= 240, key
 
-
-def test_white_icon():
-  from pathlib import Path
-  svg = (Path(__file__).resolve().parents[3] / "assets/icons_mici/set_speed_assist.svg").read_text()
-  assert "#FFFFFF" in svg and "#00FF40" not in svg

@@ -3,18 +3,11 @@ from unittest import mock
 
 import pytest
 
+from openpilot.conftest import FakeParams
 from openpilot.selfdrive.modeld import helpers
 from openpilot.selfdrive.modeld import modeld
 
 REF = 'a' * 40
-
-
-class FakeParams(dict):
-  def get(self, key, block=False):
-    return super().get(key)
-
-  def put(self, key, value):
-    self[key] = value
 
 
 @pytest.fixture

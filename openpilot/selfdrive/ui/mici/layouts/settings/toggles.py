@@ -1,8 +1,8 @@
 from collections.abc import Callable
 
 from openpilot.cereal import log
-from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigToggle, BigButton
-from openpilot.selfdrive.ui.mici.widgets.dialog import wire_confirm
+from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigMultiBoolParamToggle, BigToggle, BigButton
+from openpilot.selfdrive.ui.mici.widgets.dialog import SettingDescriptionDialog, wire_confirm
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.system.ui.lib.application import gui_app, MousePos
 from openpilot.selfdrive.ui.layouts.settings.common import (
@@ -14,8 +14,10 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.car import tesla_step_aside, park_offroad
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.layouts.settings.initial_cruise_speed import InitialCruiseSpeedButton
+from openpilot.selfdrive.ui import mads
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
+
 
 
 class AutoLaneChangeConfirmPage(NavScroller):
@@ -42,6 +44,12 @@ class ParkOffroadConfirmPage(NavScroller):
       "Summon and Autopark keep it offroad, relay open. FSD from Park goes through step aside.",
       "Also turns on the drive summary card.",
     ], on_confirm)
+
+
+class MadsConfirmPage(NavScroller):
+  def __init__(self, on_confirm: Callable[[], None], brand: str | None = None):
+    super().__init__()
+    wire_confirm(self, "enabling\nMADS", mads.welcome_cards(brand), on_confirm)
 
 
 class _ParamCycle(BigButton):
@@ -96,7 +104,38 @@ class TogglesLayoutMici(NavScroller):
                                                    "when the driving model would drive slower. The model still decides when to slow down.\n" +
                                                    "Needs openpilot longitudinal control.")
     self._ssa_toggle.set_enabled(lambda: ui_state.has_longitudinal_control)
+    self._braking_toggle = BigMultiBoolParamToggle("Braking", "BrakingFirm", ["soft", "firm"],
+                                                   description="Firm is the default. Cruise may slow more quickly to hold the set speed, down to -1.2 m/s².\n" +
+                                                               "Soft eases off more gently, down to -0.5 m/s².\n" +
+                                                               "Only with openpilot longitudinal control.")
+    self._braking_toggle.set_visible(lambda: ui_state.has_longitudinal_control)
+    self._braking_toggle.set_enabled(lambda: not ui_state.started)
     self._initial_cruise_speed = InitialCruiseSpeedButton()
+
+    # MADS, changes only offroad; sub-options only for the car's brand
+    self._mads_btn = BigToggle("MADS", initial_state=ui_state.params.get_bool("Mads"), toggle_callback=self._on_mads,
+                               description=mads.toggle_description(None))
+    # Tesla adds the brake note, so read the brand when the description opens
+    self._mads_btn.set_long_press_callback(lambda: gui_app.push_widget(SettingDescriptionDialog("MADS", mads.toggle_description(self._brand()))))
+    self._mads_main_cruise = BigParamControl("MADS with main cruise", mads.MAIN_CRUISE,
+                                             description="Turning main cruise on also turns MADS on.\n" +
+                                                         "Without a MADS button on the wheel, turning this off keeps MADS from engaging.")
+    self._mads_unified = BigParamControl("MADS with cruise", mads.UNIFIED,
+                                         description="Engaging cruise also engages MADS.\n" +
+                                                     "MADS then stays on until you turn it off with its button or turn the car off.")
+    self._mads_brake = BigMultiParamToggle("MADS on brake", mads.STEERING_MODE, mads.STEERING_MODES,
+                                           description="Remain active: MADS keeps steering while you brake.\n" +
+                                                       "Pause: MADS pauses while you brake and resumes after.\n" +
+                                                       "Disengage: braking turns MADS off.")
+    self._mads_screen = BigMultiParamToggle("MADS screen button", mads.SCREEN_BUTTON, mads.SCREEN_BUTTONS,
+                                            select_callback=lambda _: self._refresh_mads(),
+                                            description="Touch the Tesla screen with this many fingers to turn MADS on or off.")
+    self._mads_visible: set[str] = set()
+    for key, w in ((mads.MAIN_CRUISE, self._mads_main_cruise), (mads.UNIFIED, self._mads_unified),
+                   (mads.STEERING_MODE, self._mads_brake), (mads.SCREEN_BUTTON, self._mads_screen)):
+      w.set_visible(lambda k=key: ui_state.mads_enabled and k in self._mads_visible)
+    for w in (self._mads_btn, self._mads_main_cruise, self._mads_unified, self._mads_brake, self._mads_screen):
+      w.set_enabled(lambda: not ui_state.started)
     self._initial_cruise_speed.set_visible(lambda: ui_state.CP is not None and ui_state.has_longitudinal_control and not ui_state.CP.pcmCruise)
     is_metric_toggle = BigToggle("use metric units", initial_state=ui_state.params.get_bool("IsMetric"), toggle_callback=self._on_metric_toggle)
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled",
@@ -132,7 +171,13 @@ class TogglesLayoutMici(NavScroller):
       self._alc_btn,
       self._personality_toggle,
       self._ssa_toggle,
+      self._braking_toggle,
       self._initial_cruise_speed,
+      self._mads_btn,
+      self._mads_main_cruise,
+      self._mads_unified,
+      self._mads_brake,
+      self._mads_screen,
       is_metric_toggle,
       ldw_toggle,
       always_on_dm_toggle,
@@ -147,6 +192,9 @@ class TogglesLayoutMici(NavScroller):
     self._refresh_toggles = (
       ("AutoLaneChangeEnabled", self._alc_btn),
       ("SetSpeedAssist", self._ssa_toggle),
+      ("Mads", self._mads_btn),
+      (mads.MAIN_CRUISE, self._mads_main_cruise),
+      (mads.UNIFIED, self._mads_unified),
       ("IsMetric", is_metric_toggle),
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
@@ -184,6 +232,37 @@ class TogglesLayoutMici(NavScroller):
     w = self._ssa_toggle
     self._scroller.scroll_to((w.rect.x + w.rect.width / 2) - (self._rect.x + self._rect.width / 2), smooth=True)
 
+  def scroll_to_mads(self):
+    self._scroller._layout()
+    w = self._mads_btn
+    self._scroller.scroll_to((w.rect.x + w.rect.width / 2) - (self._rect.x + self._rect.width / 2), smooth=True)
+    w.trigger_grow_animation()
+
+  @staticmethod
+  def _brand() -> str | None:
+    return ui_state.CP.brand if ui_state.CP is not None else None
+
+  def _refresh_mads(self):
+    brand = self._brand()
+    car_flags = ui_state.CP.flags if ui_state.CP is not None else 0
+    fingerprint = ui_state.CP.carFingerprint if ui_state.CP is not None else ""
+    screen_button = mads.SCREEN_BUTTONS.index(self._mads_screen.value)
+    self._mads_visible = mads.visible_options(brand, ui_state.cp_sp_flags, screen_button, car_flags, fingerprint)
+
+  def _on_mads(self, state: bool):
+    if state:
+      self._mads_btn.set_checked(False)
+
+      def on_confirm():
+        ui_state.params.put_bool("Mads", True, block=True)
+        self._mads_btn.set_checked(True)
+        self._update_toggles()
+
+      gui_app.push_widget(MadsConfirmPage(on_confirm, self._brand()))
+    else:
+      ui_state.params.put_bool("Mads", False, block=True)
+      self._update_toggles()
+
   def _on_metric_toggle(self, state: bool):
     ui_state.params.put_bool("IsMetric", state, block=True)
     self._update_toggles()
@@ -194,7 +273,13 @@ class TogglesLayoutMici(NavScroller):
 
     if ui_state.CP is not None:
       self._personality_toggle.set_visible(ui_state.has_longitudinal_control)
+    self._braking_toggle.set_visible(ui_state.has_longitudinal_control)
+    self._braking_toggle._load_value()
     self._ssa_toggle.set_value("" if ui_state.has_longitudinal_control else "needs op long")
+
+    self._mads_brake._load_value()
+    self._mads_screen._load_value()
+    self._refresh_mads()
 
     # Refresh toggles from params to mirror external changes
     for key, item in self._refresh_toggles:

@@ -3,7 +3,7 @@ import time
 import threading
 from collections.abc import Callable
 from enum import Enum
-from openpilot.cereal import messaging, log
+from openpilot.cereal import custom, messaging, log
 from opendbc.car.structs import car
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
@@ -29,6 +29,18 @@ class UIStatus(Enum):
   DISENGAGED = "disengaged"
   ENGAGED = "engaged"
   OVERRIDE = "override"
+
+
+MadsState = custom.ModularAssistiveDrivingSystem.ModularAssistiveDrivingSystemState
+
+
+def steer_status(status: UIStatus, enabled: bool, mads) -> UIStatus:
+  # MADS steering alone draws the path, ball and compass like openpilot engaged
+  if enabled or status == UIStatus.OVERRIDE or not mads.enabled:
+    return status
+  if mads.state == MadsState.overriding:
+    return UIStatus.OVERRIDE
+  return UIStatus.ENGAGED if mads.state in (MadsState.enabled, MadsState.softDisabling) else UIStatus.DISENGAGED
 
 
 class ChestnutState(Enum):
@@ -81,6 +93,7 @@ class UIState:
         "vehicleParameters",
         "testJoystick",
         "rawAudioData",
+        "selfdriveStateSP",
       ]
     )
 
@@ -89,6 +102,7 @@ class UIState:
 
     # UI Status tracking
     self.status: UIStatus = UIStatus.DISENGAGED
+    self.steer_status: UIStatus = UIStatus.DISENGAGED
     self.started_frame: int = 0
     self.started_time: float = 0.0
     self._engaged_prev: bool = False
@@ -125,6 +139,8 @@ class UIState:
     self.personality_param: int = log.LongitudinalPersonality.standard
     self.is_body: bool | None = False
     self.CP: car.CarParams | None = None
+    self.mads_enabled = False
+    self.cp_sp_flags = 0
     self.light_sensor: float = -1.0
     self.tesla_stepped_aside: bool = False  # card stepped aside for Tesla Autosteer/FSD
     self.park = ParkView()                  # park-offroad: parkd's ParkOffroadState, see lib/park_view.py
@@ -215,6 +231,7 @@ class UIState:
         self.status = UIStatus.OVERRIDE
       else:
         self.status = UIStatus.ENGAGED if ss.enabled else UIStatus.DISENGAGED
+      self.steer_status = steer_status(self.status, ss.enabled, self.sm["selfdriveStateSP"].mads)
 
     # Check for engagement state changes
     if self.engaged != self._engaged_prev:
@@ -224,7 +241,7 @@ class UIState:
 
     # Handle onroad/offroad transition
     if self.started != self._started_prev or self.sm.frame == 1:
-      self.status = UIStatus.DISENGAGED
+      self.status = self.steer_status = UIStatus.DISENGAGED
       if self.started:
         self.started_frame = self.sm.frame
         self.started_time = time.monotonic()
@@ -311,6 +328,10 @@ class UIState:
         self.has_longitudinal_control = self.CP.openpilotLongitudinalControl
 
     self.recording_audio = self.params.get_bool("RecordAudio") and self.started
+    # MADS
+    self.mads_enabled = self.params.get_bool("Mads")
+    cp_sp_bytes = self.params.get("CarParamsSPPersistent")
+    self.cp_sp_flags = messaging.log_from_bytes(cp_sp_bytes, custom.CarParamsSP).flags if cp_sp_bytes else 0
     tesla = self.CP is not None and self.CP.brand == "tesla"
     self.tesla_stepped_aside = tesla and self.started and tesla_step_aside.stepped_aside(self.params)
     self._park_state = park_offroad.get_state(self.params) if tesla and park_offroad.enabled(self.params) else park_offroad.NONE

@@ -7,7 +7,7 @@ from openpilot.selfdrive.locationd.calibrationd import HEIGHT_INIT
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.selfdrive.ui.layouts.settings.common import custom_onroad_ui, tesla_theme, THEME_TESLA_RGB, THEME_OPENPILOT_RGB
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
-from openpilot.selfdrive.ui.mici.onroad.status import status_fade
+from openpilot.selfdrive.ui.mici.onroad.status import lerp_color, status_fade, steer_fade
 from openpilot.selfdrive.ui.onroad.model_renderer import ModelRenderer as BaseModelRenderer, CLIP_MARGIN, MAX_DRAW_DISTANCE, STOCK_PATH_GRADIENT
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.polygon import Gradient, draw_polygon
@@ -17,6 +17,11 @@ LEAD_BAR_WIDTH = 1.8  # m
 
 STOCK_LANE_GREEN = rl.Color(*THEME_OPENPILOT_RGB, 255)
 TESLA_LANE_BLUE = rl.Color(*THEME_TESLA_RGB, 255)
+
+SWAP_RC = 0.15  # lane/path color swap, ~0.5 s each way
+SWAP_BRIGHT = 1.5  # steering-only path alpha
+SWAP_LANE = rl.Color(242, 242, 242, 255)  # steering-only path border: the cruising near-white
+BORDER_PX = 3.0  # steering-only path border width
 
 LANE_LINE_COLORS = {
   UIStatus.DISENGAGED: rl.Color(200, 200, 200, 255),
@@ -28,6 +33,31 @@ def _faded(gradient: Gradient, alpha: float) -> Gradient:
   if alpha >= 1:
     return gradient
   return Gradient(gradient.start, gradient.end, [rl.Color(c.r, c.g, c.b, round(c.a * alpha)) for c in gradient.colors], gradient.stops)
+
+
+def _tinted(gradient: Gradient, color: rl.Color, f: float) -> Gradient:
+  # rgb toward color and alpha up, both by f
+  if f < 1e-3:
+    return gradient
+  k = 1 + (SWAP_BRIGHT - 1) * f
+  tint = [lerp_color(c, rl.Color(color.r, color.g, color.b, c.a), f) for c in gradient.colors]
+  return Gradient(gradient.start, gradient.end, [rl.Color(t.r, t.g, t.b, min(255, round(t.a * k))) for t in tint], gradient.stops)
+
+
+def _resample(line: np.ndarray, n: int) -> np.ndarray:
+  t, u = np.linspace(0, 1, len(line)), np.linspace(0, 1, n)
+  return np.column_stack((np.interp(u, t, line[:, 0]), np.interp(u, t, line[:, 1])))
+
+
+def _morph(lane: np.ndarray, edge: np.ndarray, w: float) -> np.ndarray:
+  # lane polygon slides onto a path edge (both near to far) and thins to BORDER_PX
+  m = len(lane) // 2
+  n = max(m, len(edge))
+  a, b = _resample(lane[:m], n), _resample(lane[m:][::-1], n)
+  center = (a + b) / 2 + (_resample(edge, n) - (a + b) / 2) * w
+  side = np.where(a[:, :1] <= b[:, :1], -1.0, 1.0)
+  half = (a - b) / 2 * (1 - w) + np.column_stack((side[:, 0] * BORDER_PX / 2, np.zeros(n))) * w
+  return np.vstack((center + half, (center - half)[::-1])).astype(np.float32)
 
 
 class LeadVehicle:
@@ -48,6 +78,7 @@ class ModelRenderer(BaseModelRenderer):
     self._lead_bars = [LeadVehicle(), LeadVehicle()]
     self._torque_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps)
     self._visible = 0.0
+    self._swap = FirstOrderFilter(0.0, SWAP_RC, 1 / gui_app.target_fps)
 
   def _draw_offset(self) -> np.ndarray:
     # car space transform maps to rect-origin space
@@ -94,7 +125,10 @@ class ModelRenderer(BaseModelRenderer):
       self._transform_dirty = False
 
     # lane lines and path fade out while disengaged
-    self._visible = 1 - status_fade.weight(UIStatus.DISENGAGED)
+    self._visible = 1 - steer_fade.weight(UIStatus.DISENGAGED)
+    # MADS steering alone: lane lines and path trade colors
+    # MADS override keeps it, so override flapping does not pulse the path
+    self._swap.update(float(ui_state.steer_status != UIStatus.DISENGAGED and ui_state.status == UIStatus.DISENGAGED))
     if self._visible > 1e-2:
       self._ll_engaged = TESLA_LANE_BLUE if custom_onroad_ui() and tesla_theme() else STOCK_LANE_GREEN
       self._draw_lane_lines()
@@ -149,7 +183,8 @@ class ModelRenderer(BaseModelRenderer):
   def _get_ll_color(self, prob: float, adjacent: bool, left: bool):
     alpha = np.clip(prob, 0.0, 0.7) * self._visible
     if adjacent:
-      _base_color = status_fade.color({**LANE_LINE_COLORS, UIStatus.ENGAGED: self._ll_engaged})
+      engaged = lerp_color(self._ll_engaged, SWAP_LANE, self._swap.x) if self._swap.x >= 1e-3 else self._ll_engaged
+      _base_color = steer_fade.color({**LANE_LINE_COLORS, UIStatus.ENGAGED: engaged})
       color = rl.Color(_base_color.r, _base_color.g, _base_color.b, int(alpha * 255))
 
       # turn adjacent lls orange if torque is high
@@ -169,13 +204,26 @@ class ModelRenderer(BaseModelRenderer):
   def _draw_lane_lines(self):
     """Draw lane lines and road edges. Two closest lines should be green (lane line or road edges)."""
     offset = self._draw_offset()
+    w = self._swap.x
+    edges = None
+    if w >= 1e-3:
+      path, h = self._path.projected_points + offset, len(self._path.projected_points) // 2
+      edges = sorted((path[:h], path[h:][::-1]), key=lambda e: float(e[:, 0].mean())) if h > 1 else None
 
     for i, lane_line in enumerate(self._lane_lines):
       if lane_line.projected_points.size == 0:
         continue
 
       color = self._get_ll_color(float(self._lane_line_probs[i]), i in (1, 2), i in (0, 1))
-      draw_polygon(self._rect, lane_line.projected_points + offset, color)
+      pts = lane_line.projected_points + offset
+      # steering only: the two closest lines slide onto the path edges and become its border, the others fade
+      if w >= 1e-3:
+        if i in (1, 2) and edges is not None and len(pts) >= 4:
+          pts = _morph(pts, edges[i - 1], w)
+          color.a = int(color.a + (255 * 0.7 * self._visible - color.a) * w)
+        else:
+          color.a = int(color.a * (1 - w))
+      draw_polygon(self._rect, pts, color)
 
     for i, road_edge in enumerate(self._road_edges):
       if road_edge.projected_points.size == 0:
@@ -190,13 +238,15 @@ class ModelRenderer(BaseModelRenderer):
       return
 
     path_pts = self._path.projected_points + self._draw_offset()
+    swap = self._swap.x
 
     if not self._longitudinal_control:
-      draw_polygon(self._rect, path_pts, gradient=_faded(STOCK_PATH_GRADIENT, self._visible))
+      draw_polygon(self._rect, path_pts, gradient=_faded(_tinted(STOCK_PATH_GRADIENT, self._ll_engaged, swap), self._visible))
     elif len(self._path_gradient.colors) > 1:
-      draw_polygon(self._rect, path_pts, gradient=_faded(self._path_gradient, self._visible))
+      draw_polygon(self._rect, path_pts, gradient=_faded(_tinted(self._path_gradient, self._ll_engaged, swap), self._visible))
     else:
-      draw_polygon(self._rect, path_pts, rl.Color(255, 255, 255, round(30 * self._visible)))
+      white = rl.Color(255, 255, 255, round(30 * self._visible * (1 + (SWAP_BRIGHT - 1) * swap)))
+      draw_polygon(self._rect, path_pts, lerp_color(white, rl.Color(self._ll_engaged.r, self._ll_engaged.g, self._ll_engaged.b, white.a), swap))
 
   def _draw_lead_indicator(self):
     offset = self._draw_offset()

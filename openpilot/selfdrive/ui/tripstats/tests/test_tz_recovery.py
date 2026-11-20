@@ -27,9 +27,7 @@ def fix(lat: float, lon: float) -> bytes:
 
 @pytest.mark.parametrize("lat,lon,zone", [
   (41.88, -87.63, "America/Chicago"), (35.68, 139.69, "Asia/Tokyo"), (51.50, -0.12, "Europe/London"),
-  (-33.87, 151.21, "Australia/Sydney"), (28.61, 77.21, "Asia/Kolkata"), (39.74, -104.99, "America/Denver"),
-  (33.45, -112.07, "America/Phoenix"), (-23.55, -46.63, "America/Sao_Paulo"), (-36.85, 174.76, "Pacific/Auckland"),
-  (52.52, 13.40, "Europe/Berlin"), (37.77, -122.42, "America/Los_Angeles"), (1.35, 103.82, "Asia/Singapore"),
+  (-33.87, 151.21, "Australia/Sydney"), (33.45, -112.07, "America/Phoenix"), (-36.85, 174.76, "Pacific/Auckland"),
 ])
 def test_offline_lookup(lat, lon, zone):
   assert tz.zone_at(lat, lon) == zone

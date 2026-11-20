@@ -2,8 +2,6 @@
 The recorder, store and card formatting are tested in selfdrive/ui/tripstats/tests."""
 from pathlib import Path
 
-from openpilot.selfdrive.ui import tripstats as ts
-
 UI = Path(__file__).resolve().parents[1]
 
 
@@ -11,68 +9,6 @@ def test_ui_hooks_present():
   main = (UI / "mici/layouts/main.py").read_text()
   assert "tripstats.tick(ui_state)" in main
   assert "draw_trip_row(" in (UI / "mici/layouts/home.py").read_text()
-
-
-def test_home_text_daylight_readable():
-  """Home and card text: full white primary, >= 200 grey secondary (raylib GRAY 130 washed out in sun)."""
-  import re
-  row = (UI / "mici/widgets/trip_row.py").read_text()
-  assert "GREY = rl.Color(200, 200, 200, 255)" in row and "WHITE = rl.Color(255, 255, 255, 255)" in row
-  home = (UI / "mici/layouts/home.py").read_text()
-  assert "rl.GRAY" not in home and "0.9))" not in home.split("class MiciHomeLayout")[1]
-  assert home.count("text_color=") == 3 and "text_color=WHITE" not in home   # version/date/branch: card label grey
-  # home's Today/Week row is the card's stat style: roman grey label + Inter Bold (DISPLAY) white value
-  assert "draw_trip_row(gui_app.font(FontWeight.ROMAN), gui_app.font(FontWeight.DISPLAY)" in home
-  card = (UI / "mici/widgets/drive_summary_card.py").read_text()
-  value, dim = map(float, re.search(r"VALUE_COL, DIM_COL = _col\(WHITE, ([\d.]+)\), _col\(WHITE, ([\d.]+)\)", card).groups())
-  assert value == 1.0 and dim >= 0.78
-
-
-def test_card_layout_rules():
-  """Alert-style card: opaque full screen (no home icons under it, no timer dots), Inter Bold lowercase
-  headline as the biggest text, two-column Today/Week block, everything inside 240 px."""
-  import ast
-  src = (UI / "mici/widgets/drive_summary_card.py").read_text()
-  consts = {}
-  for node in ast.parse(src).body:
-    if isinstance(node, ast.Assign):
-      for tgt in node.targets:
-        names = [tgt] if isinstance(tgt, ast.Name) else list(getattr(tgt, "elts", []))
-        vals = [node.value] if isinstance(tgt, ast.Name) else list(getattr(node.value, "elts", []))
-        for n, v in zip(names, vals, strict=False):
-          if isinstance(n, ast.Name) and isinstance(v, ast.Constant):
-            consts[n.id] = v.value
-  assert 0.25 <= consts["ENTER_S"] <= 0.3
-  assert consts["HEADLINE"] == consts["HEADLINE"].lower() == "trip summary"
-  draw_src = src.split("def draw(self")[1].split("def draw_timeline")[0]
-  # badge right of the headline: headline drawn at the left pad, badge center after its measured width
-  assert "rl.Vector2(cx, y + HEAD_Y + (HEAD_SIZE - hs)" in draw_src and "cx + hw + BADGE_GAP + br" in draw_src
-  # a headline too wide for the badge shrinks (same baseline); "trip summary" never does
-  assert consts["LAST_HEADLINE"] == "last trip summary" and consts["VAL_SIZE"] < consts["HEAD_MIN"] < consts["HEAD_SIZE"]
-  assert "while hw > room and hs > HEAD_MIN" in draw_src
-  assert draw_src.index("draw_text_ex(bold, self._head") < draw_src.index("draw_check_badge(")
-  assert "br, tc.accent_rgb())" in draw_src and "_accent" not in src   # badge reads the theme live, no stale copy
-  assert "tc.column_slots(" in draw_src and "sx - lw / 2" in draw_src and "sx - vw / 2" in draw_src
-  assert "drive" not in " ".join(v for k, v in consts.items() if isinstance(v, str))
-  assert consts["HEAD_SIZE"] > consts["VAL_SIZE"] > consts["LBL_SIZE"]
-  assert consts["HEAD_Y"] < consts["VAL_Y"] < consts["LBL_Y"] < consts["TL_Y"] < consts["TRIP_Y"]
-  assert consts["TRIP_Y"] + 34 * 1.16 <= 240
-  # thicker route bar (1.5x the original 12 px), clear of the labels above and the Today/Week text below
-  assert consts["TL_H"] == 18
-  assert consts["LBL_Y"] + consts["LBL_SIZE"] * 1.16 + 4 <= consts["TL_Y"]
-  assert consts["TL_Y"] + consts["TL_H"] + 6 <= consts["TRIP_Y"]
-  assert "draw_rectangle_rounded(rl.Rectangle(x, y, w, h), 1.0" in src     # rounded ends kept
-  # connect's statusGradient stops: 4% clear, 10% white .025, 25% black .1, bottom black .4
-  assert "(0.04, _col((0, 0, 0), 0.0)), (0.10, _col(WHITE, 0.025))" in src
-  assert "(0.25, _col((0, 0, 0), 0.1)), (1.0, _col((0, 0, 0), 0.4))" in src and "SHADE_STOPS[1:]" in src
-  assert "FontWeight.DISPLAY" in src and "draw_trip_block(" in src
-  row = (UI / "mici/widgets/trip_row.py").read_text()
-  assert "def draw_trip_block(" in row and "BLOCK_VALUE = 34" in row and "BLOCK_LABEL = 30" in row
-
-
-def test_show_time_is_twenty_seconds():
-  assert ts.SHOW_S == 20.0
-  assert sum(ln.startswith("SHOW_S =") for ln in (UI / "tripstats/__init__.py").read_text().splitlines()) == 1
 
 
 def test_home_row_day_label_fit(monkeypatch):

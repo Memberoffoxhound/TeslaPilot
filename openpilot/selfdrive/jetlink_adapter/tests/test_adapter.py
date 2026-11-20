@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from openpilot.conftest import setup_params_root
+
 from openpilot.selfdrive import jetlink_adapter as ja
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -17,10 +19,8 @@ ROOT = Path(__file__).resolve().parents[4]
 
 @pytest.fixture(autouse=True)
 def params_root(tmp_path, monkeypatch):
-  monkeypatch.setenv('PARAMS_ROOT', str(tmp_path))
-  monkeypatch.delenv('OPENPILOT_PREFIX', raising=False)
   ja._hooks = None
-  return tmp_path / 'd'
+  return setup_params_root(tmp_path, monkeypatch)
 
 
 def _write_link(params_root, index: int):

@@ -7,6 +7,8 @@ from openpilot.common.constants import CV
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
+from openpilot.common.params import Params
+from openpilot.selfdrive.controls.lib.cruise_braking import A_CRUISE_MIN, clamp_cruise_min, cruise_min_from_params
 from openpilot.selfdrive.controls.lib.set_speed_assist import SetSpeedAssist, approach_accel
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc, LongitudinalPlanSource
@@ -17,13 +19,13 @@ from openpilot.common.swaglog import cloudlog
 
 J_CRUISE_VALS = [1.6, 1.2, 0.8, 0.6]
 J_CRUISE_BP = [0., 10.0, 25., 40.]
-A_CRUISE_MIN = -0.5
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
 
-def get_cruise_accel(v_cruise, v_ego, a_cruise_prev, a_target_prev, dt):
+def get_cruise_accel(v_cruise, v_ego, a_cruise_prev, a_target_prev, dt, a_cruise_min=A_CRUISE_MIN):
+  a_cruise_min = clamp_cruise_min(a_cruise_min)
   target_accel = smooth_value(v_cruise - v_ego, a_cruise_prev, tau=1.0, dt=dt)
-  target_accel = np.clip(target_accel, A_CRUISE_MIN, ACCEL_MAX)
+  target_accel = np.clip(target_accel, a_cruise_min, ACCEL_MAX)
   j_cruise = np.interp(v_ego, J_CRUISE_BP, J_CRUISE_VALS)
   target_accel = float(np.clip(target_accel, min(a_cruise_prev, a_target_prev) - j_cruise * dt, a_cruise_prev + j_cruise * dt))
 
@@ -31,12 +33,15 @@ def get_cruise_accel(v_cruise, v_ego, a_cruise_prev, a_target_prev, dt):
 
 
 class LongitudinalPlanner:
-  def __init__(self, CP, init_v=0.0, init_a=0.0, dt=DT_MDL):
+  def __init__(self, CP, init_v=0.0, init_a=0.0, dt=DT_MDL, params=None):
     self.CP = CP
     self.mpc = LongitudinalMpc(dt=dt)
     self.fcw = False
     self.dt = dt
     self.set_speed_assist = SetSpeedAssist(CP)
+    self.params = Params() if params is None else params
+    self.a_cruise_min = A_CRUISE_MIN
+    self.on_drive_start()
 
     self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
     self.a_cruise = init_a
@@ -46,6 +51,9 @@ class LongitudinalPlanner:
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
     self.j_desired_trajectory = np.zeros(CONTROL_N)
+
+  def on_drive_start(self):
+    self.a_cruise_min = max(cruise_min_from_params(self.params), A_CRUISE_MIN)
 
   def update(self, sm):
     v_ego = sm['carState'].vEgo
@@ -99,7 +107,7 @@ class LongitudinalPlanner:
     output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
 
-    self.a_cruise = get_cruise_accel(v_cruise, v_ego, self.a_cruise, self.output_a_target, self.dt)
+    self.a_cruise = get_cruise_accel(v_cruise, v_ego, self.a_cruise, self.output_a_target, self.dt, self.a_cruise_min)
     cruise_should_stop = should_stop(v_ego, self.a_cruise)
 
     self.set_speed_assist.update_params()

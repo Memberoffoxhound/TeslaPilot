@@ -34,7 +34,7 @@ Stock recognition runs first. Unknown cars remain onroad in dashcam mode. The UI
 
 | Param | Default | Meaning |
 |---|---|---|
-| `AutoLaneChangeEnabled` | off | Nudgeless lane change >25 mph, 0.75 s after the blinker, once Tesla BSM is clear. Warning + slide-to-enable. rav4kumar / sunnypilot. |
+| `AutoLaneChangeEnabled` | off | Nudgeless lane change >45 mph, 0.75 s after the blinker, once Tesla BSM is clear. Warning + slide-to-enable. rav4kumar / sunnypilot. |
 | `LaneColor` | tesla | `0` Openpilot green, `1` Tesla Autopilot blue (lanes, wheel, confidence, compass, DM). |
 | `CompassSize` | small | Custom UI only. `0` small left, `1` large top-right. |
 | `TeslaStepAside` | on | While Tesla Autosteer/FSD is selected (not TACC) or Autopilot/FSD/Summon is active, openpilot goes passive before CarParams: `noOutput`, relay never closes. 5 s alert, then display off (touch wakes). Back via onroad cycle once Tesla is idle on TACC 3 s and in P or cruise off. `TeslaSteppedAside` (cleared on ignition) is the per-drive state. See `selfdrive/car/tesla_step_aside.py`. |

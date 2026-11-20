@@ -4,7 +4,10 @@
 # comma will ban the dongle from their servers.
 #
 # This workflow fails the PR if Highland touches those paths relative to the
-# merge-base with commaai/openpilot (and commaai/opendbc for the safety pack).
+# merge-base with commaai/openpilot (and commaai/opendbc for the safety pack),
+# except the reviewed MADS diff, pinned file by file (base and head blob) in
+# .github/fork-safety/*.allow. It also runs comma's safety tests and MISRA.
+# Refresh an allowlist only after review: .github/fork-safety/check.sh print BASE PATH...
 name: fork-safety
 
 on:
@@ -28,16 +31,16 @@ jobs:
           git remote add comma https://github.com/commaai/openpilot.git
           git fetch comma master --depth=200
 
-      - name: Driver monitoring and excessive-actuation checks must match comma
+      - name: Driver monitoring and excessive-actuation checks must match comma, except the pinned MADS diff
         run: |
           set -euo pipefail
-          BASE=$(git merge-base comma/master HEAD)
-          echo "merge-base with commaai/openpilot master: $BASE"
-          git diff --exit-code "$BASE" HEAD -- \
+          BASE=$(git merge-base comma/master HEAD || git rev-parse comma/master)
+          echo "base with commaai/openpilot master: $BASE"
+          .github/fork-safety/check.sh check "$BASE" .github/fork-safety/openpilot.allow \
             openpilot/selfdrive/monitoring \
             openpilot/selfdrive/selfdrived/helpers.py
 
-      - name: opendbc/safety must not be modified
+      - name: opendbc/safety must match comma, except the pinned MADS diff
         working-directory: opendbc_repo
         run: |
           set -euo pipefail
@@ -45,10 +48,24 @@ jobs:
           git fetch comma master --depth=200
           BASE=$(git merge-base comma/master HEAD)
           echo "merge-base with commaai/opendbc master: $BASE"
-          git diff --exit-code "$BASE" HEAD -- opendbc/safety
+          ../.github/fork-safety/check.sh check "$BASE" ../.github/fork-safety/opendbc.allow opendbc/safety
 
-      - name: panda submodule stays commaai/panda
+      - name: panda submodule is the TeslaPilot panda fork
         run: |
           set -euo pipefail
-          grep -E 'url = .*/commaai/panda.git' .gitmodules
-          echo "panda submodule URL is stock commaai/panda"
+          grep -E 'url = \.\./panda\.git$' .gitmodules
+          echo "panda submodule is ../panda.git (comma panda plus the reviewed MADS commit)"
+
+  opendbc-safety-tests:
+    name: comma safety tests (100% coverage) and MISRA
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: comma test.sh (UBSan, coverage, 100% line gate)
+        run: opendbc_repo/opendbc/safety/tests/test.sh
+
+      - name: MISRA
+        run: opendbc_repo/opendbc/safety/tests/misra/test_misra.sh

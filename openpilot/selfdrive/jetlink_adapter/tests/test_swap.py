@@ -23,13 +23,6 @@ ROOT = Path(__file__).resolve().parents[4]
 MODELD = ROOT / 'openpilot/selfdrive/modeld/modeld.py'
 
 
-@pytest.fixture(autouse=True)
-def params_root(tmp_path, monkeypatch):
-  monkeypatch.setenv('PARAMS_ROOT', str(tmp_path))
-  monkeypatch.delenv('OPENPILOT_PREFIX', raising=False)
-  return tmp_path / 'd'
-
-
 def _loads(tree: ast.AST, base) -> set[str]:
   """Attribute names read (not assigned) off the expression `base` matches."""
   return {n.attr for n in ast.walk(tree)
@@ -197,7 +190,7 @@ def test_bare_highland_model_swap_matches_jetlink(joining):
     _close(state)
 
 
-def test_attach_swaps_onto_the_large_model(joining, monkeypatch):
+def test_attach_swaps_onto_the_large_model(joining, monkeypatch, params_root):
   small = HighlandModel('small')
   big = BigModel()
   log = Log()
