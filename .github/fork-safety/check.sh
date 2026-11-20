@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # TeslaPilot fork-safety allowlist: every file that differs from comma's base under the given paths
-# must be listed with its exact base and head blob, so only the reviewed TITS diff passes.
+# must be listed with its exact base and head blob, so only the reviewed MADS diff passes.
 #   check.sh check BASE ALLOWLIST PATH...   fail on any unlisted change
 #   check.sh print BASE PATH...             print the allowlist for the current HEAD
 set -euo pipefail

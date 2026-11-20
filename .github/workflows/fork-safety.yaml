@@ -5,7 +5,7 @@
 #
 # This workflow fails the PR if Highland touches those paths relative to the
 # merge-base with commaai/openpilot (and commaai/opendbc for the safety pack),
-# except the reviewed TITS diff, pinned file by file (base and head blob) in
+# except the reviewed MADS diff, pinned file by file (base and head blob) in
 # .github/fork-safety/*.allow. It also runs comma's safety tests and MISRA.
 # Refresh an allowlist only after review: .github/fork-safety/check.sh print BASE PATH...
 name: fork-safety
@@ -31,7 +31,7 @@ jobs:
           git remote add comma https://github.com/commaai/openpilot.git
           git fetch comma master --depth=200
 
-      - name: Driver monitoring and excessive-actuation checks must match comma, except the pinned TITS diff
+      - name: Driver monitoring and excessive-actuation checks must match comma, except the pinned MADS diff
         run: |
           set -euo pipefail
           BASE=$(git merge-base comma/master HEAD || git rev-parse comma/master)
@@ -40,7 +40,7 @@ jobs:
             openpilot/selfdrive/monitoring \
             openpilot/selfdrive/selfdrived/helpers.py
 
-      - name: opendbc/safety must match comma, except the pinned TITS diff
+      - name: opendbc/safety must match comma, except the pinned MADS diff
         working-directory: opendbc_repo
         run: |
           set -euo pipefail
@@ -54,7 +54,7 @@ jobs:
         run: |
           set -euo pipefail
           grep -E 'url = \.\./panda\.git$' .gitmodules
-          echo "panda submodule is ../panda.git (comma panda plus the reviewed TITS commit)"
+          echo "panda submodule is ../panda.git (comma panda plus the reviewed MADS commit)"
 
   opendbc-safety-tests:
     name: comma safety tests (100% coverage) and MISRA
