@@ -14,14 +14,23 @@ from openpilot.selfdrive.modeld.helpers import chestnut_pick, chestnut_present, 
 from openpilot.selfdrive.modelmanager import CHESTNUT_FAILED as FAILED, CHESTNUT_PROGRESS as PROGRESS, store
 
 ROOT = Path(__file__).resolve().parents[3]
-# upstream's on-device chestnut flags, SConscript before #38930
-# compile args follow the pinned compile_onnx.py; --device-input went with #38933
+# tracks upstream's chestnut compile: its tinygrad flags, its compile_onnx.py args, PYTHONPATH and taskset
 FLAGS = {'DEBUG': '1', 'DEV': 'USB+AMD:LLVM', 'FRAME_DEV': 'CPU', 'FLOAT16': '1', 'JIT_BATCH_SIZE': '0', 'GMMU': '0',
          'TC_OPT': '2', 'TC_MIN_GLOBALS': '32'}
 
 
+CORES = '0-7'
+
+
+def compile_env() -> dict[str, str]:
+  # compile_onnx.py imports examples.openpilot from tinygrad_repo, as SConscript's PYTHONPATH gives it
+  path = os.pathsep.join(p for p in (str(ROOT / 'tinygrad_repo'), os.environ.get('PYTHONPATH', '')) if p)
+  return {**os.environ, **FLAGS, 'PYTHONPATH': path}
+
+
 def compile_cmd(onnx: Path, pkl: Path) -> list[str]:
-  return ['taskset', '-c', '7', sys.executable, str(ROOT / 'tinygrad_repo/examples/openpilot/compile_onnx.py'), str(onnx), str(pkl),
+  # 0-7 as upstream (#38656); cores 4-7 are offline offroad, so a single big core fails
+  return ['taskset', '-c', CORES, sys.executable, str(ROOT / 'tinygrad_repo/examples/openpilot/compile_onnx.py'), str(onnx), str(pkl),
           '--out-of-band', '--benchmark-runs', '1']
 
 
@@ -86,7 +95,7 @@ class ChestnutCompiler:
         self.fetch(ref, onnx, lambda f: self._progress(ref, 'downloading', f, "downloading"), self._stop.is_set)
       self._progress(ref, 'compiling', 0.0, "compiling on chestnut")
       self.log.warning(f"chestnut: compiling {ref[:10]}")
-      self._proc = self.popen(compile_cmd(onnx, pkl), env={**os.environ, **FLAGS}, cwd=str(ROOT), stdout=subprocess.DEVNULL,
+      self._proc = self.popen(compile_cmd(onnx, pkl), env=compile_env(), cwd=str(ROOT), stdout=subprocess.DEVNULL,
                               stderr=subprocess.PIPE, preexec_fn=_die_with_parent)
       _, err = self._proc.communicate()
       if self._stop.is_set():
