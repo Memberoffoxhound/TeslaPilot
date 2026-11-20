@@ -25,6 +25,7 @@ class FakeSelfdrive:
     self.initialized = True
     self.CS_prev = structs.CarState()
     self.sm = {'pandaStates': []}
+    self.disengage_on_accelerator = False
     self.mads = ModularAssistiveDrivingSystem(self)
 
   # selfdrived order: openpilot state machine first, then MADS
@@ -43,8 +44,8 @@ class FakeSelfdrive:
     return self.mads.active if self.mads.enabled_toggle else self.active
 
 
-def car_state(available=True, buttons=(), brake=False):
-  CS = structs.CarState(brakePressed=brake)
+def car_state(available=True, buttons=(), brake=False, gas=False):
+  CS = structs.CarState(brakePressed=brake, gasPressed=gas)
   CS.cruiseState.available = available
   CS.buttonEvents = [structs.CarState.ButtonEvent(pressed=True, type=b) for b in buttons]
   return CS
@@ -133,3 +134,14 @@ class TestBrakeAllModes:
 
   def test_disengage(self):
     assert self._brake(2) == ((False, False), (False, False))
+
+
+def test_disengage_on_accelerator_follows_selfdrive(monkeypatch):
+  # Params() at init is True; the live selfdrive copy is then flipped to False
+  monkeypatch.setattr("openpilot.sunnypilot.mads.mads.Params", lambda *a, **k: FakeParams(DisengageOnAccelerator=True))
+  sd = FakeSelfdrive("toyota", mads_on=True)
+  sd.disengage_on_accelerator = False
+  sd.CS_prev.gasPressed = False
+  CS = car_state(gas=True)
+  sd.events.add(EventName.pedalPressed)
+  assert sd.mads.pedal_pressed_non_gas_pressed(CS)
