@@ -27,6 +27,10 @@ FAILS = os.path.join(STATE, "fails")  # "<key> <count>": gives up after MAX_FAIL
 MAX_FAILS = 3
 TIMEOUT_S = float(os.environ.get("DPB_BOOT_TIMEOUT_S", "1200"))
 NOTE_S = float(os.environ.get("DPB_NOTE_S", "5"))  # how long a failure stays on screen
+# this runs before Wi-Fi is up: a check every NET_STEP_S, for up to NET_WAIT_S, before a download
+NET_WAIT_S = float(os.environ.get("DPB_NET_WAIT_S", "90"))
+NET_STEP_S = 5.0
+clock, nap = time.monotonic, time.sleep
 MODEL = os.environ.get("DPB_MODEL", "/sys/firmware/devicetree/base/model")
 VERSION = os.environ.get("DPB_VERSION", "/VERSION")
 SUDO = ["sudo", "-n"]
@@ -113,6 +117,18 @@ def online() -> bool:
                           capture_output=True, timeout=10).returncode == 0
   except (OSError, subprocess.SubprocessError):
     return False
+
+
+def wait_online(page) -> bool:
+  t0, n = clock(), 0
+  while True:
+    page.connecting(max(0.0, NET_WAIT_S - (clock() - t0)))
+    if online():
+      return True
+    n += 1
+    if n * NET_STEP_S > NET_WAIT_S:
+      return False
+    nap(max(0.0, t0 + n * NET_STEP_S - clock()))
 
 
 def skip_reason(key: str) -> str | None:
@@ -300,9 +316,9 @@ def main(page_factory=None) -> int:
         put(CONSENT, sha)
         accept = True
         log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} kernel accepted ({sha[:12]})\n")
-      if not cached(kstate != "ok") and not online():
+      if not cached(kstate != "ok") and not wait_online(page):
         # not counted, like a failed download: next boot tries again
-        log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} {release_host()} unreachable, not counted\n")
+        log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} {release_host()} unreachable, not counted (waited {NET_WAIT_S:.0f} s)\n")
         print(f"dpbridge boot: skip, {release_host()} unreachable")
         page.note("no network,\nskipped", "tries next boot")
         time.sleep(NOTE_S)

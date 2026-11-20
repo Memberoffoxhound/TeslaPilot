@@ -36,7 +36,7 @@ class FakeSpinner:
 
 def load(tmp_path, monkeypatch, install='echo "[1/4] x"; exit 0', state='ok', model='comma mici', slot='_a'):
   for k, v in (('DPB_DIR', tmp_path / 'data'), ('DPB_BOOT_DIR', tmp_path / 'data'), ('DPB_MODEL', tmp_path / 'model'), ('DPB_VERSION', tmp_path / 'VERSION'),
-               ('DPB_BOOT_TIMEOUT_S', '5'), ('DPB_NOTE_S', '0'),
+               ('DPB_BOOT_TIMEOUT_S', '5'), ('DPB_NOTE_S', '0'), ('DPB_NET_WAIT_S', '0'),
                ('DPB_BT_PARAM', tmp_path / 'DpbBluetooth')):  # unused now, kept so a migration would show
     monkeypatch.setenv(k, str(v))
   (tmp_path / 'data').mkdir(exist_ok=True)
@@ -468,3 +468,64 @@ def test_page_client_talks_to_the_page_process(tmp_path, monkeypatch):
   monkeypatch.setattr(m.subprocess, 'Popen', lambda *a, **kw: (_ for _ in ()).throw(OSError('no display')))
   pg = m.Page()
   assert pg.ask() == '' and pg.close() is None  # no page: no answer, so no flash
+
+
+def fake_clock(m, up_at=None):
+  # online() answers from up_at seconds on; each check costs 1 s
+  t = [0.0]
+  checks = []
+
+  def online():
+    checks.append(t[0])
+    t[0] += 1
+    return up_at is not None and checks[-1] >= up_at
+
+  m.clock = lambda: t[0]
+  m.nap = lambda s: t.__setitem__(0, t[0] + s)
+  m.online = online
+  m.NET_WAIT_S = 90.0
+  return checks
+
+
+def test_waits_for_the_network_then_installs(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  checks = fake_clock(m, up_at=20)
+  pg = FakeSpinner()
+  m.main(lambda: pg)
+  assert checks == [0, 5, 10, 15, 20] and runs(tmp_path) == ['--yes']
+  assert pg.waits == [90, 85, 80, 75, 70]
+
+
+def test_no_network_after_90_s_skips_uncounted(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  checks = fake_clock(m)
+  pg = FakeSpinner()
+  assert m.main(lambda: pg) == 0
+  assert checks == list(range(0, 95, 5)) and runs(tmp_path) == [] and not (tmp_path / 'data/fails').exists()
+  assert 'unreachable, not counted (waited 90 s)' in (tmp_path / 'data/log').read_text()
+  assert pg.notes == [('no network,\nskipped', 'tries next boot')]
+
+
+def test_no_wait_when_everything_is_on_data(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, state='offer')
+  pin_cache(m, tmp_path)
+  checks = fake_clock(m)
+  m.main(lambda: FakeSpinner())
+  assert checks == [] and runs(tmp_path) == ['--yes --accept-kernel']
+
+
+def test_running_kernel_needs_no_boot_img(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, state='ok')
+  pin_cache(m, tmp_path)
+  (tmp_path / 'data/boot.img').unlink()
+  checks = fake_clock(m)
+  m.main(lambda: FakeSpinner())
+  assert checks == [] and runs(tmp_path) == ['--yes'] and not m.cached()
+
+
+def test_network_wait_defaults(monkeypatch):
+  monkeypatch.delenv('DPB_NET_WAIT_S', raising=False)
+  spec = importlib.util.spec_from_file_location('dpb_boot3', HERE / 'boot.py')
+  m = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(m)
+  assert m.NET_WAIT_S == 90 and m.NET_STEP_S == 5
