@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # First boot after a dpbridge install (or a change to its pins): run install_userspace.sh once, before manager,
 # with the kernel page on screen. On a stock kernel the page asks first (once per kernel image); "not now" is kept
-# until Settings > bluetooth clears it. Any failure or the timeout is logged and boot goes on; it tries again next boot.
+# until Settings > bluetooth clears it; no answer in ASK_S powers the comma off. Any failure or the install timeout is
+# logged and boot goes on; it tries again next boot.
 # The kernel step is waited for, so openpilot never runs while it flashes. Reboots only when the installer flashed the kernel (state=pending).
 import hashlib
 import os
 import re
+import select
 import signal
 import subprocess
 import sys
@@ -27,6 +29,7 @@ FAILS = os.path.join(STATE, "fails")  # "<key> <count>": gives up after MAX_FAIL
 MAX_FAILS = 3
 TIMEOUT_S = float(os.environ.get("DPB_BOOT_TIMEOUT_S", "1200"))
 NOTE_S = float(os.environ.get("DPB_NOTE_S", "5"))  # how long a failure stays on screen
+ASK_S = float(os.environ.get("DPB_ASK_S", "600"))  # no answer by then: power off, ask again next boot
 # this runs before Wi-Fi is up: a check every NET_STEP_S, for up to NET_WAIT_S, before a download
 NET_WAIT_S = float(os.environ.get("DPB_NET_WAIT_S", "90"))
 NET_STEP_S = 5.0
@@ -37,6 +40,8 @@ SUDO = ["sudo", "-n"]
 INSTALL = os.path.join(HERE, "install_userspace.sh")
 KERNEL = os.path.join(HERE, "kernel.sh")
 REBOOT = ["sudo", "reboot"]
+POWEROFF = ["sudo", "poweroff"]  # what HARDWARE.shutdown runs
+HALT_S = 60.0  # after poweroff, so manager never starts
 # what the install depends on; a change here (code or a pinned sha) runs it again
 KEY_FILES = ("install_userspace.sh", "kernel.sh", "lib.sh", "flash_boot.sh", "radio.sh", "attach.sh", "asound.conf",
              "firmware/kernel.env", "firmware/btfw.env", "firmware/firmware.sha256", "firmware/qca.sha256", "bluez/bluez.env")
@@ -192,15 +197,23 @@ class Page:
       except (OSError, ValueError):
         pass
 
-  def ask(self) -> str:
-    # waits for the user, no timeout; "" if the page died
+  def ask(self) -> str | None:
+    # "" if the page died, None if no answer in ASK_S
     self._send("ask")
     if self._p is None:
       return ""
-    for ln in self._p.stdout:
-      if ln.strip() in ("accept", "later"):
-        return ln.strip()
-    return ""
+    fd, buf, end = self._p.stdout.fileno(), b"", time.monotonic() + ASK_S
+    while (left := end - time.monotonic()) > 0:
+      if not select.select([fd], [], [], left)[0]:
+        continue
+      chunk = os.read(fd, 4096)
+      if not chunk:
+        return ""
+      *lines, buf = (buf + chunk).split(b"\n")
+      for ln in lines:
+        if ln.strip() in (b"accept", b"later"):
+          return ln.strip().decode()
+    return None
 
   def connecting(self, secs: float):
     self._send(f"wait {secs:.0f}")
@@ -307,6 +320,14 @@ def main(page_factory=None) -> int:
     with open(LOG, "a", buffering=1) as log:
       if kstate == "offer" and not accept:
         a = page.ask()
+        if a is None:
+          # nobody answered (or the page froze): nothing saved, power off instead of booting on
+          log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} kernel not answered in {ASK_S:.0f} s, powering off\n")
+          print("dpbridge boot: no answer, powering off")
+          page.close()
+          if subprocess.run(POWEROFF).returncode == 0:
+            time.sleep(HALT_S)
+          return 0
         if a != "accept":
           if a == "later":
             put(DECLINED, sha)

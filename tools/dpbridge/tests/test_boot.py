@@ -530,3 +530,40 @@ def test_network_wait_defaults(monkeypatch):
   m = importlib.util.module_from_spec(spec)
   spec.loader.exec_module(m)
   assert m.NET_WAIT_S == 90 and m.NET_STEP_S == 5
+
+
+def test_no_answer_powers_off_and_saves_nothing(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, state='offer')
+  (tmp_path / 'poweroff').write_text(f'echo off >> {tmp_path}/offs\n')
+  m.POWEROFF, m.HALT_S = ['bash', str(tmp_path / 'poweroff')], 0
+  pg = FakePage(None)
+  assert m.main(lambda: pg) == 0
+  assert (tmp_path / 'offs').read_text().splitlines() == ['off'] and pg.closed and runs(tmp_path) == []
+  assert sorted(p.name for p in (tmp_path / 'data').iterdir()) == ['log']  # no consent, declined, stamp or fails
+  assert 'not answered in 600 s, powering off' in (tmp_path / 'data/log').read_text()
+  assert not (tmp_path / 'reboots').exists()
+  m.main(lambda: pg)
+  assert pg.asked == 2  # asks again next boot
+
+
+def test_page_died_still_boots_without_poweroff(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, state='offer')
+  m.POWEROFF = ['bash', '-c', f'echo off >> {tmp_path}/offs']
+  assert m.main(lambda: FakePage('')) == 0
+  assert not (tmp_path / 'offs').exists() and runs(tmp_path) == [] and not (tmp_path / 'data/declined').exists()
+
+
+def test_ask_deadline(tmp_path, monkeypatch):
+  import sys
+  import time
+  m = load(tmp_path, monkeypatch)
+  assert m.ASK_S == 600 and m.POWEROFF == ['sudo', 'poweroff']
+  m.ASK_S = 0.5
+  (tmp_path / 'page.py').write_text(FAKE_PAGE)
+  real = m.subprocess.Popen
+  monkeypatch.setattr(m.subprocess, 'Popen', lambda cmd, **kw: real([sys.executable, str(tmp_path / 'page.py'), str(tmp_path / 'got'), 'noise'], **kw))
+  pg = m.Page()
+  t0 = time.monotonic()
+  assert pg.ask() is None and time.monotonic() - t0 < 5  # alive but silent: the deadline, not a hang
+  pg.close()
+

@@ -53,7 +53,8 @@ The installer does everything, with openpilot down. After an install from comma'
 `launch_chffrplus.sh` calls `boot.py` after `agnos_init`, before manager, on a comma 4 only. comma's installer and
 AGNOS setup can't show our warning, so on a stock kernel `boot.py` first shows the kernel page
 (`openpilot/system/dpbridge/kernel_page.py`): the cards from `kernel_warning.txt`, then comma's confirm circles,
-"install kernel" and a red "not now", each with its slider. It waits for an answer, with no timeout.
+"install kernel" and a red "not now", each with its slider. With no answer in 10 min (`DPB_ASK_S`) the comma powers
+off, nothing saved, and asks again next boot. A page that dies flashes nothing and openpilot starts.
 
 - install kernel: `/data/dpbridge_boot/consent` holds the kernel image sha, so it asks once per image. The run goes
   on with `--accept-kernel`.

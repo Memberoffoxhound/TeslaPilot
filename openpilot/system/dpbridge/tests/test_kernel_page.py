@@ -60,7 +60,7 @@ for c in page._scroller.items[:-2]:
 print("fit", len(page._scroller.items))
 """
   r = subprocess.run([sys.executable, "-c", code], env=xvfb, capture_output=True, text=True, timeout=60)
-  assert r.returncode == 0 and "fit 14" in r.stdout, r.stderr[-2000:]
+  assert r.returncode == 0 and "fit 15" in r.stdout, r.stderr[-2000:]
 
 
 def test_page_process_takes_commands_and_exits_at_eof(xvfb):
@@ -102,3 +102,9 @@ print("ok")
 """
   r = subprocess.run([sys.executable, "-c", code], env=xvfb, capture_output=True, text=True, timeout=60)
   assert r.returncode == 0 and "ok" in r.stdout, r.stderr[-2000:]
+
+
+def test_page_says_no_answer_shuts_down():
+  src = (PKG / "kernel_page.py").read_text()
+  assert 'GreyBigButton("no answer in\\n10 min", "the comma shuts down"' in src
+  assert 'os.environ.get("DPB_ASK_S", "600")' in (ROOT / "tools/dpbridge/boot.py").read_text()

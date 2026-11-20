@@ -35,7 +35,9 @@ class ConsentPage(Scroller):
     accept = BigConfirmationCircleButton("install\nkernel", gui_app.texture("icons_mici/setup/driver_monitoring/dm_check.png", 64, 64),
                                          on_accept)
     decline = BigConfirmationCircleButton("not now", gui_app.texture("icons_mici/setup/cancel.png", 64, 64), on_decline, red=True)
-    self._scroller.add_widgets([*items, accept, decline])
+    # boot.py powers off after DPB_ASK_S (600 s) without an answer
+    off = GreyBigButton("no answer in\n10 min", "the comma shuts down", gui_app.texture(*ICONS["warning"]))
+    self._scroller.add_widgets([*items, off, accept, decline])
 
   def _render(self, rect):
     rl.draw_rectangle_rec(self._rect, rl.BLACK)
