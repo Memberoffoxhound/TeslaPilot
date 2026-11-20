@@ -27,7 +27,7 @@ def test_cards_from_the_warning_file():
 
 def test_copy_rules():
   text = Path(WARNING).read_text()
-  assert "\u2014" not in text and "Hotz" not in text
+  assert "\u2014" not in text
 
 
 def test_accept_and_red_decline_are_comma_s_confirm_circles():

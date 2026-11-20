@@ -11,7 +11,7 @@ HERE = Path(__file__).resolve().parents[1]
 ROOT = HERE.parents[1]
 
 
-class FakeSpinner:
+class FakePage:
   # the kernel page: answers ask() with `answer`, records what it was shown
   def __init__(self, answer='accept'):
     self.answer, self.asked, self.seen, self.names, self.notes, self.waits, self.closed = answer, 0, [], [], [], [], False
@@ -80,11 +80,11 @@ def pin_cache(m, tmp_path, btfw=b'fw', bluez=b'bz', boot=b'boot', write=True):
 
 def test_runs_once_then_stamp_skips(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch)
-  sp = FakeSpinner()
+  sp = FakePage()
   assert m.main(lambda: sp) == 0
   assert runs(tmp_path) == ['--yes'] and sp.closed
   assert (tmp_path / 'data/stamp').read_text() == m.setup_key()
-  assert m.main(lambda: FakeSpinner()) == 0
+  assert m.main(lambda: FakePage()) == 0
   assert runs(tmp_path) == ['--yes']  # second boot: nothing to do
 
 
@@ -107,18 +107,18 @@ def test_stamp_changes_with_pins_agnos_and_slot(tmp_path, monkeypatch):
 def test_pin_change_reruns(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch)
   (tmp_path / 'data/stamp').write_text('an older setup')
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert runs(tmp_path) == ['--yes']
 
 
 def test_skip_on_disable_and_off_a_comma_4(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch)
   (tmp_path / 'data/disable').touch()
-  assert m.main(lambda: FakeSpinner()) == 0 and runs(tmp_path) == []
+  assert m.main(lambda: FakePage()) == 0 and runs(tmp_path) == []
   assert not (tmp_path / 'data/stamp').exists()
   m = load(tmp_path, monkeypatch, model='comma tici')
   (tmp_path / 'data/disable').unlink()
-  assert m.main(lambda: FakeSpinner()) == 0 and runs(tmp_path) == []
+  assert m.main(lambda: FakePage()) == 0 and runs(tmp_path) == []
 
 
 @pytest.mark.parametrize('param', ['0', '1', None])
@@ -129,20 +129,20 @@ def test_disable_survives_boot_with_bt_off(tmp_path, monkeypatch, param):
   if param is not None:
     (tmp_path / 'DpbBluetooth').write_text(param)
   for _ in range(2):
-    m.main(lambda: FakeSpinner())
+    m.main(lambda: FakePage())
   assert (tmp_path / 'data/disable').exists() and not (tmp_path / 'data/bt_off').exists()
   assert runs(tmp_path) == [] and m.skip_reason(m.setup_key()) == 'disabled'
 
 
 def test_no_network_falls_through_and_retries(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, install='echo "[2/4] BT firmware"; echo "refusing: download failed: x" >&2; exit 75')
-  assert m.main(lambda: FakeSpinner()) == 0
+  assert m.main(lambda: FakePage()) == 0
   assert not (tmp_path / 'data/stamp').exists()
   log = (tmp_path / 'data/log').read_text()
   assert 'download failed, not counted' in log and 'download failed: x' in log
   # never counted: no Wi-Fi for many boots does not use up the tries
   for _ in range(4):
-    m.main(lambda: FakeSpinner())
+    m.main(lambda: FakePage())
   assert runs(tmp_path) == ['--yes'] * 5 and not (tmp_path / 'data/fails').exists()
   assert not (tmp_path / 'reboots').exists()
 
@@ -150,27 +150,27 @@ def test_no_network_falls_through_and_retries(tmp_path, monkeypatch):
 def test_gives_up_after_three_failures_per_setup(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, install='exit 1')
   for _ in range(5):
-    m.main(lambda: FakeSpinner())
+    m.main(lambda: FakePage())
   assert runs(tmp_path) == ['--yes'] * 3
   assert (tmp_path / 'data/fails').read_text() == f'{m.setup_key()} 3'
   assert 'gave up after 3 failed runs' in m.skip_reason(m.setup_key())
   # a new setup (pin, AGNOS or slot) gets its own three tries
   m.slot = lambda: '_b'
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert runs(tmp_path) == ['--yes'] * 4
 
 
 def test_success_clears_the_fail_count(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch)
   (tmp_path / 'data/fails').write_text(f'{m.setup_key()} 2')
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert (tmp_path / 'data/stamp').exists() and not (tmp_path / 'data/fails').exists()
 
 
 def test_hung_install_times_out(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, install='sleep 60')
   m.TIMEOUT_S = 0.5
-  sp = FakeSpinner()
+  sp = FakePage()
   assert m.main(lambda: sp) == 0 and sp.closed
   assert 'timed out' in (tmp_path / 'data/log').read_text()
   assert not (tmp_path / 'data/stamp').exists()
@@ -179,7 +179,7 @@ def test_hung_install_times_out(tmp_path, monkeypatch):
 def test_kernel_step_is_never_timed_out(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, install='echo "[3/4] x"; echo "[4/4] kernel"; sleep 1.5; echo flashed')
   m.TIMEOUT_S = 0.3
-  assert m.main(lambda: FakeSpinner()) == 0
+  assert m.main(lambda: FakePage()) == 0
   log = (tmp_path / 'data/log').read_text()
   assert 'timed out' not in log and 'flashed' in log and (tmp_path / 'data/stamp').exists()
 
@@ -189,7 +189,7 @@ def test_kernel_step_is_waited_for_to_the_end(tmp_path, monkeypatch):
   monkeypatch.setenv('DPB_KERNEL_WAIT_S', '0.3')  # the old 60 min stop's knob, now ignored
   m = load(tmp_path, monkeypatch, install=f'echo "[4/4] kernel"; sleep 2; echo "  kernel: switching slot 98%"; echo done > {tmp_path}/finished')
   m.TIMEOUT_S = 0.3
-  assert m.main(lambda: FakeSpinner()) == 0
+  assert m.main(lambda: FakePage()) == 0
   assert (tmp_path / 'finished').exists() and (tmp_path / 'data/stamp').exists()
   assert 'switching slot 98%' in (tmp_path / 'data/log').read_text()
   assert not hasattr(m, 'KERNEL_WAIT_S') and not hasattr(m, 'STILL')
@@ -200,14 +200,14 @@ def test_timeout_sends_term_first(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, install=f'trap "echo term > {tmp_path}/got; exit 143" TERM; echo "[2/4] x"; sleep 30 & wait')
   m.TIMEOUT_S = 0.3
   t0 = __import__('time').monotonic()
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert (tmp_path / 'got').read_text().strip() == 'term'
   assert __import__('time').monotonic() - t0 < 5  # did not need the 10 s SIGKILL wait
 
 
 def test_reboots_only_after_a_flash(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, install='echo "[4/4] kernel"; echo "  kernel: writing slot b 55%"', state='pending')
-  sp = FakeSpinner()
+  sp = FakePage()
   m.main(lambda: sp)
   assert (tmp_path / 'reboots').read_text().splitlines() == ['reboot']
   assert not (tmp_path / 'data/stamp').exists()  # the new slot changes the key anyway
@@ -216,13 +216,13 @@ def test_reboots_only_after_a_flash(tmp_path, monkeypatch):
     d = tmp_path / st
     d.mkdir()
     m = load(d, monkeypatch, state=st)
-    m.main(lambda: FakeSpinner())
+    m.main(lambda: FakePage())
     assert not (d / 'reboots').exists() and (d / 'data/stamp').exists()
 
 
 def test_installer_reboot_is_left_to_boot(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, install='echo "REBOOT=$DPB_REBOOT"')
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert 'REBOOT=true' in (tmp_path / 'data/log').read_text()
 
 
@@ -255,11 +255,11 @@ def test_unreachable_host_skips_without_counting(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch)
   m.online = lambda: False
   for _ in range(4):
-    assert m.main(lambda: FakeSpinner()) == 0
+    assert m.main(lambda: FakePage()) == 0
   assert runs(tmp_path) == [] and not (tmp_path / 'data/fails').exists() and not (tmp_path / 'data/stamp').exists()
   assert 'github.com/ unreachable, not counted' in (tmp_path / 'data/log').read_text()
   m.online = lambda: True
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert runs(tmp_path) == ['--yes']
 
 
@@ -269,10 +269,10 @@ def test_offline_with_everything_on_data_still_installs(tmp_path, monkeypatch):
   pin_cache(m, tmp_path, write=False)
   (tmp_path / 'data/debs/fw.tar').write_bytes(b'fw')
   (tmp_path / 'data/debs/bz.tar').write_bytes(b'bz')
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert runs(tmp_path) == []  # boot.img missing: still needs the network
   (tmp_path / 'data/boot.img').write_bytes(b'boot')
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert runs(tmp_path) == ['--yes --accept-kernel']
 
 
@@ -284,14 +284,14 @@ def test_stale_cache_does_not_skip_the_offline_check(tmp_path, monkeypatch):
   assert m.cached()
   (tmp_path / 'data/debs/fw.tar').write_bytes(b'old fw')
   assert not m.cached()
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert runs(tmp_path) == [] and 'unreachable, not counted' in (tmp_path / 'data/log').read_text()
   (tmp_path / 'data/debs/fw.tar').write_bytes(b'fw')
   (tmp_path / 'data/boot.img').write_bytes(b'bootXXXX')  # wrong size
   assert not m.cached()
   (tmp_path / 'data/boot.img').write_bytes(b'BOOT')  # same size, wrong sha
   assert not m.cached()
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert runs(tmp_path) == []
   # exist-only (the old cached() test) is not enough
   (tmp_path / 'data/debs/fw.tar').write_bytes(b'')
@@ -306,7 +306,7 @@ def test_cached_wrong_bluez_sha_is_not_cached(tmp_path, monkeypatch):
   pin_cache(m, tmp_path)
   (tmp_path / 'data/debs/bz.tar').write_bytes(b'old bz')
   assert not m.cached()
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert runs(tmp_path) == [] and 'unreachable, not counted' in (tmp_path / 'data/log').read_text()
 
 
@@ -341,7 +341,7 @@ def test_stamped_boot_never_hashes_payloads(tmp_path, monkeypatch):
     raise AssertionError(f'file_sha opened {path} on a stamped boot')
 
   m.file_sha = boom
-  assert m.main(lambda: FakeSpinner()) == 0
+  assert m.main(lambda: FakePage()) == 0
   assert runs(tmp_path) == []
 
 
@@ -369,7 +369,7 @@ def boot_sha(m):
 
 def test_stock_kernel_asks_first_and_accept_flashes(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, state='offer')
-  pg = FakeSpinner('accept')
+  pg = FakePage('accept')
   m.main(lambda: pg)
   assert pg.asked == 1 and pg.closed and runs(tmp_path) == ['--yes --accept-kernel']
   assert (tmp_path / 'data/consent').read_text() == boot_sha(m) and 'kernel accepted' in (tmp_path / 'data/log').read_text()
@@ -378,7 +378,7 @@ def test_stock_kernel_asks_first_and_accept_flashes(tmp_path, monkeypatch):
 def test_consent_is_once_per_kernel_image(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, state='offer', install='exit 75')  # a download failure, so every boot runs again
   (tmp_path / 'data/consent').write_text(boot_sha(m))
-  pg = FakeSpinner('later')
+  pg = FakePage('later')
   m.main(lambda: pg)
   assert pg.asked == 0 and runs(tmp_path) == ['--yes --accept-kernel']
   (tmp_path / 'data/consent').write_text('an older image')
@@ -388,7 +388,7 @@ def test_consent_is_once_per_kernel_image(tmp_path, monkeypatch):
 
 def test_not_now_is_kept_until_settings_clears_it(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, state='offer')
-  pg = FakeSpinner('later')
+  pg = FakePage('later')
   assert m.main(lambda: pg) == 0
   assert pg.asked == 1 and runs(tmp_path) == [] and not (tmp_path / 'data/fails').exists()
   assert (tmp_path / 'data/declined').exists() and not (tmp_path / 'data/consent').exists()
@@ -396,13 +396,13 @@ def test_not_now_is_kept_until_settings_clears_it(tmp_path, monkeypatch):
     m.main(lambda: pg)
   assert pg.asked == 1 and runs(tmp_path) == [] and m.skip_reason(m.setup_key()).startswith('kernel declined')
   (tmp_path / 'data/declined').unlink()  # what the Settings entry does, then a reboot
-  m.main(lambda: FakeSpinner('accept'))
+  m.main(lambda: FakePage('accept'))
   assert runs(tmp_path) == ['--yes --accept-kernel']
 
 
 def test_no_answer_saves_nothing_and_asks_next_boot(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, state='offer')
-  pg = FakeSpinner('')  # the page process died
+  pg = FakePage('')  # the page process died
   m.main(lambda: pg)
   m.main(lambda: pg)
   assert pg.asked == 2 and runs(tmp_path) == []
@@ -414,15 +414,15 @@ def test_no_question_without_a_stock_kernel(tmp_path, monkeypatch):
     d = tmp_path / st
     d.mkdir()
     m = load(d, monkeypatch, state=st)
-    pg = FakeSpinner('later')
-    m.main(lambda: pg)
+    pg = FakePage('later')
+    m.main(lambda pg=pg: pg)
     assert pg.asked == 0 and runs(d) == ['--yes'], st
 
 
 def test_page_shows_step_names(tmp_path, monkeypatch):
-  m = load(tmp_path, monkeypatch, install='echo "[2/4] BT firmware"; echo "[4/4] kernel"; echo "  kernel: downloading 8%"; '
-                                           'echo "  kernel: writing slot b 55%"; echo "  kernel: rebooting 100%"')
-  pg = FakeSpinner()
+  steps = ('[2/4] BT firmware', '[4/4] kernel', '  kernel: downloading 8%', '  kernel: writing slot b 55%', '  kernel: rebooting 100%')
+  m = load(tmp_path, monkeypatch, install='; '.join(f'echo "{s}"' for s in steps))
+  pg = FakePage()
   m.main(lambda: pg)
   names = [n for i, n in enumerate(pg.names) if i == 0 or n != pg.names[i - 1]]
   assert names == ['installing', 'downloading', 'writing slot b', 'rebooting'] and pg.seen[-1] == 100
@@ -430,12 +430,12 @@ def test_page_shows_step_names(tmp_path, monkeypatch):
 
 def test_failure_is_shown_then_openpilot_starts(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, state='offer', install='exit 1')
-  pg = FakeSpinner()
+  pg = FakePage()
   assert m.main(lambda: pg) == 0
   assert pg.notes == [('kernel not\ninstalled', 'openpilot is starting')] and pg.closed
   (tmp_path / 'x').mkdir()
   m = load(tmp_path / 'x', monkeypatch, install='exit 75')
-  pg = FakeSpinner()
+  pg = FakePage()
   m.main(lambda: pg)
   assert pg.notes == [('download\nfailed', 'tries next boot')]
 
@@ -452,10 +452,11 @@ def test_page_client_talks_to_the_page_process(tmp_path, monkeypatch):
   import sys
   m = load(tmp_path, monkeypatch)
   (tmp_path / 'page.py').write_text(FAKE_PAGE)
+  real = m.subprocess.Popen
   for reply, want in (('later', 'later'), ('accept', 'accept'), ('noise', '')):
     got = tmp_path / f'got_{reply}'
-    monkeypatch.setattr(m.subprocess, 'Popen', lambda cmd, _p=m.subprocess.Popen, **kw: _p([sys.executable, str(tmp_path / 'page.py'),
-                                                                                        str(got), reply], **kw))
+    monkeypatch.setattr(m.subprocess, 'Popen', lambda cmd, _p=real, _got=got, _reply=reply, **kw:
+                        _p([sys.executable, str(tmp_path / 'page.py'), str(_got), _reply], **kw))
     pg = m.Page()
     pg.connecting(85.2)
     pg.progress(64, 'writing slot b')
@@ -490,7 +491,7 @@ def fake_clock(m, up_at=None):
 def test_waits_for_the_network_then_installs(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch)
   checks = fake_clock(m, up_at=20)
-  pg = FakeSpinner()
+  pg = FakePage()
   m.main(lambda: pg)
   assert checks == [0, 5, 10, 15, 20] and runs(tmp_path) == ['--yes']
   assert pg.waits == [90, 85, 80, 75, 70]
@@ -499,7 +500,7 @@ def test_waits_for_the_network_then_installs(tmp_path, monkeypatch):
 def test_no_network_after_90_s_skips_uncounted(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch)
   checks = fake_clock(m)
-  pg = FakeSpinner()
+  pg = FakePage()
   assert m.main(lambda: pg) == 0
   assert checks == list(range(0, 95, 5)) and runs(tmp_path) == [] and not (tmp_path / 'data/fails').exists()
   assert 'unreachable, not counted (waited 90 s)' in (tmp_path / 'data/log').read_text()
@@ -510,7 +511,7 @@ def test_no_wait_when_everything_is_on_data(tmp_path, monkeypatch):
   m = load(tmp_path, monkeypatch, state='offer')
   pin_cache(m, tmp_path)
   checks = fake_clock(m)
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert checks == [] and runs(tmp_path) == ['--yes --accept-kernel']
 
 
@@ -519,7 +520,7 @@ def test_running_kernel_needs_no_boot_img(tmp_path, monkeypatch):
   pin_cache(m, tmp_path)
   (tmp_path / 'data/boot.img').unlink()
   checks = fake_clock(m)
-  m.main(lambda: FakeSpinner())
+  m.main(lambda: FakePage())
   assert checks == [] and runs(tmp_path) == ['--yes'] and not m.cached()
 
 
