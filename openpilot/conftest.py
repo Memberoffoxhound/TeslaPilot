@@ -1,4 +1,5 @@
 import os
+import textwrap
 
 import pytest
 
@@ -83,7 +84,7 @@ def params_root(tmp_path, monkeypatch):
 
 
 # stand-in Params for UI probe subprocesses that draw without libparams_c.so
-PARAMS_PROBE_STUB = """
+PARAMS_PROBE_STUB = textwrap.dedent("""\
   m = types.ModuleType("openpilot.common.params")
   class Params:
     def __init__(self, *a, **k): pass
@@ -92,5 +93,5 @@ PARAMS_PROBE_STUB = """
     def __getattr__(self, n): return lambda *a, **k: None
   m.Params = Params
   sys.modules["openpilot.common.params"] = m
-"""
+""")
 
