@@ -191,7 +191,6 @@ class LongModeBadge(Widget):
   H = VLABEL_H
   COL_W = VLABEL_COL_W
   OP_LOGO_W = 30
-  LETTER_SZ = VLABEL_SZ
 
   def __init__(self):
     super().__init__()
