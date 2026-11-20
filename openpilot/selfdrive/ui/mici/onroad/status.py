@@ -54,5 +54,5 @@ class StatusFade:
 
 
 status_fade = StatusFade()
-# TITS steering alone counts as engaged: path, lane lines, confidence ball, compass
+# MADS steering alone counts as engaged: path, lane lines, confidence ball, compass
 steer_fade = StatusFade("steer_status")

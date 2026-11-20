@@ -87,7 +87,7 @@ class MiciMainLayout(Scroller):
       on_alerts=lambda: self._scroll_to(self._alerts_layout),
       on_stats=lambda: gui_app.push_widget(self._settings_layout.stats_layout),
       on_set_speed_assist=self._settings_layout.show_set_speed_assist,
-      on_tits=self._settings_layout.show_tits,
+      on_mads=self._settings_layout.show_mads,
       on_models=self._settings_layout.show_models,
       alert_count_callback=self._alerts_layout.active_alerts,
       alert_icon_callback=self._alerts_layout.highest_severity_icon,

@@ -173,14 +173,14 @@ def _column_offsets(widths: tuple[float, ...], col: int) -> tuple[int, ...]:
 
 def draw_vertical_label(font: rl.Font, letters: str, x: float, y: float, fsz: int = VLABEL_SZ, col: int = VLABEL_COL_W,
                         h: float = VLABEL_H, color: rl.Color = WHITE, center: bool = False) -> None:
-  # shared by LONG, TITS and the OEM letters: even pitch, glyphs pinned to the slot top
+  # shared by LONG, MADS and the OEM letters: even pitch, glyphs pinned to the slot top
   pitch = h / len(letters)
   sizes = [measure_text_cached(font, ch, fsz) for ch in letters]
   if center:
     for i, (ch, sz) in enumerate(zip(letters, sizes, strict=True)):
       rl.draw_text_ex(font, ch, rl.Vector2(x + (col - sz.x) / 2, y + i * pitch + (pitch - sz.y) / 2), fsz, 0, color)
     return
-  # LONG/TITS: whole pixels on one center column
+  # LONG/MADS: whole pixels on one center column
   for i, (ch, xo) in enumerate(zip(letters, _column_offsets(tuple(sz.x for sz in sizes), col), strict=True)):
     rl.draw_text_ex(font, ch, rl.Vector2(round(x) + xo, round(y + i * pitch)), fsz, 0, color)
 
@@ -251,8 +251,8 @@ class LongModeBadge(Widget):
       draw_vertical_label(self._font, m.stock_label, x + self._logo_w + VLABEL_GAP, y, m.letter_sz, m.col_w, center=True)
 
 
-class TitsBadge(Widget):
-  # footer: wheel + vertical TITS, styled like the LONG badge, while TITS is on
+class MadsBadge(Widget):
+  # footer: wheel + vertical MADS, styled like the LONG badge, while MADS is on
 
   H = VLABEL_H
   WHEEL = 40
@@ -280,7 +280,7 @@ class MiciHomeLayout(Widget):
     self._wordmark_font = _wordmark_font()
 
     self._long_badge = LongModeBadge()
-    self._tits_badge = TitsBadge()
+    self._mads_badge = MadsBadge()
     self._usb_icon = IconWidget("icons_mici/usb.png", (62, 40))
     self._chestnut_icon = IconWidget("icons_mici/chestnut_green.png", (54, 40))
     self._chestnut_loading_icon = IconWidget("icons_mici/chestnut.png", (68, 40))
@@ -298,7 +298,7 @@ class MiciHomeLayout(Widget):
       IconWidget("icons_mici/settings.png", (48, 48), opacity=0.9),
       NetworkIcon(),
       self._long_badge,
-      self._tits_badge,
+      self._mads_badge,
       self._usb_icon,
       self._ssa_icon,
       self._chestnut_icon,
@@ -320,9 +320,9 @@ class MiciHomeLayout(Widget):
     self._ssa_on = False
     self._ssa_hit = rl.Rectangle(0, 0, 0, 0)
     self._on_ssa_click: Callable | None = None
-    self._tits_on = False
-    self._tits_hit = rl.Rectangle(0, 0, 0, 0)
-    self._on_tits_click: Callable | None = None
+    self._mads_on = False
+    self._mads_hit = rl.Rectangle(0, 0, 0, 0)
+    self._on_mads_click: Callable | None = None
     self._accel_hit = rl.Rectangle(0, 0, 0, 0)
     self._on_models_click: Callable | None = None
 
@@ -338,12 +338,12 @@ class MiciHomeLayout(Widget):
     self._day_txt = ("Day", fmt_trip(t["today_m"], t["today_e"], ui_state.is_metric))
     self._week_txt = ("Week", fmt_trip(t["week_m"], t["week_e"], ui_state.is_metric))
     self._ssa_on = ui_state.params.get_bool("SetSpeedAssist")
-    self._tits_on = ui_state.tits_enabled
+    self._mads_on = ui_state.mads_enabled
 
   def set_callbacks(self, on_settings: Callable | None = None, on_alerts: Callable | None = None,
                     on_stats: Callable | None = None,
                     on_set_speed_assist: Callable | None = None,
-                    on_tits: Callable | None = None,
+                    on_mads: Callable | None = None,
                     on_models: Callable | None = None,
                     alert_count_callback: Callable[[], int] | None = None,
                     alert_icon_callback: Callable[[], rl.Texture | None] | None = None):
@@ -351,14 +351,14 @@ class MiciHomeLayout(Widget):
     self._on_alerts_click = on_alerts
     self._on_stats_click = on_stats
     self._on_ssa_click = on_set_speed_assist
-    self._on_tits_click = on_tits
+    self._on_mads_click = on_mads
     self._on_models_click = on_models
     self._alert_count_callback = alert_count_callback
     self._alerts_pill.set_alert_count_callback(alert_count_callback, alert_icon_callback)
 
   def _handle_mouse_release(self, mouse_pos: MousePos):
-    if self._on_tits_click and self._tits_hit.width > 0 and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._tits_hit):
-      self._on_tits_click()
+    if self._on_mads_click and self._mads_hit.width > 0 and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._mads_hit):
+      self._on_mads_click()
       return
     if self._on_ssa_click and self._ssa_hit.width > 0 and rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._ssa_hit):
       self._on_ssa_click()
@@ -449,15 +449,15 @@ class MiciHomeLayout(Widget):
     self._mic_icon.set_visible(ui_state.recording_audio)
     self._body_icon.set_visible(bool(ui_state.is_body))
     self._ssa_icon.set_visible(self._ssa_on and bool(ui_state.has_longitudinal_control))
-    self._tits_badge.set_visible(self._tits_on)
+    self._mads_badge.set_visible(self._mads_on)
 
     footer_rect = rl.Rectangle(self.rect.x + HOME_PADDING, self.rect.y + self.rect.height - 48, self.rect.width - HOME_PADDING, 48)
     self._status_bar_layout.render(footer_rect)
-    if self._tits_badge.is_visible:
-      r = self._tits_badge.rect
-      self._tits_hit = rl.Rectangle(r.x - 8, r.y - 8, r.width + 16, r.height + 8)
+    if self._mads_badge.is_visible:
+      r = self._mads_badge.rect
+      self._mads_hit = rl.Rectangle(r.x - 8, r.y - 8, r.width + 16, r.height + 8)
     else:
-      self._tits_hit = rl.Rectangle(0, 0, 0, 0)
+      self._mads_hit = rl.Rectangle(0, 0, 0, 0)
     if self._ssa_icon.is_visible:
       r = self._ssa_icon.rect
       self._ssa_hit = rl.Rectangle(r.x - 8, r.y - 8, r.width + 16, r.height + 8)

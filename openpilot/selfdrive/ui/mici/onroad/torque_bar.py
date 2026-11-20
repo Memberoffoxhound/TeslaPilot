@@ -188,7 +188,7 @@ class TorqueBar(Widget):
     torque_line_height = np.interp(abs(self._torque_filter.x), [0.5, 1], [14, 56])
 
     # animate alpha and angle span
-    # TITS steering alone keeps it shown
+    # MADS steering alone keeps it shown
     line_alpha = self._torque_line_alpha_filter.update(not self._hidden) * (1 - steer_fade.weight(UIStatus.DISENGAGED))
     engaged = status_fade.weight(UIStatus.ENGAGED)
 

@@ -35,7 +35,7 @@ MadsState = custom.ModularAssistiveDrivingSystem.ModularAssistiveDrivingSystemSt
 
 
 def steer_status(status: UIStatus, enabled: bool, mads) -> UIStatus:
-  # TITS steering alone draws the path, ball and compass like openpilot engaged
+  # MADS steering alone draws the path, ball and compass like openpilot engaged
   if enabled or status == UIStatus.OVERRIDE or not mads.enabled:
     return status
   if mads.state == MadsState.overriding:
@@ -139,7 +139,7 @@ class UIState:
     self.personality_param: int = log.LongitudinalPersonality.standard
     self.is_body: bool | None = False
     self.CP: car.CarParams | None = None
-    self.tits_enabled = False
+    self.mads_enabled = False
     self.cp_sp_flags = 0
     self.light_sensor: float = -1.0
     self.tesla_stepped_aside: bool = False  # card stepped aside for Tesla Autosteer/FSD
@@ -328,8 +328,8 @@ class UIState:
         self.has_longitudinal_control = self.CP.openpilotLongitudinalControl
 
     self.recording_audio = self.params.get_bool("RecordAudio") and self.started
-    # TITS (MADS)
-    self.tits_enabled = self.params.get_bool("Mads")
+    # MADS
+    self.mads_enabled = self.params.get_bool("Mads")
     cp_sp_bytes = self.params.get("CarParamsSPPersistent")
     self.cp_sp_flags = messaging.log_from_bytes(cp_sp_bytes, custom.CarParamsSP).flags if cp_sp_bytes else 0
     tesla = self.CP is not None and self.CP.brand == "tesla"

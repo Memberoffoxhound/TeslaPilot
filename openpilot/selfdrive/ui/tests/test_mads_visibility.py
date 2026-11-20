@@ -64,9 +64,9 @@ def test_brand_list_is_complete():
 
 
 def test_welcome_copy():
-  assert mads.TITS_TITLE == "MADS - Modular Assistive Driving System"
-  assert mads.TITS_WELCOME[0] == mads.TITS_TITLE
-  for card in mads.TITS_WELCOME:
+  assert mads.MADS_TITLE == "MADS - Modular Assistive Driving System"
+  assert mads.MADS_WELCOME[0] == mads.MADS_TITLE
+  for card in mads.MADS_WELCOME:
     for text in (card if isinstance(card, tuple) else (card,)):
       assert "\u2014" not in text and "\u2013" not in text and "stands for" not in text
 
@@ -75,11 +75,11 @@ def test_welcome_copy():
 def test_tesla_brake_copy(brand):
   cards, desc = mads.welcome_cards(brand), mads.toggle_description(brand)
   note = "On Tesla, pressing the brake cancels both steering and speed."
-  assert cards[:len(mads.TITS_WELCOME)] == mads.TITS_WELCOME
+  assert cards[:len(mads.MADS_WELCOME)] == mads.MADS_WELCOME
   if brand == "tesla":
     assert cards[-2:] == ["Engage cruise again to get speed control back.", note]
     assert note in desc
   else:
-    assert cards == mads.TITS_WELCOME and note not in desc
+    assert cards == mads.MADS_WELCOME and note not in desc
   for text in (desc, *[c for c in cards if isinstance(c, str)]):
     assert "\u2014" not in text and "\u2013" not in text

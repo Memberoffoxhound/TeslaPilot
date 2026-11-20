@@ -1,9 +1,9 @@
-# TITS (MADS) settings shown per car, rules ported from sunnypilot, see LICENSE.sunnypilot.
+# MADS settings shown per car, rules ported from sunnypilot, see LICENSE.sunnypilot.
 from opendbc.sunnypilot.car.tesla.values import MadsScreenButtonType, TeslaFlagsSP
 from openpilot.sunnypilot.mads.helpers import MADS_NO_ACC_MAIN_BUTTON, get_mads_limited_brands, mads_has_button, mads_main_reported
 
-TITS_TITLE = "MADS - Modular Assistive Driving System"
-TITS_WELCOME: list = [
+MADS_TITLE = "MADS - Modular Assistive Driving System"
+MADS_WELCOME: list = [
   "MADS - Modular Assistive Driving System",
   "TeslaPilot will continue steering when you cancel cruise while you handle speed.",
   "Engage cruise again to get speed control back.",
@@ -12,12 +12,12 @@ TESLA_BRAKE = "On Tesla, pressing the brake cancels both steering and speed."
 
 
 def welcome_cards(brand: str | None) -> list:
-  return TITS_WELCOME + ([TESLA_BRAKE] if brand == "tesla" else [])
+  return MADS_WELCOME + ([TESLA_BRAKE] if brand == "tesla" else [])
 
 
 def toggle_description(brand: str | None) -> str:
   tesla = TESLA_BRAKE + "\n" if brand == "tesla" else ""
-  return TITS_TITLE + "\nKeeps steering when you cancel cruise while you handle speed.\n" + tesla + "Change it while parked."
+  return MADS_TITLE + "\nKeeps steering when you cancel cruise while you handle speed.\n" + tesla + "Change it while parked."
 
 
 STEERING_MODES = ["remain active", "pause", "disengage"]

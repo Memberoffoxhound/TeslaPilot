@@ -35,8 +35,8 @@ WHEEL_WHITE = rl.Color(255, 255, 255, 255)
 WHEEL_GREEN = rl.Color(0, 255, 64, 255)
 WHEEL_ORANGE = rl.Color(255, 115, 0, 255)
 WHEEL_RIM_R = 0.77
-TITS_PAUSED_ALPHA = 0.45
-TITS_HUB_ALPHA = 0.85
+MADS_PAUSED_ALPHA = 0.45
+MADS_HUB_ALPHA = 0.85
 
 
 def _texture(rgba: np.ndarray, px: float) -> rl.Texture:
@@ -76,7 +76,7 @@ def _wheel_effect_textures(asset: str, size: int) -> tuple[rl.Texture, rl.Textur
 
 
 def _wheel_part_textures(asset: str, size: int) -> tuple[rl.Texture, rl.Texture]:
-  # TITS wheel: rim is steering, hub and spokes are speed
+  # MADS wheel: rim is steering, hub and spokes are speed
   image = gui_app._load_image_from_path((ASSETS_DIR / asset).as_posix(), size, size)
   w, h, px = image.width, image.height, image.width / size
   alpha = np.frombuffer(image.to_bytes(w * h * 4), dtype=np.uint8).reshape(h, w, 4)[..., 3]
@@ -328,7 +328,7 @@ class HudRenderer(Widget):
     alpha = 255 * (1 - (1 - DIMMED_ICON_ALPHA) * status_fade.weight(UIStatus.DISENGAGED) * (1 - critical))
     mads = ui_state.sm['selfdriveStateSP'].mads
     if ui_state.started and mads.enabled and not ui_state.engaged and critical < 0.5:
-      self._draw_tits_wheel(pos_x, pos_y, rotation, mads.active)
+      self._draw_mads_wheel(pos_x, pos_y, rotation, mads.active)
       return
     origin = rl.Vector2(self._txt_wheel_glow.width / 2, self._txt_wheel_glow.height / 2)
     rl.draw_texture_pro(self._txt_wheel_glow, rl.Rectangle(0, 0, self._txt_wheel_glow.width, self._txt_wheel_glow.height),
@@ -341,11 +341,11 @@ class HudRenderer(Widget):
                         rl.Rectangle(pos_x, pos_y, wheel_txt.width, wheel_txt.height),
                         rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(255, 255, 255, int(alpha * glow)))
 
-  def _draw_tits_wheel(self, pos_x: int, pos_y: int, rotation: float, active: bool) -> None:
-    # TITS steering alone: rim in the theme color (comma green fallback), hub white; paused dims both
+  def _draw_mads_wheel(self, pos_x: int, pos_y: int, rotation: float, active: bool) -> None:
+    # MADS steering alone: rim in the theme color (comma green fallback), hub white; paused dims both
     r, g, b = theme_rgb()
-    rim_alpha = 255 if active else int(255 * TITS_PAUSED_ALPHA)
-    hub_alpha = int(255 * (TITS_HUB_ALPHA if active else DIMMED_ICON_ALPHA))
+    rim_alpha = 255 if active else int(255 * MADS_PAUSED_ALPHA)
+    hub_alpha = int(255 * (MADS_HUB_ALPHA if active else DIMMED_ICON_ALPHA))
     dst = rl.Rectangle(pos_x, pos_y, self._txt_wheel_rim.width, self._txt_wheel_rim.height)
     src = rl.Rectangle(0, 0, self._txt_wheel_rim.width, self._txt_wheel_rim.height)
     origin = rl.Vector2(self._txt_wheel_rim.width / 2, self._txt_wheel_rim.height / 2)
