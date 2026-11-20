@@ -84,24 +84,28 @@ run $SUDO abctl --set_unbootable "$(slot_num "$oth")"
 
 # 3. mirror the current slot into the other one, skipping what already matches
 # compare and copy with O_DIRECT: cmp can agree from the page cache when flash still differs
-i=0
+# each partition gets its share of 55-78% by size, so the big system write moves the bar
+tot=0
+for n in $MIRROR; do tot=$((tot + $(size "$P/$n$cur"))); done
+acc=0
 for n in $MIRROR; do
-  progress "writing slot ${oth#_}" $((55 + i * 4)); i=$((i + 1))
+  sz=$(size "$P/$n$cur")
+  lo=$((55 + 23 * acc / tot)); acc=$((acc + sz)); hi=$((55 + 23 * acc / tot))
+  progress "writing slot ${oth#_}" $lo
   if [ "$(dsha "$P/$n$cur" "$(size "$P/$n$cur")")" = "$(dsha "$P/$n$oth" "$(size "$P/$n$oth")")" ]; then
     echo "  $n already matches"
     continue
   fi
-  run $SUDO dd if="$P/$n$cur" of="$P/$n$oth" bs=4M iflag=direct conv=fsync status=none
+  pdd "writing slot ${oth#_}" $lo $hi "$sz" $SUDO dd if="$P/$n$cur" of="$P/$n$oth" bs=4M iflag=direct conv=fsync
   if [ $YES = 1 ]; then
-    progress "reading back" $((55 + i * 4 - 2))
-    sz=$(size "$P/$n$cur")
+    progress "reading back" $hi
     [ "$(dsha "$P/$n$cur" "$sz")" = "$(dsha "$P/$n$oth" "$sz")" ] || die "$n$oth readback mismatch, slot not switched"
   fi
 done
 
 # 4. new kernel on the other slot only
 progress "writing slot ${oth#_}" 80
-run $SUDO dd if="$IMG" of="$P/boot$oth" bs=4M conv=fsync status=none
+pdd "writing slot ${oth#_}" 80 89 "$isz" $SUDO dd if="$IMG" of="$P/boot$oth" bs=4M conv=fsync
 if [ $YES = 1 ]; then
   progress "reading back" 90
   [ "$(dsha "$P/boot$oth" "$isz")" = "$(fsha "$IMG")" ] || die "boot$oth readback mismatch, slot not switched"

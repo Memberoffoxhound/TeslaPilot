@@ -640,3 +640,25 @@ def test_flash_needs_block_devices_up_front(dev):
   r = run('flash_boot.sh', env, '--yes')
   assert r.returncode != 0 and 'devcfg_b is not a block device' in r.stderr
   assert snapshot(parts) == before and not [o for o in ops(tmp) if o.startswith('abctl')]
+
+
+def test_dd_progress_moves_within_a_write(tmp_path):
+  # a slow dd: its byte counts become percents between from and to, its exit status and errors pass through
+  lib = (HERE / 'lib.sh').read_text()
+  fake = ("fdd() { echo \"$*\" > " + str(tmp_path / 'args') + "; printf '2097152 bytes copied\\r' >&2; sleep 1.5; " +
+          "printf '6291456 bytes copied\\r' >&2; sleep 1.5; echo '10485760 bytes copied' >&2; return ${RC:-0}; }\n")
+  script = f'set -euo pipefail\nSUDO=\nYES=1\n{lib}\n{fake}pdd "writing slot b" 55 75 10485760 fdd if=x of=y iflag=direct conv=fsync\n'
+  r = subprocess.run(['bash', '-c', script], capture_output=True, text=True)
+  pct = [int(ln.rsplit(' ', 1)[1].rstrip('%')) for ln in r.stdout.splitlines() if ln.startswith('  kernel: writing slot b ')]
+  assert r.returncode == 0 and pct[-1] == 75 and len(pct) >= 3 and pct == sorted(pct) and 55 < pct[0] < 75, r.stdout
+  assert (tmp_path / 'args').read_text().split() == ['if=x', 'of=y', 'iflag=direct', 'conv=fsync', 'status=progress']
+  r = subprocess.run(['bash', '-c', script.replace('return ${RC:-0}', "echo 'dd: error writing y' >&2; return 1")],
+                     capture_output=True, text=True)
+  assert r.returncode == 1 and 'error writing y' in r.stderr and '75%' not in r.stdout
+
+
+def test_flash_writes_keep_direct_fsync_and_readback():
+  sh = (HERE / 'flash_boot.sh').read_text()
+  assert 'pdd "writing slot ${oth#_}" $lo $hi "$sz" $SUDO dd if="$P/$n$cur" of="$P/$n$oth" bs=4M iflag=direct conv=fsync\n' in sh
+  assert 'pdd "writing slot ${oth#_}" 80 89 "$isz" $SUDO dd if="$IMG" of="$P/boot$oth" bs=4M conv=fsync\n' in sh
+  assert sh.count('readback mismatch, slot not switched') == 2
