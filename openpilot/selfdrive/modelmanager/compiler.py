@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import ctypes
 import os
+import pty
+import re
 import signal
 import subprocess
 import sys
@@ -45,6 +47,35 @@ def fetch_onnx(ref: str, dest: Path, progress, should_stop) -> Path:
   raise RegistryError("no server has its ONNX")
 
 
+_ANSI = re.compile(r'\x1b\[[0-9;?]*[A-Za-z]')
+_BAR = re.compile(r'^compiling\b.*?(\d+)/(\d+) \[')
+_BENCH = re.compile(r'^\[(\d+)/(\d+)\] [\d.]+ ms')
+_VERIFY = re.compile(r'^opened device DISK:\S+\.pkl ')  # the ONNX opens DISK too
+# compile_onnx.py's DEBUG=1 output, in order, to (frac, msg); kernels fill 0.05 to 0.80
+KERNELS = (0.05, 0.80)
+
+
+def parse_line(line: str) -> tuple[float, str] | None:
+  line = _ANSI.sub('', line).strip()
+  if m := _BAR.match(line):
+    n, t = int(m[1]), int(m[2])
+    return KERNELS[0] + (KERNELS[1] - KERNELS[0]) * (n / t if t else 0.0), "compiling"
+  if line.startswith('scheduled '):
+    return KERNELS[0], "scheduling"
+  if line.startswith('JIT captured'):
+    return 0.85, "checking"
+  if m := _BENCH.match(line):
+    return (0.90, "saving") if int(m[1]) + 1 >= int(m[2]) else (0.88, "benchmarking")
+  if _VERIFY.match(line):
+    return 0.95, "verifying"
+  return None
+
+
+def last_line(tail: bytes) -> str:
+  lines = [_ANSI.sub('', ln).strip() for ln in re.split(r'[\r\n]+', tail.decode(errors='replace'))]
+  return next((ln for ln in reversed(lines) if ln), "")[-200:]
+
+
 def _die_with_parent():
   ctypes.CDLL(None).prctl(1, signal.SIGKILL)  # PR_SET_PDEATHSIG: never hold the GPU past modelmanagerd
 
@@ -59,6 +90,7 @@ class ChestnutCompiler:
     self._thread: threading.Thread | None = None
     self._proc = None
     self._stop = threading.Event()
+    self._last: dict | None = None
 
   def busy(self) -> bool:
     return self._thread is not None and self._thread.is_alive()
@@ -80,28 +112,65 @@ class ChestnutCompiler:
   def stop(self) -> None:
     self._stop.set()
     if self._proc is not None and self._proc.poll() is None:
+      try:
+        os.killpg(self._proc.pid, signal.SIGKILL)  # tinygrad's compile workers too
+      except (OSError, TypeError):
+        pass
       self._proc.kill()
 
   def _progress(self, ref, stage, frac=0.0, msg=""):  # jetlink.progress's shape
-    store.put(PROGRESS, {'ref': ref, 'stage': stage, 'frac': round(frac, 2), 'msg': msg})
+    p = {'ref': ref, 'stage': stage, 'frac': round(frac, 2), 'msg': msg}
+    if p != self._last:
+      self._last = p
+      store.put(PROGRESS, p)
+
+  def _compile(self, ref: str, onnx: Path, pkl: Path) -> None:
+    # a pty so tinygrad prints its live tqdm bars and flushes each line
+    master, slave = pty.openpty()
+    try:
+      self._proc = self.popen(compile_cmd(onnx, pkl), env=compile_env(), cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=slave,
+                              stderr=slave, preexec_fn=_die_with_parent, start_new_session=True)
+    finally:
+      os.close(slave)
+    if self._stop.is_set():
+      self.stop()  # stopped while it spawned
+    frac, buf, tail = 0.0, b'', b''
+    try:
+      while True:
+        try:
+          chunk = os.read(master, 4096)
+        except OSError:  # EIO once the child side is gone
+          chunk = b''
+        if not chunk:
+          break
+        tail = (tail + chunk)[-4096:]
+        *lines, buf = re.split(rb'[\r\n]', buf + chunk)
+        for ln in lines:
+          step = parse_line(ln.decode(errors='replace'))
+          if step and step[0] >= frac:
+            frac = step[0]
+            self._progress(ref, 'compiling', frac, step[1])
+    finally:
+      os.close(master)
+    rc = self._proc.wait()
+    if self._stop.is_set():
+      raise InterruptedError("stopped")
+    if rc:
+      self.log.warning(f"chestnut: compile exited {rc}: {tail[-500:].decode(errors='replace')}")
+      raise RuntimeError(last_line(tail) or f"compile exited {rc}")
 
   def _run(self, ref: str) -> None:
     d = compiled_dir(ref)
     onnx, pkl, stamp = d / 'model.onnx', d / 'driving_tinygrad.pkl', d / 'tinygrad_ref'
+    self._last = None
     try:
       stamp.unlink(missing_ok=True)
       if not onnx.is_file():
         self._progress(ref, 'downloading', 0.0, "downloading")
         self.fetch(ref, onnx, lambda f: self._progress(ref, 'downloading', f, "downloading"), self._stop.is_set)
-      self._progress(ref, 'compiling', 0.0, "compiling on chestnut")
+      self._progress(ref, 'compiling', 0.0, "loading model")
       self.log.warning(f"chestnut: compiling {ref[:10]}")
-      self._proc = self.popen(compile_cmd(onnx, pkl), env=compile_env(), cwd=str(ROOT), stdout=subprocess.DEVNULL,
-                              stderr=subprocess.PIPE, preexec_fn=_die_with_parent)
-      _, err = self._proc.communicate()
-      if self._stop.is_set():
-        raise InterruptedError("stopped")
-      if self._proc.returncode:
-        raise RuntimeError(f"compile exited {self._proc.returncode}: {(err or b'')[-200:].decode(errors='replace')}")
+      self._compile(ref, onnx, pkl)
       stamp.write_text(tinygrad_ref())
       onnx.unlink(missing_ok=True)
       store.remove(FAILED)
