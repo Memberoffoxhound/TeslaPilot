@@ -26,7 +26,7 @@ def test_first_day_by_country(zone, first):
   assert tz.first_day(zone) == first and tz.first_day(ZoneInfo(zone)) == first
 
 
-@pytest.mark.parametrize("zone", [None, "Etc/UTC", "garbage"])
+@pytest.mark.parametrize("zone", [None, "", "Etc/UTC", "garbage"])
 def test_unknown_zone_is_sunday(zone):
   assert tz.first_day(zone) == SUN
 

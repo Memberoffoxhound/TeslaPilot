@@ -118,6 +118,7 @@ def _near(got, expect, tol=2):
 def test_large_compass_bottom_right(place):
   assert _near(place["large"], [478, 195]) and _near(place["large_download"], [478, 195])
   assert _near(place["large_failed"], [466, 194])   # 60 wide, still 10 from the corner
+  assert place["large"][1] - place["large_failed"][1] == 1
 
 
 def test_small_compass_on_the_personality(place):
@@ -126,6 +127,7 @@ def test_small_compass_on_the_personality(place):
 
 def test_custom_off_stays_stock(place):
   assert _near(place["stock"], [86, 195]) and _near(place["stock_failed"], [86, 194])
+  assert place["stock"][1] - place["stock_failed"][1] == 1
 
 ABSENT = textwrap.dedent('''
   out = {}

@@ -25,8 +25,9 @@ BRANDS = ["body", "byd", "chrysler", "ford", "gm", "honda", "hyundai", "mazda", 
   ("body", 0, 0, 0, set()),
   ("rivian", 0, 0, 0, set()),
   ("tesla", 0, 0, 0, set()),
+  ("tesla", 0, 2, 0, set()),
   ("tesla", BUS, 0, 0, {SCREEN_BUTTON}),
-  ("tesla", BUS, 1, 0, {SCREEN_BUTTON, UNIFIED}),
+  *[("tesla", BUS, s, 0, {SCREEN_BUTTON, UNIFIED}) for s in (1, 2, 3)],
 ])
 def test_visible_options(brand, flags, screen, car_flags, shown):
   assert mads.visible_options(brand, flags, screen, car_flags) == shown
