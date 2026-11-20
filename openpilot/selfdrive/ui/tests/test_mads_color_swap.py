@@ -1,4 +1,4 @@
-# TITS steering alone: lane lines and path trade colors, with a fade
+# MADS steering alone: lane lines and path trade colors, with a fade
 import json
 import os
 import subprocess
@@ -89,9 +89,9 @@ PROBE = textwrap.dedent('''
   fps = gui_app.target_fps
   out = {"fps": fps, "stock": [[c.r, c.g, c.b, c.a] for c in mrm.STOCK_PATH_GRADIENT.colors], "ll": [0, 255, 64]}
   ss.enabled, ss.state = True, OP.enabled
-  out["engaged_off"] = run(fps)[-1]  # TITS off
+  out["engaged_off"] = run(fps)[-1]  # MADS off
   mads.enabled, mads.active, mads.state = True, True, MS.enabled
-  out["engaged"] = run(fps)[-1]  # TITS on and openpilot engaged
+  out["engaged"] = run(fps)[-1]  # MADS on and openpilot engaged
   ss.enabled, ss.state = False, OP.disabled
   out["enter"] = run(fps)  # cruise cancel: steering only
   mads.state = MS.overriding
@@ -104,7 +104,7 @@ PROBE = textwrap.dedent('''
   mr._longitudinal_control = True
   ss.enabled, ss.state = False, OP.disabled
   out["plain"] = run(fps)[-1]
-  # driver torque near the threshold: TITS override flaps 2 of every 6 frames
+  # driver torque near the threshold: MADS override flaps 2 of every 6 frames
   flap = []
   for i in range(fps):
     mads.state = MS.overriding if i % 6 < 2 else MS.enabled

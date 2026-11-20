@@ -1,4 +1,4 @@
-# TITS steering alone draws the path, ball and compass like engaged; fully off dims like stock
+# MADS steering alone draws the path, ball and compass like engaged; fully off dims like stock
 import json
 import os
 import subprocess
@@ -19,7 +19,7 @@ PROBE = textwrap.dedent('''
   from openpilot.system.ui.lib.application import gui_app
   rl.set_trace_log_level(rl.TraceLogLevel.LOG_NONE)
   rl.set_config_flags(rl.ConfigFlags.FLAG_WINDOW_HIDDEN)
-  rl.init_window(536, 240, "tits")
+  rl.init_window(536, 240, "mads")
   gui_app._load_fonts()
   print("WINDOW", flush=True)
 
@@ -92,7 +92,7 @@ PROBE = textwrap.dedent('''
   out["engaged"] = run()
   ss.enabled, ss.state = False, OP.disabled
   mads.enabled, mads.active, mads.state = True, True, MS.enabled
-  out["tits"] = run()
+  out["mads"] = run()
   # going offroad resets it, the next frame doesn't recompute while stopped
   ui_state.started = False
   ui_state._update_status()
@@ -101,12 +101,12 @@ PROBE = textwrap.dedent('''
   run(1)
   ui_state.started_frame = 0  # keep the fake model data current
   mads.state = MS.overriding
-  out["tits_override"] = run()
+  out["mads_override"] = run()
   mads.active, mads.state = False, MS.paused
   out["paused"] = run()
   mads.enabled, mads.state = False, MS.disabled
   out["off"] = run()
-  # long only: openpilot engaged, TITS paused
+  # long only: openpilot engaged, MADS paused
   ss.enabled, ss.state = True, OP.enabled
   mads.enabled, mads.state = True, MS.paused
   out["long_only"] = run()
@@ -126,11 +126,11 @@ def probe(tmp_path_factory):
 
 
 def test_steering_only_looks_engaged(probe):
-  eng, tits = probe["engaged"], probe["tits"]
-  assert tits["status"] == "disengaged" and tits["steer"] == "engaged"
-  assert tits["path"] > 0.99 and tits["compass"] >= 225
-  assert tits["ball"][0] == pytest.approx(eng["ball"][0], abs=0.5) and tits["ball"][1] == eng["ball"][1]  # same height, engaged colors
-  assert tits["lane"] != probe["off"]["lane"]  # lane lines lit, not grey (test_tits_color_swap checks the color)
+  eng, mads = probe["engaged"], probe["mads"]
+  assert mads["status"] == "disengaged" and mads["steer"] == "engaged"
+  assert mads["path"] > 0.99 and mads["compass"] >= 225
+  assert mads["ball"][0] == pytest.approx(eng["ball"][0], abs=0.5) and mads["ball"][1] == eng["ball"][1]  # same height, engaged colors
+  assert mads["lane"] != probe["off"]["lane"]  # lane lines lit, not grey (test_mads_color_swap checks the color)
 
 
 def test_long_only_stays_lit(probe):
@@ -145,13 +145,13 @@ def test_offroad_resets_steer_status(probe):
 
 def test_steering_only_leaves_the_rest_disengaged(probe):
   # MAX, personality, wheel, camera keep reading the stock status
-  assert probe["tits"]["stock_fade"] > 0.99
+  assert probe["mads"]["stock_fade"] > 0.99
 
 
-def test_tits_override_is_white(probe):
-  assert probe["tits_override"]["steer"] == "override"
-  assert probe["tits_override"]["path"] > 0.99
-  assert probe["tits_override"]["ball"][1] == [255, 255, 255]
+def test_mads_override_is_white(probe):
+  assert probe["mads_override"]["steer"] == "override"
+  assert probe["mads_override"]["path"] > 0.99
+  assert probe["mads_override"]["ball"][1] == [255, 255, 255]
 
 
 @pytest.mark.parametrize("state", ["paused", "off"])

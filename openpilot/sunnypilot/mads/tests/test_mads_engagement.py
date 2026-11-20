@@ -58,7 +58,7 @@ def engage(sd):
 
 
 class TestTeslaCancel:
-  def test_cancel_keeps_lateral_with_tits(self):
+  def test_cancel_keeps_lateral_with_mads(self):
     sd = FakeSelfdrive("tesla", mads_on=True, steering_mode=2)
     engage(sd)
     sd.step(car_state(buttons=(ButtonType.cancel,)), [EventName.buttonCancel])
@@ -66,14 +66,14 @@ class TestTeslaCancel:
     assert sd.lat_active
     assert sd.events_sp.has(EventNameSP.manualLongitudinalRequired)
 
-  def test_cancel_disengages_all_without_tits(self):
+  def test_cancel_disengages_all_without_mads(self):
     sd = FakeSelfdrive("tesla", mads_on=False)
     engage(sd)
     sd.step(car_state(buttons=(ButtonType.cancel,)), [EventName.buttonCancel])
     assert not sd.enabled
     assert not sd.lat_active
 
-  def test_brake_disengages_all_with_tits(self):
+  def test_brake_disengages_all_with_mads(self):
     sd = FakeSelfdrive("tesla", mads_on=True, steering_mode=2)
     engage(sd)
     sd.step(car_state(brake=True), [EventName.pedalPressed])
@@ -116,7 +116,7 @@ class TestMainCruiseOff:
 
 
 class TestBrakeAllModes:
-  # brake always ends longitudinal and release never brings it back; lateral follows the TITS on brake option
+  # brake always ends longitudinal and release never brings it back; lateral follows the MADS on brake option
   def _brake(self, mode):
     sd = FakeSelfdrive("toyota", mads_on=True, steering_mode=mode)
     engage(sd)
