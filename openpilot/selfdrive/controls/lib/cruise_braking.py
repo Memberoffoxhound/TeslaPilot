@@ -5,9 +5,9 @@ A_CRUISE_MIN_SOFT = -0.5
 BRAKING_FIRM_PARAM = "BrakingFirm"
 
 
-def braking_firm_from_params(params, default=True) -> bool:
+def braking_firm_from_params(params, default=True, param=BRAKING_FIRM_PARAM) -> bool:
   try:
-    val = params.get(BRAKING_FIRM_PARAM, return_default=True)
+    val = params.get(param, return_default=True)
   except (KeyError, OSError, TypeError, AttributeError, UnknownKeyName):
     return default
   if val is None or val == "" or val == b"":
@@ -29,3 +29,7 @@ def clamp_cruise_min(a_cruise_min: float) -> float:
 
 def braking_visible(has_longitudinal_control: bool) -> bool:
   return bool(has_longitudinal_control)
+
+
+def braking_enabled(started: bool) -> bool:
+  return not started

@@ -1,6 +1,6 @@
 from openpilot.conftest import FakeParams
 from openpilot.selfdrive.controls.lib.cruise_braking import (
-  A_CRUISE_MIN, A_CRUISE_MIN_SOFT, braking_visible, clamp_cruise_min, cruise_min_from_params)
+  A_CRUISE_MIN, A_CRUISE_MIN_SOFT, braking_enabled, braking_visible, clamp_cruise_min, cruise_min_from_params)
 
 
 def test_default_unset_params_are_firm():
@@ -60,22 +60,32 @@ def _planner_cls():
     return LongitudinalPlanner, get_cruise_accel
 
 
-def test_planner_clamps_and_follows_param_cadence(params_root):
+def test_planner_holds_value_mid_drive_then_rereads_on_new_drive(params_root):
   from types import SimpleNamespace
-  from openpilot.common.realtime import DT_MDL
-  from openpilot.selfdrive.controls.lib.set_speed_assist import PARAMS_UPDATE_PERIOD
-  LongitudinalPlanner, get_cruise_accel = _planner_cls()
+  LongitudinalPlanner, _ = _planner_cls()
   params = FakeParams(BrakingFirm=True)
   planner = LongitudinalPlanner(SimpleNamespace(openpilotLongitudinalControl=True), params=params)
   assert planner.a_cruise_min == A_CRUISE_MIN == -1.2
-  assert get_cruise_accel(0.0, 30.0, 0.0, 0.0, planner.dt, a_cruise_min=-2.0) >= A_CRUISE_MIN
-  planner.update_params()
   params.put("BrakingFirm", False)
-  period = int(PARAMS_UPDATE_PERIOD / planner.dt)
-  assert period == int(PARAMS_UPDATE_PERIOD / DT_MDL)
-  for _ in range(period - 1):
-    planner.update_params()
-    assert planner.a_cruise_min == A_CRUISE_MIN
-  planner.update_params()
+  assert planner.a_cruise_min == A_CRUISE_MIN
+  planner.on_drive_start()
   assert planner.a_cruise_min == A_CRUISE_MIN_SOFT == -0.5
-  assert get_cruise_accel(0.0, 30.0, 0.0, 0.0, planner.dt, a_cruise_min=planner.a_cruise_min) >= A_CRUISE_MIN
+  params.put("BrakingFirm", True)
+  assert planner.a_cruise_min == A_CRUISE_MIN_SOFT
+  planner.on_drive_start()
+  assert planner.a_cruise_min == A_CRUISE_MIN
+
+
+def test_get_cruise_accel_clamp_from_prev_min(params_root):
+  from openpilot.common.realtime import DT_MDL
+  _, get_cruise_accel = _planner_cls()
+  a = get_cruise_accel(0.0, 30.0, -1.2, -1.2, DT_MDL, a_cruise_min=-2.0)
+  assert a >= A_CRUISE_MIN == -1.2
+  # without the clamp, jerk from a_cruise_prev=-1.2 would go below the floor
+  assert a == -1.2
+
+
+def test_braking_toggle_disabled_onroad():
+  assert braking_enabled(False) is True
+  assert braking_enabled(True) is False
+  assert braking_visible(True) is True

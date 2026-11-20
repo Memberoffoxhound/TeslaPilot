@@ -9,7 +9,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.common.params import Params
 from openpilot.selfdrive.controls.lib.cruise_braking import A_CRUISE_MIN, clamp_cruise_min, cruise_min_from_params
-from openpilot.selfdrive.controls.lib.set_speed_assist import SetSpeedAssist, approach_accel, PARAMS_UPDATE_PERIOD
+from openpilot.selfdrive.controls.lib.set_speed_assist import SetSpeedAssist, approach_accel
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc, LongitudinalPlanSource
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
@@ -40,9 +40,8 @@ class LongitudinalPlanner:
     self.dt = dt
     self.set_speed_assist = SetSpeedAssist(CP)
     self.params = Params() if params is None else params
-    self._params_frame = -1
     self.a_cruise_min = A_CRUISE_MIN
-    self._read_braking()
+    self.on_drive_start()
 
     self.v_desired_filter = FirstOrderFilter(init_v, 2.0, self.dt)
     self.a_cruise = init_a
@@ -56,11 +55,8 @@ class LongitudinalPlanner:
   def _read_braking(self):
     self.a_cruise_min = max(cruise_min_from_params(self.params), A_CRUISE_MIN)
 
-  def update_params(self):
-    # same cadence as set speed assist, never per frame
-    self._params_frame += 1
-    if self._params_frame % int(PARAMS_UPDATE_PERIOD / self.dt) == 0:
-      self._read_braking()
+  def on_drive_start(self):
+    self._read_braking()
 
   def update(self, sm):
     v_ego = sm['carState'].vEgo
@@ -117,7 +113,6 @@ class LongitudinalPlanner:
     self.a_cruise = get_cruise_accel(v_cruise, v_ego, self.a_cruise, self.output_a_target, self.dt, self.a_cruise_min)
     cruise_should_stop = should_stop(v_ego, self.a_cruise)
 
-    self.update_params()
     self.set_speed_assist.update_params()
     a_floor = min(output_a_target_mpc, self.a_cruise, approach_accel(v_ego, v_cruise, sm['selfdriveState'].personality))
     output_a_target_e2e = self.set_speed_assist.update(sm, output_a_target_e2e, a_floor, reset_state)

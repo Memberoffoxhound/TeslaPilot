@@ -457,7 +457,7 @@ class BigMultiBoolParamToggle(BigMultiToggle):
 
   def _firm(self) -> bool:
     from openpilot.selfdrive.controls.lib.cruise_braking import braking_firm_from_params
-    return braking_firm_from_params(self._params, default=self._default)
+    return braking_firm_from_params(self._params, default=self._default, param=self._param)
 
   def _load_value(self):
     self.set_value(self._options[int(self._firm())])

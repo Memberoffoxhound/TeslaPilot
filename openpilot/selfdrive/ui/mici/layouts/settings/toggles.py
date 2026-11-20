@@ -15,7 +15,7 @@ from openpilot.selfdrive.car import tesla_step_aside, park_offroad
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.layouts.settings.initial_cruise_speed import InitialCruiseSpeedButton
 from openpilot.selfdrive.ui import mads
-from openpilot.selfdrive.controls.lib.cruise_braking import braking_visible
+from openpilot.selfdrive.controls.lib.cruise_braking import braking_enabled, braking_visible
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
 
@@ -110,6 +110,7 @@ class TogglesLayoutMici(NavScroller):
                                                                "Soft eases off more gently, down to -0.5 m/s².\n" +
                                                                "Only with openpilot longitudinal control.")
     self._braking_toggle.set_visible(lambda: braking_visible(ui_state.has_longitudinal_control))
+    self._braking_toggle.set_enabled(lambda: braking_enabled(ui_state.started))
     self._initial_cruise_speed = InitialCruiseSpeedButton()
 
     # MADS, changes only offroad; sub-options only for the car's brand
