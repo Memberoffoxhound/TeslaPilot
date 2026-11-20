@@ -52,6 +52,12 @@ def load(tmp_path, monkeypatch, install='echo "[1/4] x"; exit 0', state='ok', mo
   m.REBOOT = ['bash', str(tmp_path / 'reboot')]
   m.slot = lambda: slot
   m.online = lambda: True  # no network in tests
+  naps = []
+
+  def nap(s):
+    naps.append(s)
+    assert len(naps) < 100, 'network wait has no limit'
+  m.nap = nap
   return m
 
 
@@ -478,6 +484,7 @@ def fake_clock(m, up_at=None):
 
   def online():
     checks.append(t[0])
+    assert len(checks) < 100, 'network wait has no limit'
     t[0] += 1
     return up_at is not None and checks[-1] >= up_at
 

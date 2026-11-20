@@ -104,6 +104,29 @@ print("ok")
   assert r.returncode == 0 and "ok" in r.stdout, r.stderr[-2000:]
 
 
+def test_circles_answer_through_their_sliders(xvfb):
+  # the real wiring: each circle's confirm callback, green answers accept, red answers later
+  code = """
+from openpilot.system.ui.lib.application import gui_app
+gui_app.init_window("t")
+from openpilot.system.dpbridge import kernel_page
+said = []
+kernel_page.answer = said.append
+for idx, word in ((-2, "accept"), (-1, "later")):
+  page = kernel_page.KernelPage()
+  page.command("ask")
+  btn = page._consent._scroller.items[idx]
+  btn._click_callback()
+  dialog = gui_app._nav_stack[-1]
+  dialog._confirm_callback()
+  assert said[-1] == word, (idx, said)
+assert said == ["accept", "later"], said
+print("ok")
+"""
+  r = subprocess.run([sys.executable, "-c", code], env=xvfb, capture_output=True, text=True, timeout=60)
+  assert r.returncode == 0 and "ok" in r.stdout, r.stderr[-2000:]
+
+
 def test_page_says_no_answer_shuts_down():
   src = (PKG / "kernel_page.py").read_text()
   assert 'GreyBigButton("no answer in\\n10 min", "the comma shuts down"' in src
