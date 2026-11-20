@@ -567,3 +567,26 @@ def test_ask_deadline(tmp_path, monkeypatch):
   assert pg.ask() is None and time.monotonic() - t0 < 5  # alive but silent: the deadline, not a hang
   pg.close()
 
+
+def test_offline_marker_makes_later_boots_quick(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch)
+  checks = fake_clock(m)
+  m.main(lambda: FakePage())
+  assert len(checks) == 19 and (tmp_path / 'data/net_miss').exists()
+  checks.clear()
+  pg = FakePage()
+  m.main(lambda: pg)
+  assert len(checks) == 1 and pg.waits == [0] and runs(tmp_path) == []
+  assert 'not counted (waited 0 s)' in (tmp_path / 'data/log').read_text()
+  checks.clear()
+  m.online = lambda: True
+  m.main(lambda: FakePage())
+  assert runs(tmp_path) == ['--yes'] and not (tmp_path / 'data/net_miss').exists()
+
+
+def test_accept_gets_the_full_wait_despite_the_marker(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, state='offer')
+  (tmp_path / 'data/net_miss').touch()
+  checks = fake_clock(m, up_at=10)
+  m.main(lambda: FakePage('accept'))
+  assert checks == [0, 5, 10] and runs(tmp_path) == ['--yes --accept-kernel'] and not (tmp_path / 'data/net_miss').exists()

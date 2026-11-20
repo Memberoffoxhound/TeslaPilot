@@ -25,6 +25,7 @@ LOG = os.path.join(STATE, "log")
 OUT = os.path.join(STATE, "install.out")  # this run's installer output
 CONSENT = os.path.join(STATE, "consent")  # BOOT_SHA the user agreed to flash
 DECLINED = os.path.join(STATE, "declined")  # "not now"; Settings > bluetooth removes it
+NET_MISS = os.path.join(STATE, "net_miss")  # last boot found no network: one quick check, not the full wait
 FAILS = os.path.join(STATE, "fails")  # "<key> <count>": gives up after MAX_FAILS runs of the same setup
 MAX_FAILS = 3
 TIMEOUT_S = float(os.environ.get("DPB_BOOT_TIMEOUT_S", "1200"))
@@ -124,14 +125,14 @@ def online() -> bool:
     return False
 
 
-def wait_online(page) -> bool:
+def wait_online(page, limit: float) -> bool:
   t0, n = clock(), 0
   while True:
-    page.connecting(max(0.0, NET_WAIT_S - (clock() - t0)))
+    page.connecting(max(0.0, limit - (clock() - t0)))
     if online():
       return True
     n += 1
-    if n * NET_STEP_S > NET_WAIT_S:
+    if n * NET_STEP_S > limit:
       return False
     nap(max(0.0, t0 + n * NET_STEP_S - clock()))
 
@@ -318,6 +319,8 @@ def main(page_factory=None) -> int:
   os.makedirs(STATE, exist_ok=True)
   try:
     with open(LOG, "a", buffering=1) as log:
+      # after an offline boot: one quick check instead of the full wait
+      limit = 0.0 if os.path.exists(NET_MISS) else NET_WAIT_S
       if kstate == "offer" and not accept:
         a = page.ask()
         if a is None:
@@ -335,15 +338,19 @@ def main(page_factory=None) -> int:
           print(f"dpbridge boot: skip, kernel {'declined' if a else 'not answered'}")
           return 0
         put(CONSENT, sha)
-        accept = True
+        accept, limit = True, NET_WAIT_S  # just tapped: Wi-Fi may still be coming up
         log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} kernel accepted ({sha[:12]})\n")
-      if not cached(kstate != "ok") and not wait_online(page):
-        # not counted, like a failed download: next boot tries again
-        log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} {release_host()} unreachable, not counted (waited {NET_WAIT_S:.0f} s)\n")
-        print(f"dpbridge boot: skip, {release_host()} unreachable")
-        page.note("no network,\nskipped", "tries next boot")
-        time.sleep(NOTE_S)
-        return 0
+      if not cached(kstate != "ok"):
+        if not wait_online(page, limit):
+          # not counted, like a failed download: next boot tries again
+          put(NET_MISS, "")
+          log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} {release_host()} unreachable, not counted (waited {limit:.0f} s)\n")
+          print(f"dpbridge boot: skip, {release_host()} unreachable")
+          page.note("no network,\nskipped", "tries next boot")
+          time.sleep(NOTE_S)
+          return 0
+        if os.path.exists(NET_MISS):
+          os.unlink(NET_MISS)
       log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} key {key[:12]}\n")
       rc = install(page, log, accept)
       if rc == 75:

@@ -64,7 +64,8 @@ off, nothing saved, and asks again next boot. A page that dies flashes nothing a
 
 Then, when a download is needed (anything not already on `/data`; `boot.img` only when a flash may follow), it waits
 for the network, a check every 5 s for up to 90 s, showing "connecting..." and a countdown. Still offline: it shows
-"no network", skips uncounted and openpilot starts. The page then shows each step and its percent. `boot.py` writes
+"no network", skips uncounted and openpilot starts. Then `/data/dpbridge_boot/net_miss` makes later boots do one 5 s
+check until the network is back. Online, the page shows each step and its percent. `boot.py` writes
 a stamp (`/data/dpbridge_boot/stamp`: sha256 of the installer scripts, the pin files, the AGNOS version and the boot
 slot), so it runs again only when the code, a pin, AGNOS or the slot changes. It is skipped while
 `/data/dpbridge/disable` exists. A failure or the 20 min timeout on steps 1-3 is shown for 5 s, logged to
