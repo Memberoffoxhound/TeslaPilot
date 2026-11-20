@@ -47,7 +47,10 @@ def default_name() -> str:
 
 
 def compile_progress(m: str | None = None) -> dict | None:
-  # the chestnut compile of the current pick, in jetlink.progress's shape
+  # the chestnut compile of the current pick, in jetlink.progress's shape; never over Jetlink's own
+  m = m or mode()
+  if m != 'chestnut':
+    return None
   p, pick = store.get(CHESTNUT_PROGRESS), picked(m)
   return p if isinstance(p, dict) and pick and p.get('ref') == pick['ref'] else None
 

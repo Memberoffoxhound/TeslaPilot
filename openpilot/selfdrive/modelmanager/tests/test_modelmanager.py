@@ -534,3 +534,29 @@ def test_models_page_per_mode(page, monkeypatch, tmp_path):
   mode[0] = 'jetlink'
   p.show_event()
   assert p._big.text == 'jetlink big model' and p._link.visible and mp.picked() is None
+
+
+def test_compile_progress_renders_like_jetlink_and_stays_out_of_jetlink(page, monkeypatch, tmp_path):
+  from openpilot.selfdrive.modeld import helpers
+  from openpilot.selfdrive.ui import accelerator_link as al
+  mod, gui = page
+  mode = ['chestnut']
+  monkeypatch.setattr(ja, 'accel_mode', lambda chestnut=None: mode[0])
+  monkeypatch.setattr(helpers, 'CHESTNUT_DIR', tmp_path / 'models')
+  store.put(mm.CHESTNUT_CACHE, CATALOG)
+  store.put(mm.CHESTNUT_PICK, {'ref': REF_A, 'displayName': 'Alpha'})
+  store.put(mm.CHESTNUT_PROGRESS, {'ref': REF_A, 'stage': 'compiling', 'frac': 0.42, 'msg': 'compiling'})
+  p = mod.ModelsLayoutMici()
+  p.show_event()
+  p._tick = 0
+  p._update_state()
+  assert p._info.info[1:] == ('big model', 'compiling 42%') and mp.model_note(REF_A) == 'compiling 42%'
+  # a Jetlink build at the same point reads the same
+  jl = SimpleNamespace(progress={'stage': 'compile', 'frac': 0.42, 'msg': 'compiling'}, active_model=None, mode='usb')
+  assert al.model_info(jl, 'loading', False, progress=jl.progress)[1:] == ('big model', 'compiling 42%')
+  # Jetlink with the same ref picked never sees a stale chestnut compile
+  store.put(mm.CHESTNUT_PROGRESS, {'ref': REF_A, 'stage': 'failed', 'frac': 0.0, 'msg': 'failed: boom'})
+  store.put(mm.ACTIVE_BIG, {'ref': REF_A, 'displayName': 'Alpha'})
+  mode[0] = 'jetlink'
+  assert mp.compile_progress() is None and mp.compile_progress('jetlink') is None
+  assert mp.compile_progress('chestnut') is not None
