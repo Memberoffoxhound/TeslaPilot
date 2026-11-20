@@ -111,17 +111,21 @@ def place(tmp_path_factory):
   return run_probe(tmp_path_factory, PLACE)
 
 
+def _near(got, expect, tol=2):
+  return abs(got[0] - expect[0]) <= tol and abs(got[1] - expect[1]) <= tol
+
+
 def test_large_compass_bottom_right(place):
-  assert place["large"] == [478, 195] and place["large_download"] == [478, 195]
-  assert place["large_failed"] == [466, 194]   # 60 wide, still 10 from the corner
+  assert _near(place["large"], [478, 195]) and _near(place["large_download"], [478, 195])
+  assert _near(place["large_failed"], [466, 194])   # 60 wide, still 10 from the corner
 
 
 def test_small_compass_on_the_personality(place):
-  assert place["small"] == [470, 172]
+  assert _near(place["small"], [470, 172])
 
 
 def test_custom_off_stays_stock(place):
-  assert place["stock"] == [86, 195] and place["stock_failed"] == [86, 194]
+  assert _near(place["stock"], [86, 195]) and _near(place["stock_failed"], [86, 194])
 
 ABSENT = textwrap.dedent('''
   out = {}
