@@ -17,17 +17,10 @@ from unittest import mock
 import numpy as np
 import pytest
 
-from openpilot.conftest import setup_params_root
-
 from openpilot.selfdrive import jetlink_adapter as ja
 
 ROOT = Path(__file__).resolve().parents[4]
 MODELD = ROOT / 'openpilot/selfdrive/modeld/modeld.py'
-
-
-@pytest.fixture(autouse=True)
-def params_root(tmp_path, monkeypatch):
-  return setup_params_root(tmp_path, monkeypatch)
 
 
 def _loads(tree: ast.AST, base) -> set[str]:
@@ -197,7 +190,7 @@ def test_bare_highland_model_swap_matches_jetlink(joining):
     _close(state)
 
 
-def test_attach_swaps_onto_the_large_model(joining, monkeypatch):
+def test_attach_swaps_onto_the_large_model(joining, monkeypatch, params_root):
   small = HighlandModel('small')
   big = BigModel()
   log = Log()
