@@ -3,7 +3,6 @@ from openpilot.cereal import log, custom
 
 from opendbc.car import structs
 from opendbc.car.hyundai.values import HyundaiFlags
-from openpilot.common.params import Params
 from openpilot.sunnypilot.mads.helpers import MadsSteeringModeOnBrake, read_steering_mode_param, MADS_NO_ACC_MAIN_BUTTON
 from openpilot.sunnypilot.mads.state import StateMachine, GEARS_ALLOW_PAUSED_SILENT
 
@@ -35,7 +34,6 @@ class ModularAssistiveDrivingSystem:
     self.state_machine = StateMachine(self)
     self.events = self.selfdrive.events
     self.events_sp = self.selfdrive.events_sp
-    self.disengage_on_accelerator = Params().get_bool("DisengageOnAccelerator")
     if self.CP.brand == "hyundai":
       if self.CP.flags & (HyundaiFlags.HAS_LDA_BUTTON | HyundaiFlags.CANFD):
         self.allow_always = True
@@ -57,7 +55,7 @@ class ModularAssistiveDrivingSystem:
 
   def pedal_pressed_non_gas_pressed(self, CS: structs.CarState) -> bool:
     # ignore `pedalPressed` events caused by gas presses
-    if self.events.has(EventName.pedalPressed) and not (CS.gasPressed and not self.selfdrive.CS_prev.gasPressed and self.disengage_on_accelerator):
+    if self.events.has(EventName.pedalPressed) and not (CS.gasPressed and not self.selfdrive.CS_prev.gasPressed and self.selfdrive.disengage_on_accelerator):
       return True
 
     return False
