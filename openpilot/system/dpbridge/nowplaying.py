@@ -319,7 +319,7 @@ def _wait_transfer(conn, path: str, timeout: float, sleep=time.sleep, clock=time
 def fetch_art(bz, player: str, handle: str, dest: str, log, conn_fn=_obex_conn, staging: str = ART_STAGING,
               sleep=time.sleep) -> str | None:
   # BlueZ 5.79+: ImgHandle is only valid while a BIP session is up on ObexPort.
-  # obexd runs as root on the system bus (dpbridge-obex.service). 5.72 has no ObexPort: None.
+  # obexd runs as comma on the system bus (dpbridge-obex.service). 5.72 has no ObexPort: None.
   if not handle:
     return None
   try:
@@ -344,7 +344,7 @@ def fetch_art(bz, player: str, handle: str, dest: str, log, conn_fn=_obex_conn, 
       new_method_call(client, "CreateSession", "sa{sv}", (mac, {"Target": ("s", "bip-avrcp"), "PSM": ("q", int(port))})),
       timeout=5,
     ))[0]
-    # obexd writes as root, which needs no permission; the dir is ours only, then copy so the UI file is ours
+    # obexd (same user) writes 0600 into our private dir, then copy so the UI file is ours
     os.makedirs(staging, mode=0o700, exist_ok=True)
     os.chmod(staging, 0o700)
     tmp = os.path.join(staging, "art")

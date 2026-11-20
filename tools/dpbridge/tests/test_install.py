@@ -214,6 +214,19 @@ def test_install_rules():
   assert 'radio.sh' in text and 'dpbridge-obex' in (HERE / 'radio.sh').read_text()
 
 
+def test_obexd_runs_as_comma():
+  # obexd writes cover art 0600; nowplaying (comma) has to read it
+  text = script_text()
+  unit = text[text.index('put /etc/systemd/system/dpbridge-obex.service'):]
+  unit = unit[:unit.index('\nUNIT\n')]
+  assert 'User=comma' in unit and 'BusName=org.bluez.obex' in unit
+  conf = text[text.index('put /etc/dbus-1/system.d/dpbridge-obex.conf'):]
+  conf = conf[:conf.index('\nCONF\n')]
+  assert '<policy user="comma">' in conf and '<allow own="org.bluez.obex"/>' in conf
+  assert text.index('dpbridge-obex.conf') < text.index('dpbridge-obex.service')
+  assert 'run $SUDO systemctl reload dbus.service || true' in text
+
+
 def run_bluez_debs(tmp_path, tar_bytes, sha, have_tar=None):
   text = (HERE / 'install_userspace.sh').read_text()
   fn = text[text.index('bluez_debs() {'):text.index('\n}\n', text.index('bluez_debs() {')) + 3]

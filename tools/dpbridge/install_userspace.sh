@@ -233,8 +233,19 @@ ExecStart=
 ExecStart=/usr/libexec/bluetooth/bluetoothd -E
 UNIT
 
-# cover art: obexd as root on the system bus (5.83 -s) so nowplaying needs no session bus.
-# PBAP, MAP and FTP servers off; only the BIP client is used.
+# cover art: obexd on the system bus (5.83 -s) so nowplaying needs no session bus.
+# PBAP, MAP and FTP servers off; only the BIP client is used. It runs as comma: it writes art 0600, nowplaying reads it.
+# obex.conf lets only root own the name
+put /etc/dbus-1/system.d/dpbridge-obex.conf <<CONF
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <policy user="comma">
+    <allow own="org.bluez.obex"/>
+  </policy>
+</busconfig>
+CONF
+run $SUDO systemctl reload dbus.service || true
 put /etc/systemd/system/dpbridge-obex.service <<UNIT
 [Unit]
 Description=dpbridge: obexd for AVRCP cover art
@@ -245,6 +256,7 @@ PartOf=bluetooth.service
 [Service]
 Type=dbus
 BusName=org.bluez.obex
+User=comma
 ExecStart=/usr/libexec/bluetooth/obexd -n -s -P $OBEX_OFF
 Restart=on-failure
 RestartSec=5
