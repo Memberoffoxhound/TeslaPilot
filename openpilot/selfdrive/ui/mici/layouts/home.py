@@ -339,7 +339,7 @@ class MiciHomeLayout(Widget):
     self._day_txt = ("Day", fmt_trip(t["today_m"], t["today_e"], ui_state.is_metric))
     self._week_txt = ("Week", fmt_trip(t["week_m"], t["week_e"], ui_state.is_metric))
     self._ssa_on = ui_state.params.get_bool("SetSpeedAssist")
-    self._tits_on = ui_state.params.get_bool("Mads")
+    self._tits_on = ui_state.tits_enabled
 
   def set_callbacks(self, on_settings: Callable | None = None, on_alerts: Callable | None = None,
                     on_stats: Callable | None = None,
