@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # First boot after a dpbridge install (or a change to its pins): run install_userspace.sh once, before manager,
-# with comma's spinner on screen. Any failure or the timeout is logged and boot goes on; it tries again next boot.
+# with the kernel page on screen. On a stock kernel the page asks first (once per kernel image); "not now" is kept
+# until Settings > bluetooth clears it. Any failure or the timeout is logged and boot goes on; it tries again next boot.
 # The kernel step is waited for, so openpilot never runs while it flashes. Reboots only when the installer flashed the kernel (state=pending).
 import hashlib
 import os
@@ -12,15 +13,20 @@ import threading
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
+PAGE = os.path.join(ROOT, "openpilot/system/dpbridge/kernel_page.py")
 DIR = os.environ.get("DPB_DIR", "/data/dpbridge")
 # own dir: $DIR is root's, this runs as the comma user
 STATE = os.environ.get("DPB_BOOT_DIR", "/data/dpbridge_boot")
 STAMP = os.path.join(STATE, "stamp")
 LOG = os.path.join(STATE, "log")
 OUT = os.path.join(STATE, "install.out")  # this run's installer output
+CONSENT = os.path.join(STATE, "consent")  # BOOT_SHA the user agreed to flash
+DECLINED = os.path.join(STATE, "declined")  # "not now"; Settings > bluetooth removes it
 FAILS = os.path.join(STATE, "fails")  # "<key> <count>": gives up after MAX_FAILS runs of the same setup
 MAX_FAILS = 3
 TIMEOUT_S = float(os.environ.get("DPB_BOOT_TIMEOUT_S", "1200"))
+NOTE_S = float(os.environ.get("DPB_NOTE_S", "5"))  # how long a failure stays on screen
 MODEL = os.environ.get("DPB_MODEL", "/sys/firmware/devicetree/base/model")
 VERSION = os.environ.get("DPB_VERSION", "/VERSION")
 SUDO = ["sudo", "-n"]
@@ -31,7 +37,7 @@ REBOOT = ["sudo", "reboot"]
 KEY_FILES = ("install_userspace.sh", "kernel.sh", "lib.sh", "flash_boot.sh", "radio.sh", "attach.sh", "asound.conf",
              "firmware/kernel.env", "firmware/btfw.env", "firmware/firmware.sha256", "firmware/qca.sha256", "bluez/bluez.env")
 STEP = re.compile(r"^\[(\d)/(\d)\] ")
-KPCT = re.compile(r"^  kernel: .* (\d+)%$")
+KPCT = re.compile(r"^  kernel: (.+) (\d+)%$")
 
 
 def read(path: str) -> str:
@@ -79,8 +85,9 @@ def file_sha(path: str) -> str:
   return h.hexdigest()
 
 
-def cached() -> bool:
-  # every release download already on /data and matching the pins (an AGNOS update reinstalls offline)
+def cached(boot_img: bool = True) -> bool:
+  # every release download already on /data and matching the pins (an AGNOS update reinstalls offline);
+  # boot.img only when a flash may follow
   btfw = os.path.join(DIR, "debs", env_val("firmware/btfw.env", "BTFW_TAR"))
   bluez = os.path.join(DIR, "debs", env_val("bluez/bluez.env", "BLUEZ_TAR"))
   boot = os.path.join(DIR, "boot.img")
@@ -88,14 +95,15 @@ def cached() -> bool:
   sha_bluez = env_val("bluez/bluez.env", "BLUEZ_SHA")
   sha_boot = env_val("firmware/kernel.env", "BOOT_SHA")
   size_boot = env_val("firmware/kernel.env", "BOOT_SIZE")
-  if not (sha_btfw and sha_bluez and sha_boot):
+  if not (sha_btfw and sha_bluez and (sha_boot or not boot_img)):
     return False
-  try:
-    if os.path.getsize(boot) != int(size_boot):
+  if boot_img:
+    try:
+      if os.path.getsize(boot) != int(size_boot):
+        return False
+    except (OSError, ValueError):
       return False
-  except (OSError, ValueError):
-    return False
-  return file_sha(btfw) == sha_btfw and file_sha(bluez) == sha_bluez and file_sha(boot) == sha_boot
+  return file_sha(btfw) == sha_btfw and file_sha(bluez) == sha_bluez and (not boot_img or file_sha(boot) == sha_boot)
 
 
 def online() -> bool:
@@ -112,6 +120,8 @@ def skip_reason(key: str) -> str | None:
     return "not a comma 4"
   if os.path.exists(os.path.join(DIR, "disable")):
     return "disabled"
+  if os.path.exists(DECLINED):
+    return "kernel declined, Settings > bluetooth sets it up"
   if read(STAMP) == key:
     return "up to date"
   if fails(key) >= MAX_FAILS:
@@ -136,20 +146,75 @@ def progress(line: str, cur: int) -> int:
     n, total = int(m.group(1)), int(m.group(2))
     return max(cur, 20 * (n - 1) // (total - 1))
   if m := KPCT.match(line):
-    return max(cur, 20 + int(m.group(1)) * 80 // 100)
+    return max(cur, 20 + int(m.group(2)) * 80 // 100)
   return cur
 
 
-def install(spinner, log) -> int:
+def title(line: str, cur: str) -> str:
+  # the page's step title: "installing" for steps 1-3, then the kernel step's own name
+  if STEP.match(line):
+    return "installing"
+  if m := KPCT.match(line):
+    return m.group(1)
+  return cur
+
+
+class Page:
+  # the kernel page process (kernel_page.py): commands in, the user's answer out
+  def __init__(self):
+    try:
+      self._p = subprocess.Popen([sys.executable, PAGE], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                                 close_fds=True, env=dict(os.environ, PYTHONPATH=ROOT))
+    except OSError:
+      self._p = None
+
+  def _send(self, line: str):
+    if self._p is not None:
+      try:
+        self._p.stdin.write(line + "\n")
+        self._p.stdin.flush()
+      except (OSError, ValueError):
+        pass
+
+  def ask(self) -> str:
+    # waits for the user, no timeout; "" if the page died
+    self._send("ask")
+    if self._p is None:
+      return ""
+    for ln in self._p.stdout:
+      if ln.strip() in ("accept", "later"):
+        return ln.strip()
+    return ""
+
+  def connecting(self, secs: float):
+    self._send(f"wait {secs:.0f}")
+
+  def progress(self, pct: int, name: str):
+    self._send(f"step {pct} {name}")
+
+  def note(self, head: str, text: str):
+    self._send("note " + head.replace("\n", "\\n") + "|" + text)
+
+  def close(self):
+    if self._p is not None:
+      self._p.terminate()
+      try:
+        self._p.wait(timeout=2)
+      except subprocess.TimeoutExpired:
+        self._p.kill()
+      self._p = None
+
+
+def install(page, log, accept: bool) -> int:
   env = dict(os.environ, DPB_REBOOT="true")  # the reboot, if any, is ours, after the stamp logic
-  cmd = ["bash", INSTALL, "--yes"]
-  spinner.update_progress(0, 100)
+  cmd = ["bash", INSTALL, "--yes"] + (["--accept-kernel"] if accept else [])
+  page.progress(0, "installing")
   kernel_step = threading.Event()
   done = threading.Event()
 
   # output goes to a file, not a pipe: nothing in the installer dies of a closed pipe
   def pump():
-    pct, buf = 0, ""
+    pct, name, buf = 0, "installing", ""
     with open(OUT, errors="replace") as f:
       while True:
         chunk = f.read()
@@ -159,8 +224,8 @@ def install(spinner, log) -> int:
           if ln.startswith("[4/4]"):
             kernel_step.set()
           log.write(ln + "\n")
-          pct = progress(ln, pct)
-          spinner.update_progress(pct, 100)
+          pct, name = progress(ln, pct), title(ln, name)
+          page.progress(pct, name)
         if not chunk:
           if done.is_set():
             return
@@ -211,50 +276,66 @@ def kernel_state() -> str:
   return next((ln[6:] for ln in out.splitlines() if ln.startswith("state=")), "")
 
 
-def main(spinner_factory=None) -> int:
+def main(page_factory=None) -> int:
   key = setup_key()
   why = skip_reason(key)
   if why is not None:
     print(f"dpbridge boot: skip, {why}")
     return 0
-  if not cached() and not online():
-    # not counted, like a failed download: next boot tries again
-    os.makedirs(STATE, exist_ok=True)
-    with open(LOG, "a") as log:
-      log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} {release_host()} unreachable, not counted\n")
-    print(f"dpbridge boot: skip, {release_host()} unreachable")
-    return 0
-  if spinner_factory is None:
-    from openpilot.common.spinner import Spinner as spinner_factory
+  kstate = kernel_state()
+  sha = env_val("firmware/kernel.env", "BOOT_SHA")
+  accept = bool(sha) and read(CONSENT) == sha
+  page = (page_factory or Page)()
   os.makedirs(STATE, exist_ok=True)
-  with open(LOG, "a", buffering=1) as log:
-    log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} key {key[:12]}\n")
-    spinner = spinner_factory()
-    try:
-      rc = install(spinner, log)
-    finally:
-      spinner.close()
-    if rc == 75:
-      # a download failed (no network, release not up yet): not counted toward MAX_FAILS
-      log.write("download failed, not counted, next boot tries again\n")
-      print(f"dpbridge boot: download failed, see {LOG}")
-      return 0
-    if rc != 0:
-      n = fails(key) + 1
-      put(FAILS, f"{key} {n}")
-      log.write(f"install failed ({rc}, {n}/{MAX_FAILS}), openpilot starts anyway, next boot tries again\n")
-      print(f"dpbridge boot: install failed ({rc}), see {LOG}")
-      return 0
-    if kernel_state() == "pending":
-      # flashed: the one reboot, no stamp (the new slot changes the key, so the next boot records the result)
-      log.write("flashed, rebooting\n")
-      log.flush()
-      subprocess.run(REBOOT)
-      return 0
-    put(STAMP, key)
-    if os.path.exists(FAILS):
-      os.unlink(FAILS)
-    log.write("done\n")
+  try:
+    with open(LOG, "a", buffering=1) as log:
+      if kstate == "offer" and not accept:
+        a = page.ask()
+        if a != "accept":
+          if a == "later":
+            put(DECLINED, sha)
+          log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} kernel {'declined' if a else 'page closed without an answer'}\n")
+          print(f"dpbridge boot: skip, kernel {'declined' if a else 'not answered'}")
+          return 0
+        put(CONSENT, sha)
+        accept = True
+        log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} kernel accepted ({sha[:12]})\n")
+      if not cached(kstate != "ok") and not online():
+        # not counted, like a failed download: next boot tries again
+        log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} {release_host()} unreachable, not counted\n")
+        print(f"dpbridge boot: skip, {release_host()} unreachable")
+        page.note("no network,\nskipped", "tries next boot")
+        time.sleep(NOTE_S)
+        return 0
+      log.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} key {key[:12]}\n")
+      rc = install(page, log, accept)
+      if rc == 75:
+        # a download failed (no network, release not up yet): not counted toward MAX_FAILS
+        log.write("download failed, not counted, next boot tries again\n")
+        print(f"dpbridge boot: download failed, see {LOG}")
+        page.note("download\nfailed", "tries next boot")
+        time.sleep(NOTE_S)
+        return 0
+      if rc != 0:
+        n = fails(key) + 1
+        put(FAILS, f"{key} {n}")
+        log.write(f"install failed ({rc}, {n}/{MAX_FAILS}), openpilot starts anyway, next boot tries again\n")
+        print(f"dpbridge boot: install failed ({rc}), see {LOG}")
+        page.note("kernel not\ninstalled" if kstate == "offer" else "install\nfailed", "openpilot is starting")
+        time.sleep(NOTE_S)
+        return 0
+      if kernel_state() == "pending":
+        # flashed: the one reboot, no stamp (the new slot changes the key, so the next boot records the result)
+        log.write("flashed, rebooting\n")
+        log.flush()
+        subprocess.run(REBOOT)
+        return 0
+      put(STAMP, key)
+      if os.path.exists(FAILS):
+        os.unlink(FAILS)
+      log.write("done\n")
+  finally:
+    page.close()
   return 0
 
 

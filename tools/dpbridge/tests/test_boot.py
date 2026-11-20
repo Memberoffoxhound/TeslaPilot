@@ -12,11 +12,23 @@ ROOT = HERE.parents[1]
 
 
 class FakeSpinner:
-  def __init__(self):
-    self.seen, self.closed = [], False
+  # the kernel page: answers ask() with `answer`, records what it was shown
+  def __init__(self, answer='accept'):
+    self.answer, self.asked, self.seen, self.names, self.notes, self.waits, self.closed = answer, 0, [], [], [], [], False
 
-  def update_progress(self, cur, total):
-    self.seen.append(round(100 * cur / total))
+  def ask(self):
+    self.asked += 1
+    return self.answer
+
+  def progress(self, pct, name):
+    self.seen.append(pct)
+    self.names.append(name)
+
+  def connecting(self, secs):
+    self.waits.append(secs)
+
+  def note(self, head, text):
+    self.notes.append((head, text))
 
   def close(self):
     self.closed = True
@@ -24,7 +36,7 @@ class FakeSpinner:
 
 def load(tmp_path, monkeypatch, install='echo "[1/4] x"; exit 0', state='ok', model='comma mici', slot='_a'):
   for k, v in (('DPB_DIR', tmp_path / 'data'), ('DPB_BOOT_DIR', tmp_path / 'data'), ('DPB_MODEL', tmp_path / 'model'), ('DPB_VERSION', tmp_path / 'VERSION'),
-               ('DPB_BOOT_TIMEOUT_S', '5'),
+               ('DPB_BOOT_TIMEOUT_S', '5'), ('DPB_NOTE_S', '0'),
                ('DPB_BT_PARAM', tmp_path / 'DpbBluetooth')):  # unused now, kept so a migration would show
     monkeypatch.setenv(k, str(v))
   (tmp_path / 'data').mkdir(exist_ok=True)
@@ -233,9 +245,9 @@ def test_crash_never_stops_openpilot(tmp_path):
   assert r.returncode == 0 and 'skip, not a comma 4' in r.stdout
 
 
-def test_spinner_is_comma_s():
+def test_page_is_the_kernel_page():
   text = (HERE / 'boot.py').read_text()
-  assert 'from openpilot.common.spinner import Spinner' in text
+  assert 'openpilot/system/dpbridge/kernel_page.py' in text and 'Spinner' not in text
   assert re.search(r'DPB_REBOOT="true"', text)
 
 
@@ -252,7 +264,7 @@ def test_unreachable_host_skips_without_counting(tmp_path, monkeypatch):
 
 
 def test_offline_with_everything_on_data_still_installs(tmp_path, monkeypatch):
-  m = load(tmp_path, monkeypatch)
+  m = load(tmp_path, monkeypatch, state='offer')  # a flash follows, so boot.img counts
   m.online = lambda: False
   pin_cache(m, tmp_path, write=False)
   (tmp_path / 'data/debs/fw.tar').write_bytes(b'fw')
@@ -261,12 +273,12 @@ def test_offline_with_everything_on_data_still_installs(tmp_path, monkeypatch):
   assert runs(tmp_path) == []  # boot.img missing: still needs the network
   (tmp_path / 'data/boot.img').write_bytes(b'boot')
   m.main(lambda: FakeSpinner())
-  assert runs(tmp_path) == ['--yes']
+  assert runs(tmp_path) == ['--yes --accept-kernel']
 
 
 def test_stale_cache_does_not_skip_the_offline_check(tmp_path, monkeypatch):
   # leftover files from an older pin must not count as cached
-  m = load(tmp_path, monkeypatch)
+  m = load(tmp_path, monkeypatch, state='offer')
   m.online = lambda: False
   pin_cache(m, tmp_path)
   assert m.cached()
@@ -349,3 +361,110 @@ def test_reachability_check_is_5_s(tmp_path, monkeypatch):
   assert (tmp_path / 'args').read_text().split() == ['-sI', '--max-time', '5', '-o', '/dev/null', 'https://github.com/']
   monkeypatch.setenv('CURL_RC', '28')
   assert not fresh.online()
+
+
+def boot_sha(m):
+  return m.env_val('firmware/kernel.env', 'BOOT_SHA')
+
+
+def test_stock_kernel_asks_first_and_accept_flashes(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, state='offer')
+  pg = FakeSpinner('accept')
+  m.main(lambda: pg)
+  assert pg.asked == 1 and pg.closed and runs(tmp_path) == ['--yes --accept-kernel']
+  assert (tmp_path / 'data/consent').read_text() == boot_sha(m) and 'kernel accepted' in (tmp_path / 'data/log').read_text()
+
+
+def test_consent_is_once_per_kernel_image(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, state='offer', install='exit 75')  # a download failure, so every boot runs again
+  (tmp_path / 'data/consent').write_text(boot_sha(m))
+  pg = FakeSpinner('later')
+  m.main(lambda: pg)
+  assert pg.asked == 0 and runs(tmp_path) == ['--yes --accept-kernel']
+  (tmp_path / 'data/consent').write_text('an older image')
+  m.main(lambda: pg)
+  assert pg.asked == 1 and len(runs(tmp_path)) == 1 and (tmp_path / 'data/declined').exists()
+
+
+def test_not_now_is_kept_until_settings_clears_it(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, state='offer')
+  pg = FakeSpinner('later')
+  assert m.main(lambda: pg) == 0
+  assert pg.asked == 1 and runs(tmp_path) == [] and not (tmp_path / 'data/fails').exists()
+  assert (tmp_path / 'data/declined').exists() and not (tmp_path / 'data/consent').exists()
+  for _ in range(3):
+    m.main(lambda: pg)
+  assert pg.asked == 1 and runs(tmp_path) == [] and m.skip_reason(m.setup_key()).startswith('kernel declined')
+  (tmp_path / 'data/declined').unlink()  # what the Settings entry does, then a reboot
+  m.main(lambda: FakeSpinner('accept'))
+  assert runs(tmp_path) == ['--yes --accept-kernel']
+
+
+def test_no_answer_saves_nothing_and_asks_next_boot(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, state='offer')
+  pg = FakeSpinner('')  # the page process died
+  m.main(lambda: pg)
+  m.main(lambda: pg)
+  assert pg.asked == 2 and runs(tmp_path) == []
+  assert not (tmp_path / 'data/declined').exists() and not (tmp_path / 'data/consent').exists()
+
+
+def test_no_question_without_a_stock_kernel(tmp_path, monkeypatch):
+  for st in ('ok', 'outdated', 'off', 'failed', 'pending', 'no_space', 'unsupported_agnos'):
+    d = tmp_path / st
+    d.mkdir()
+    m = load(d, monkeypatch, state=st)
+    pg = FakeSpinner('later')
+    m.main(lambda: pg)
+    assert pg.asked == 0 and runs(d) == ['--yes'], st
+
+
+def test_page_shows_step_names(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, install='echo "[2/4] BT firmware"; echo "[4/4] kernel"; echo "  kernel: downloading 8%"; '
+                                           'echo "  kernel: writing slot b 55%"; echo "  kernel: rebooting 100%"')
+  pg = FakeSpinner()
+  m.main(lambda: pg)
+  names = [n for i, n in enumerate(pg.names) if i == 0 or n != pg.names[i - 1]]
+  assert names == ['installing', 'downloading', 'writing slot b', 'rebooting'] and pg.seen[-1] == 100
+
+
+def test_failure_is_shown_then_openpilot_starts(tmp_path, monkeypatch):
+  m = load(tmp_path, monkeypatch, state='offer', install='exit 1')
+  pg = FakeSpinner()
+  assert m.main(lambda: pg) == 0
+  assert pg.notes == [('kernel not\ninstalled', 'openpilot is starting')] and pg.closed
+  (tmp_path / 'x').mkdir()
+  m = load(tmp_path / 'x', monkeypatch, install='exit 75')
+  pg = FakeSpinner()
+  m.main(lambda: pg)
+  assert pg.notes == [('download\nfailed', 'tries next boot')]
+
+
+FAKE_PAGE = '''import sys
+for ln in sys.stdin:
+  open(sys.argv[1], "a").write(ln)
+  if ln.strip() == "ask":
+    print(sys.argv[2], flush=True)
+'''
+
+
+def test_page_client_talks_to_the_page_process(tmp_path, monkeypatch):
+  import sys
+  m = load(tmp_path, monkeypatch)
+  (tmp_path / 'page.py').write_text(FAKE_PAGE)
+  for reply, want in (('later', 'later'), ('accept', 'accept'), ('noise', '')):
+    got = tmp_path / f'got_{reply}'
+    monkeypatch.setattr(m.subprocess, 'Popen', lambda cmd, _p=m.subprocess.Popen, **kw: _p([sys.executable, str(tmp_path / 'page.py'),
+                                                                                        str(got), reply], **kw))
+    pg = m.Page()
+    pg.connecting(85.2)
+    pg.progress(64, 'writing slot b')
+    pg.note('kernel not\ninstalled', 'openpilot is starting')
+    a = pg.ask() if reply != 'noise' else (pg._p.stdin.close(), pg.ask())[1]
+    pg.close()
+    assert a == want
+    if reply == 'later':
+      assert got.read_text().splitlines() == ['wait 85', 'step 64 writing slot b', 'note kernel not\\ninstalled|openpilot is starting', 'ask']
+  monkeypatch.setattr(m.subprocess, 'Popen', lambda *a, **kw: (_ for _ in ()).throw(OSError('no display')))
+  pg = m.Page()
+  assert pg.ask() == '' and pg.close() is None  # no page: no answer, so no flash
