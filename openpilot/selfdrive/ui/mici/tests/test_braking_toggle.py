@@ -11,35 +11,36 @@ def _init_window():
     gui_app._load_fonts()
 
 
-def test_braking_toggle_hidden_without_long_and_disabled_onroad(params_root):
+def test_braking_toggle_hidden_without_long_and_disabled_onroad(params_root, monkeypatch):
   try:
     _init_window()
-    from openpilot.selfdrive.ui.ui_state import ui_state
-    from openpilot.selfdrive.ui.mici.layouts.settings.toggles import TogglesLayoutMici
   except Exception as e:
     pytest.skip(str(e))
 
-  ui_state.has_longitudinal_control = False
-  ui_state.started = False
+  from openpilot.selfdrive.ui.ui_state import ui_state
+  from openpilot.selfdrive.ui.mici.layouts.settings.toggles import TogglesLayoutMici
+
+  monkeypatch.setattr(ui_state, "has_longitudinal_control", False)
+  monkeypatch.setattr(ui_state, "started", False)
   layout = TogglesLayoutMici()
   toggle = layout._braking_toggle
   assert toggle.is_visible is False
   assert toggle.enabled is True
 
-  ui_state.has_longitudinal_control = True
+  monkeypatch.setattr(ui_state, "has_longitudinal_control", True)
   assert toggle.is_visible is True
   assert toggle.enabled is True
 
-  ui_state.started = True
+  monkeypatch.setattr(ui_state, "started", True)
   assert toggle.is_visible is True
   assert toggle.enabled is False
 
-  ui_state.started = False
+  monkeypatch.setattr(ui_state, "started", False)
   layout._update_toggles()
   assert toggle.is_visible is True
   assert toggle.enabled is True
 
-  ui_state.has_longitudinal_control = False
+  monkeypatch.setattr(ui_state, "has_longitudinal_control", False)
   layout._update_toggles()
   assert toggle.is_visible is False
   assert toggle.enabled is True
