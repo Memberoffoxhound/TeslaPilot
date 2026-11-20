@@ -16,6 +16,7 @@ import raylib_nb as rl
 # dpbridge Bluetooth: the toggle lives on the main Settings list. This page is the
 # devices card, styled like the Wi-Fi search list. UI only writes DpbCmd.
 HCI0 = "/sys/class/bluetooth/hci0"
+FORGET_S = 10  # give up on "forgetting..." after this
 SHARE_NOTE = ["DashKit streams to one device at a time.",
               "While the comma is logging, DashPilot on your phone shows no live data.",
               "Turn off log DashKit to give it back."]
@@ -58,6 +59,8 @@ class DeviceButton(BigButton):
     self._device = device
     self._on_forget = on_forget
     self._forgetting = False
+    self._forget_at = 0.0
+    self._note = ""  # last forget error
     self._busy = ""  # pairing... / connecting...
     self._bt_icon = gui_app.texture("icons_mici/settings/network/bluetooth.png", 32, 48)
     self._forget_btn = ForgetButton(self._forget)
@@ -72,8 +75,12 @@ class DeviceButton(BigButton):
   def set_busy(self, text: str):
     self._busy = text
 
-  def on_forgotten(self):
+  def on_forgotten(self, note: str = ""):
     self._forgetting = False
+    self._note = note
+
+  def forget_expired(self, now: float) -> bool:
+    return self._forgetting and now - self._forget_at > FORGET_S
 
   @property
   def mac(self) -> str:
@@ -87,6 +94,8 @@ class DeviceButton(BigButton):
     if self._forgetting:
       return
     self._forgetting = True
+    self._forget_at = time.monotonic()
+    self._note = ""
     self._on_forget(self.mac)
 
   def _show_forget_btn(self) -> bool:
@@ -115,6 +124,11 @@ class DeviceButton(BigButton):
       self.set_enabled(False)
       self.set_value(self._busy)
       self._sub_label.set_color(rl.Color(255, 255, 255, int(255 * 0.585)))
+      self._sub_label.set_font_weight(FontWeight.ROMAN)
+    elif self._note:
+      self.set_enabled(True)
+      self.set_value(self._note)
+      self._sub_label.set_color(rl.Color(255, 115, 0, 255))
       self._sub_label.set_font_weight(FontWeight.ROMAN)
     elif connected:
       self.set_enabled(True)
@@ -208,6 +222,7 @@ class BluetoothUIMici(NavScroller):
     if btn is None:
       return
     d = btn._device
+    btn.on_forgotten()
     if d.get("connected"):
       btn.set_busy("disconnecting...")
       self._busy[mac] = "disconnecting..."
@@ -227,9 +242,12 @@ class BluetoothUIMici(NavScroller):
   def _update_buttons(self):
     want = {d["mac"]: d for d in self._devices() if d.get("mac")}
     existing = {btn.mac: btn for btn in self._scroller.items if isinstance(btn, DeviceButton)}
+    now = time.monotonic()
     for mac, d in want.items():
       if mac in existing:
         existing[mac].update_device(d)
+        if existing[mac].forgetting and not d.get("paired"):
+          existing[mac].on_forgotten()
         if mac in self._busy:
           if (self._busy[mac] == "pairing..." and d.get("paired")) or \
              (self._busy[mac] == "connecting..." and d.get("connected")) or \
@@ -242,9 +260,13 @@ class BluetoothUIMici(NavScroller):
         btn = DeviceButton(d, self._forget)
         btn.set_click_callback(lambda mac=mac: self._tap(mac))
         self._scroller.add_widget(btn)
-    for mac in list(existing):
-      if mac not in want and not existing[mac].forgetting:
-        self._scroller.items.remove(existing[mac])
+    for mac, btn in existing.items():
+      if btn.forget_expired(now):
+        err = self._status.get("error") or ""
+        btn.on_forgotten(f"forget failed: {err[:40]}" if err else "")
+      if mac not in want:
+        btn.on_forgotten()
+        self._scroller.items.remove(btn)
         self._busy.pop(mac, None)
 
     # connected first, then paired, then the rest, scanning last, dashkit notes after that
@@ -273,8 +295,6 @@ class BluetoothUIMici(NavScroller):
       self._last_ping = self._last_read
     self._status = self._params.get("DpbStatus") or {}
     self._addr = self._params.get("DashKitAddr") or ""
-    if self._status.get("error") and not self._passkey_shown:
-      pass
     self._update_buttons()
 
     passkey = self._status.get("passkey", "")
