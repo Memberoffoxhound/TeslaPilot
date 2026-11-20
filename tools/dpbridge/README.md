@@ -57,7 +57,7 @@ AGNOS setup can't show our warning, so on a stock kernel `boot.py` first shows t
 off, nothing saved, and asks again next boot. A page that dies flashes nothing and openpilot starts.
 
 - install kernel: `/data/dpbridge_boot/consent` holds the kernel image sha, so it asks once per image. The run goes
-  on with `--accept-kernel`.
+  on with `--accept-kernel`. Any accepted flash (also by hand) removes `declined`.
 - not now: `/data/dpbridge_boot/declined`, openpilot starts, Bluetooth stays off, and the page stays quiet. On a stock
   kernel Settings shows "bluetooth / tap to set up": slide to reboot removes the file and the page asks again
   (or `rm /data/dpbridge_boot/declined` over SSH).

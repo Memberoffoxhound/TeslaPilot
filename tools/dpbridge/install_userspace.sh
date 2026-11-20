@@ -50,6 +50,8 @@ kernel_step() {
   $SUDO "${KSH[@]}" "${a[@]}" || rc=$?
   [ $rc != 75 ] || exit 75  # the boot.img download, before any write
   [ $rc = 0 ] || die "kernel flash failed, see kernel.sh status"
+  # an accepted flash ends an earlier "not now", so boot.py runs again after an AGNOS update
+  if [ $YES = 1 ]; then $SUDO rm -f "${DPB_BOOT_DIR:-/data/dpbridge_boot}/declined"; fi
   [ $YES = 1 ]
 }
 

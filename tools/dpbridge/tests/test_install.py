@@ -422,6 +422,16 @@ def test_kernel_step_needs_consent_to_flash(tmp_path):
   assert log == ['status', 'flash']
 
 
+def test_accepted_flash_removes_declined(tmp_path, monkeypatch):
+  monkeypatch.setenv('DPB_BOOT_DIR', str(tmp_path))
+  for st, yes, accept, gone in (('offer', 1, 1, True), ('offer', 1, 0, False), ('offer', 0, 0, False), ('ok', 1, 1, False)):
+    d = tmp_path / f'{st}{yes}{accept}'
+    d.mkdir()
+    (tmp_path / 'declined').write_text('x')
+    r, _ = run_kernel_step(d, st, yes=yes, accept=accept)
+    assert r.returncode == 0 and (tmp_path / 'declined').exists() != gone, (st, yes, accept)
+
+
 def test_accept_kernel_flag_and_warning():
   text = script_text()
   assert '--accept-kernel) ACCEPT=1' in text and 'ACCEPT=0' in text
