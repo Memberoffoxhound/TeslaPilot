@@ -22,7 +22,7 @@ PROBE = textwrap.dedent('''
     updated = {}
   ui = SimpleNamespace(started=False, is_metric=False, params=params, status=UIStatus.DISENGAGED, engaged=False,
                        has_longitudinal_control=False, usb_connected=True, usb_unknown=False, chestnut_state=CS.READY,
-                       recording_audio=False, is_body=False, CP=None, accel_progress=None,
+                       recording_audio=False, is_body=False, CP=None, accel_progress=None, mads_enabled=False,
                        sm=SM({"deviceState": SimpleNamespace(networkType=log.DeviceState.NetworkType.wifi,
                                                              networkStrength=SimpleNamespace(raw=3))}))
   mod = types.ModuleType("openpilot.selfdrive.ui.ui_state")
