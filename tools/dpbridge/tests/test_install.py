@@ -486,3 +486,10 @@ def test_apt_has_a_timeout():
   opts = r.stdout.split()
   assert {'Acquire::http::Timeout=20', 'Acquire::https::Timeout=20', 'Acquire::Retries=1'} <= set(opts)
   assert opts.count('-o') == 3
+
+
+def test_readme_shows_the_same_warning():
+  lib = (HERE / 'lib.sh').read_text()
+  r = subprocess.run(['bash', '-c', f'{lib}\nwarning_text {HERE}/kernel_warning.txt'], capture_output=True, text=True)
+  readme = (HERE / 'README.md').read_text()
+  assert f'```\n{r.stdout}```' in readme

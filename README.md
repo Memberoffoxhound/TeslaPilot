@@ -8,6 +8,8 @@
 >
 > **dpbridge only logs data. It never sends anything to the car, and panda safety is unchanged.**
 >
+> **On the first boot after install, the comma shows this warning and asks before it flashes. "not now" keeps the stock kernel; Settings > bluetooth > tap to set up asks again.**
+>
 > Steps: [tools/dpbridge/README.md](tools/dpbridge/README.md)
 
 # TeslaPilot

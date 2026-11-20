@@ -18,8 +18,9 @@ Nothing here talks to the car or changes panda safety.
 | `probe_ro.sh` | comma | read-only probe: kernel config, UART node, rfkill, firmware, A/B sizes, modules, audio |
 | `flash_boot.sh` | comma | comma 4 on AGNOS 20.6 only. Backs up both boot slots, marks the other slot unbootable, mirrors the partitions AGNOS updates (xbl xbl_config abl aop devcfg system) into it, writes `boot.img` there, reads everything back from flash, switches to it. Dry run unless `--yes` |
 | `restore_boot.sh` | comma | switches back to the stock slot (`--write` also puts the stock kernel on the other slot) |
-| `install_userspace.sh` | comma | the installer: pinned BT firmware, the dpbridge BlueZ build (`bluez/bluez.env`), bluez-alsa from noble, all debs kept in `/data/dpbridge/debs` so an AGNOS update reinstalls offline (dpkg, skip udev, skip what is already installed), services incl. `dpbridge-obex` for cover art, then the kernel (`kernel.sh`) when the stock one runs and a reboot last. Leaves audio alone. Dry run unless `--yes` |
-| `boot.py` | comma | run by `launch_chffrplus.sh` before manager: `install_userspace.sh --yes` once per setup change with comma's spinner, never blocks openpilot, reboots only after a flash |
+| `install_userspace.sh` | comma | the installer: pinned BT firmware, the dpbridge BlueZ build (`bluez/bluez.env`), bluez-alsa from noble, all debs kept in `/data/dpbridge/debs` so an AGNOS update reinstalls offline (dpkg, skip udev, skip what is already installed), services incl. `dpbridge-obex` for cover art, then the kernel (`kernel.sh`) when the stock one runs, only with `--accept-kernel`, and a reboot last. Prints `kernel_warning.txt` when it could flash. Leaves audio alone. Dry run unless `--yes` |
+| `boot.py` | comma | run by `launch_chffrplus.sh` before manager: on a stock kernel asks first on the kernel page, waits up to 90 s for the network, then `install_userspace.sh --yes` once per setup change with the page's progress, reboots only after a flash |
+| `kernel_warning.txt` | comma, Mac | the warning the user agrees to: the kernel page's cards, printed by `install_userspace.sh` and `mac/deliver.sh` |
 | `bluez/build_bluez.sh` | noble arm64 root | BlueZ 5.83 as three debs plus a tarball: experimental API, obexd with the BIP client, no Evolution libs. The tarball is a release asset; its sha is in `bluez/bluez.env` |
 | `kernel.sh` | comma | automatic kernel flash, run only by `install_userspace.sh` on a stock kernel: status, fetch `boot.img` from the release (sha in `firmware/kernel.env`), `flash_boot.sh --rotate` on the inactive slot only; `post-boot` records the result on the next install |
 | `firmware/firmware.sha256` | both | sha256 of `qca/crbtfw21.tlv`, `qca/crnv21.bin` and its license from linux-firmware f859d9f, and of comma's `firmware/bluetooth.img` from agnos-builder 140ed0c; `mac/make_bundle.sh` and `make_btfw.sh` fetch and check them |
@@ -32,9 +33,9 @@ Nothing here talks to the car or changes panda safety.
 | `attach.sh` | comma | started by `dpbridge-bt.service`: power on, `btattach` on /dev/ttyHS1, then this unit's own address |
 | `test_bt.sh` | both | the 16 acceptance checks; device rows skip without hci0 |
 | `dk_unpack.py` | dev box | DashKit frames from a route as CSV, `--check` for the acceptance test |
-| `mac/deliver.sh` | Mac | copies everything over SSH and runs the steps below |
+| `mac/deliver.sh` | Mac | copies everything over SSH and runs the steps below; `install --yes` shows the warning and needs a typed yes |
 
-openpilot side: `openpilot/system/dpbridge/` (dashkitd, btagentd, a2dp ducking, nowplaying), params `DashKitBridge`,
+openpilot side: `openpilot/system/dpbridge/` (kernel_page.py, dashkitd, btagentd, a2dp ducking, nowplaying), params `DashKitBridge`,
 `DashKitAddr`, `DashKitVersion`, `DpbA2dpOnroad`, `DpbCmd`, `DpbStatus`, and Settings > bluetooth.
 Now playing is a tmpfs JSON file plus a home / disengaged-onroad card; it is hidden when nothing is up.
 All of it stays off when `/sys/class/bluetooth/hci0` is missing.
@@ -49,20 +50,33 @@ config is untouched.
 ## Steps
 
 The installer does everything, with openpilot down. After an install from comma's installer URL it runs by itself:
-`launch_chffrplus.sh` calls `boot.py` after `agnos_init`, before manager, on a comma 4 only. `boot.py` runs
-`install_userspace.sh --yes` with comma's spinner and a progress bar on screen, then writes a stamp
-(`/data/dpbridge_boot/stamp`: sha256 of the installer scripts, the pin files, the AGNOS version and the boot slot), so
-it runs again only when the code, a pin, AGNOS or the slot changes. It is skipped while `/data/dpbridge/disable`
-exists. A failure or the 20 min timeout on steps 1-3 is logged to `/data/dpbridge_boot/log`, openpilot starts
-anyway and the next boot tries again, up to 3 runs per setup (`rm /data/dpbridge_boot/fails` to retry). A failed
-download (no network, exit 75) is not counted, and when the release host gives no answer in 5 s it skips
-uncounted (unless every download is already on `/data`). The kernel step is never killed and openpilot waits for it: its
-boot.img download gives up on a stalled link, after 20 min per try or 25 min in all (resumed next run), before any
-write (output in `/data/dpbridge_boot/install.out`).
+`launch_chffrplus.sh` calls `boot.py` after `agnos_init`, before manager, on a comma 4 only. comma's installer and
+AGNOS setup can't show our warning, so on a stock kernel `boot.py` first shows the kernel page
+(`openpilot/system/dpbridge/kernel_page.py`): the cards from `kernel_warning.txt`, then comma's confirm circles,
+"install kernel" and a red "not now", each with its slider. It waits for an answer, with no timeout.
+
+- install kernel: `/data/dpbridge_boot/consent` holds the kernel image sha, so it asks once per image. The run goes
+  on with `--accept-kernel`.
+- not now: `/data/dpbridge_boot/declined`, openpilot starts, Bluetooth stays off, and the page stays quiet. On a stock
+  kernel Settings shows "bluetooth / tap to set up": slide to reboot removes the file and the page asks again
+  (or `rm /data/dpbridge_boot/declined` over SSH).
+
+Then, when a download is needed (anything not already on `/data`; `boot.img` only when a flash may follow), it waits
+for the network, a check every 5 s for up to 90 s, showing "connecting..." and a countdown. Still offline: it shows
+"no network", skips uncounted and openpilot starts. The page then shows each step and its percent. `boot.py` writes
+a stamp (`/data/dpbridge_boot/stamp`: sha256 of the installer scripts, the pin files, the AGNOS version and the boot
+slot), so it runs again only when the code, a pin, AGNOS or the slot changes. It is skipped while
+`/data/dpbridge/disable` exists. A failure or the 20 min timeout on steps 1-3 is shown for 5 s, logged to
+`/data/dpbridge_boot/log`, openpilot starts anyway and the next boot tries again, up to 3 runs per setup
+(`rm /data/dpbridge_boot/fails` to retry). A failed download (exit 75) is not counted. The kernel step is never
+killed and openpilot waits for it: its boot.img download gives up on a stalled link, after 20 min per try or 25 min
+in all (resumed next run), before any write (output in `/data/dpbridge_boot/install.out`).
 After a flash it reboots once, without a stamp; the next boot records the result.
 Do the first run parked at home on Wi-Fi: openpilot is not available for the minutes it takes, then one reboot.
 
-By hand: `install_userspace.sh --yes` on the comma, or `mac/deliver.sh install --yes` from a Mac, which runs it
+By hand: `install_userspace.sh --yes --accept-kernel` on the comma (without `--accept-kernel` it installs the rest and
+leaves a stock kernel alone), or `mac/deliver.sh install --yes` from a Mac, which shows the warning, asks for a typed
+`yes` and passes `--accept-kernel`, then runs it
 detached from SSH (log in `install.log`) so a dropped session can't stop a flash. It refuses while openpilot runs
 onroad (`./manager.py` running and `IsOffroad` not 1). It prints `[1/4]` to `[4/4]` and the kernel step as
 `kernel: <step> <percent>%` (downloading, verifying, backing up, writing slot X, reading back, switching slot), then
@@ -79,7 +93,7 @@ comma answers again.
 Without `--yes` it is a dry run. `kernel.sh status` prints `state=`: `ok` (pinned kernel runs), `outdated` (an older
 dpbridge kernel runs: restore first), `offer` (stock, install flashes), `off` (`/data/dpbridge/disable`), `failed`
 (the last try with this image, AGNOS and slot failed), `pending`, `no_space`, `unsupported_agnos`, `unsupported_device`.
-`install_userspace.sh --yes --reflash` flashes despite `off` or `failed`; without it both leave the kernel alone.
+`install_userspace.sh --yes --accept-kernel --reflash` flashes despite `off` or `failed`; without it both leave the kernel alone.
 `no_space` and `unsupported_*` are printed and skipped; the rest of the install still succeeds.
 
 Manual path (development, new kernel builds): `build_kernel.sh`, `mac/deliver.sh probe`, `qdl-check`, `push`,
@@ -92,6 +106,28 @@ Bluetooth off is a separate file: the Settings toggle and `mac/deliver.sh disabl
 A device that ran an earlier dpbridge build with Bluetooth toggled off: `rm /data/dpbridge/disable` once.
 If two Bluetooth starts in a row never settle (hci0 up for 60 s), the next one switches Bluetooth off instead and
 Settings shows `off: did not start twice` under the toggle until it is switched on again.
+
+## The warning
+
+What the kernel page shows, as `install_userspace.sh` and `mac/deliver.sh` print it:
+
+```
+custom kernel required
+  for Bluetooth
+- This branch needs its own kernel to turn on Bluetooth.
+caution: a bad flash can brick the comma
+- Recovery may need QDL mode and a full reflash that wipes your data.
+fallbacks if something fails
+- Both boot slots are backed up first.
+- Only the unused slot is written. The running one is not.
+- Every write is read back before the slot switches.
+- If it won't boot, it should go back to stock. Not yet tested.
+go back to stock later over SSH
+  restore_boot.sh
+last resort: full reflash, wipes data
+  flash.comma.ai
+- Takes a few minutes and one reboot. Stay parked.
+```
 
 ## Recovery
 
