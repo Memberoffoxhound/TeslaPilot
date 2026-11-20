@@ -5,20 +5,22 @@ A_CRUISE_MIN_SOFT = -0.5
 BRAKING_FIRM_PARAM = "BrakingFirm"
 
 
-def cruise_min_from_params(params) -> float:
+def braking_firm_from_params(params, default=True) -> bool:
   try:
     val = params.get(BRAKING_FIRM_PARAM, return_default=True)
   except (KeyError, OSError, TypeError, AttributeError, UnknownKeyName):
-    return A_CRUISE_MIN
+    return default
   if val is None or val == "" or val == b"":
-    firm = True
-  elif isinstance(val, (bytes, bytearray)):
-    firm = val not in (b"0", b"")
-  elif isinstance(val, str):
-    firm = val not in ("0", "")
-  else:
-    firm = bool(val)
-  return A_CRUISE_MIN if firm else A_CRUISE_MIN_SOFT
+    return default
+  if isinstance(val, (bytes, bytearray)):
+    return val not in (b"0", b"")
+  if isinstance(val, str):
+    return val not in ("0", "")
+  return bool(val)
+
+
+def cruise_min_from_params(params) -> float:
+  return A_CRUISE_MIN if braking_firm_from_params(params) else A_CRUISE_MIN_SOFT
 
 
 def clamp_cruise_min(a_cruise_min: float) -> float:
