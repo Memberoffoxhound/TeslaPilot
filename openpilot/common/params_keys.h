@@ -43,7 +43,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"DoReboot", {CLEAR_ON_MANAGER_START, BOOL}},
     {"DoShutdown", {CLEAR_ON_MANAGER_START, BOOL}},
     {"DoUninstall", {CLEAR_ON_MANAGER_START, BOOL}},
-    {"DpbA2dpOnroad", {PERSISTENT, BOOL, "0"}},  // dpbridge: allow phone music while driving
+    {"DpbMusicOnroad", {PERSISTENT, BOOL, "1"}},  // dpbridge: phone music while driving, alerts still duck it
     {"DpbBluetooth", {PERSISTENT, BOOL, "0"}},  // dpbridge: radio on, home icon and devices list
     {"DpbCmd", {CLEAR_ON_MANAGER_START, STRING}},  // dpbridge: settings page -> btagentd
     {"DpbStatus", {CLEAR_ON_MANAGER_START, JSON}},  // dpbridge: btagentd -> settings page

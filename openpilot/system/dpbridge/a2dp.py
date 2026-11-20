@@ -4,7 +4,7 @@ import signal
 import sys
 import time
 
-# Keeps phone music out of the way: muted while driving unless DpbA2dpOnroad.
+# Keeps phone music out of the way: muted while driving if DpbMusicOnroad is off.
 # soundd mixes A2DP from the FIFO and already mutes during alerts, so this process
 # only publishes a tmpfs level that Music reads. 0 is mute. No ALSA mixer.
 LEVEL_PATH = '/dev/shm/dpbridge-a2dp.level'
@@ -83,7 +83,7 @@ def main():
   def levels():
     while True:
       sm.update(200)
-      yield target(sm['deviceState'].started, params.get_bool("DpbA2dpOnroad"), sm['selfdriveState'].alertSound.raw != 0)
+      yield target(sm['deviceState'].started, params.get_bool("DpbMusicOnroad"), sm['selfdriveState'].alertSound.raw != 0)
 
   exit_on_sigterm()
   run(Ducker(), levels(), cloudlog.warning)

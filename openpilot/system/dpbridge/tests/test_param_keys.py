@@ -12,6 +12,11 @@ SH = re.compile(r"params/d/(\w+)")
 
 def test_every_dpbridge_param_exists():
   used = {k: f.name for f in FILES for k in PY.findall(f.read_text()) + SH.findall(f.read_text())}
-  assert {"DpbBluetooth", "DashKitAddr", "DpbCmd", "DpbStatus", "DpbA2dpOnroad"} <= set(used)
+  assert {"DpbBluetooth", "DashKitAddr", "DpbCmd", "DpbStatus", "DpbMusicOnroad"} <= set(used)
   missing = {k: f for k, f in used.items() if f'{{"{k}",' not in KEYS}
   assert not missing, missing
+
+
+def test_music_onroad_on_by_default():
+  # new name so a comma that stored the old "0" default picks up on
+  assert '{"DpbMusicOnroad", {PERSISTENT, BOOL, "1"}}' in KEYS and "DpbA2dpOnroad" not in KEYS

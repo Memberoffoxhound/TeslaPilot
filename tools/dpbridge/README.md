@@ -36,7 +36,7 @@ Nothing here talks to the car or changes panda safety.
 | `mac/deliver.sh` | Mac | copies everything over SSH and runs the steps below; `install --yes` shows the warning and needs a typed yes |
 
 openpilot side: `openpilot/system/dpbridge/` (kernel_page.py, dashkitd, btagentd, a2dp ducking, nowplaying), params `DashKitBridge`,
-`DashKitAddr`, `DashKitVersion`, `DpbA2dpOnroad`, `DpbCmd`, `DpbStatus`, and Settings > bluetooth.
+`DashKitAddr`, `DashKitVersion`, `DpbMusicOnroad` (phone music while driving, on by default), `DpbCmd`, `DpbStatus`, and Settings > bluetooth.
 Now playing is a tmpfs JSON file plus a home / disengaged-onroad card; it is hidden when nothing is up.
 All of it stays off when `/sys/class/bluetooth/hci0` is missing.
 
