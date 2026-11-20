@@ -52,10 +52,16 @@ def get_mads_limited_brands(brand: str, flags: int, screen_button: int) -> bool:
   return False
 
 
+def _limited_from_params(CP: structs.CarParams, CP_SP: CarParamsSP, params: Params) -> bool:
+  screen_button = 0
+  if CP.brand == "tesla":
+    screen_button = int(params.get("TeslaMadsScreenButton", return_default=True) or 0)
+  return get_mads_limited_brands(CP.brand, CP_SP.flags, screen_button)
+
+
 def read_steering_mode_param(CP: structs.CarParams, CP_SP: CarParamsSP, params: Params):
   # Tesla: brake always ends steering too
-  screen_button = int(params.get("TeslaMadsScreenButton", return_default=True) or 0)
-  if CP.brand == "tesla" or get_mads_limited_brands(CP.brand, CP_SP.flags, screen_button):
+  if CP.brand == "tesla" or _limited_from_params(CP, CP_SP, params):
     return MadsSteeringModeOnBrake.DISENGAGE
 
   return params.get("MadsSteeringMode", return_default=True)
@@ -80,8 +86,7 @@ def set_car_specific_params(CP: structs.CarParams, CP_SP: CarParamsSP, params: P
     CP_SP.safetyParam |= HyundaiSafetyFlagsSP.LONG_MAIN_CRUISE_TOGGLEABLE
 
   # limited brands only support disengage on brake and unified engagement
-  screen_button = int(params.get("TeslaMadsScreenButton", return_default=True) or 0)
-  mads_partial_support = get_mads_limited_brands(CP.brand, CP_SP.flags, screen_button)
+  mads_partial_support = _limited_from_params(CP, CP_SP, params)
   if mads_partial_support:
     params.put("MadsSteeringMode", 2, block=True)
     params.put_bool("MadsUnifiedEngagementMode", True, block=True)

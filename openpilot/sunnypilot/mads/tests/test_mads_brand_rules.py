@@ -15,7 +15,7 @@ _MADS = dict(MadsSteeringMode=0, MadsUnifiedEngagementMode=False, MadsMainCruise
 
 
 def FakeMadsParams(**values):
-  return FakeParams(**_MADS, **values)
+  return FakeParams(**{**_MADS, **values})
 
 
 def car(brand, flags=0, sp_flags=0):
