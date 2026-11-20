@@ -205,8 +205,10 @@ class ModelRenderer(BaseModelRenderer):
     """Draw lane lines and road edges. Two closest lines should be green (lane line or road edges)."""
     offset = self._draw_offset()
     w = self._swap.x
-    path, h = self._path.projected_points + offset, len(self._path.projected_points) // 2
-    edges = sorted((path[:h], path[h:][::-1]), key=lambda e: float(e[:, 0].mean())) if h > 1 else None
+    edges = None
+    if w >= 1e-3:
+      path, h = self._path.projected_points + offset, len(self._path.projected_points) // 2
+      edges = sorted((path[:h], path[h:][::-1]), key=lambda e: float(e[:, 0].mean())) if h > 1 else None
 
     for i, lane_line in enumerate(self._lane_lines):
       if lane_line.projected_points.size == 0:
