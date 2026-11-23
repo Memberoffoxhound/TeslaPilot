@@ -32,6 +32,23 @@ def _hooks_header(safety_model: int) -> list[str]:
   return texts
 
 
+def _writes(texts: list[str], field: str) -> bool:
+  # a write counts in the mode's own header, or in an included helper that header calls
+  pattern = r"safety\." + field + r"\s*="
+  bodies = {}
+  for text in texts[1:]:
+    for m in re.finditer(r"\b(\w+)\([^;{)]*\)\s*\{", text):
+      depth, i = 1, m.end()
+      while depth and i < len(text):
+        depth += {"{": 1, "}": -1}.get(text[i], 0)
+        i += 1
+      bodies[m.group(1)] = text[m.end():i]
+  writers = {name for name, body in bodies.items() if re.search(pattern, body)}
+  while new := {n for n, b in bodies.items() if n not in writers and any(re.search(r"\b" + w + r"\(", b) for w in writers)}:
+    writers |= new
+  return bool(re.search(pattern, texts[0])) or any(re.search(r"\b" + w + r"\(", texts[0]) for w in writers)
+
+
 def _platforms():
   for fp in sorted(PLATFORMS):
     CP = interfaces[fp].get_non_essential_params(fp)
@@ -42,11 +59,11 @@ def _platforms():
 @pytest.mark.parametrize("fp, CP", list(_platforms()), ids=lambda x: x if isinstance(x, str) else "")
 def test_main_and_button_match_panda(fp, CP):
   texts = _hooks_header(CP.safetyConfigs[-1].safetyModel.raw)
-  sets_main = any(re.search(r"safety\.acc_main_on\s*=", t) for t in texts)
+  sets_main = _writes(texts, "acc_main_on")
   assert mads_main_reported(CP.brand, CP.flags, fp) == sets_main
   # Hyundai and Tesla buttons depend on car and openpilot flags, covered in test_mads_brand_rules.py
   if CP.brand not in ("hyundai", "tesla"):
-    sets_button = any(re.search(r"safety\.mads_button_press\s*=", t) for t in texts)
+    sets_button = _writes(texts, "mads_button_press")
     assert mads_has_button(CP.brand, CP.flags, 0, 0, fp) == sets_button
 
 
