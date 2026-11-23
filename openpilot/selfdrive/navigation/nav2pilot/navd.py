@@ -155,8 +155,8 @@ class Nav2PilotRouteEngine(RouteEngine):
         cloudlog.warning("Got empty route response")
         self.clear_route()
 
-    except requests.exceptions.RequestException:
-      cloudlog.exception("failed to get route")
+    except requests.exceptions.RequestException as e:
+      cloudlog.error(f"failed to get route: {type(e).__name__} {getattr(e.response, 'status_code', None)}")
       self.clear_route()
 
   def clear_route(self):
