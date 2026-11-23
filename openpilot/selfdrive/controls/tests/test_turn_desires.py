@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+import pytest
+
 from openpilot.cereal import log
 from openpilot.common.constants import CV
 from openpilot.conftest import FakeParams
@@ -8,7 +10,8 @@ from openpilot.selfdrive.controls.lib import desire_helper as dh
 from openpilot.selfdrive.controls.lib.stop_light_detector import StopLightDetector
 
 
-def _cs(v_ego=5.0, left=False, right=False, standstill=False, steer_deg=0.0):
+def _cs(v_ego=5.0, left=False, right=False, standstill=False, steer_deg=0.0,
+       left_blind=False, right_blind=False):
   return SimpleNamespace(
     vEgo=v_ego,
     leftBlinker=left,
@@ -16,8 +19,8 @@ def _cs(v_ego=5.0, left=False, right=False, standstill=False, steer_deg=0.0):
     standstill=standstill,
     steeringPressed=False,
     steeringTorque=0.0,
-    leftBlindspot=False,
-    rightBlindspot=False,
+    leftBlindspot=left_blind,
+    rightBlindspot=right_blind,
     brakePressed=False,
     steeringAngleDeg=steer_deg,
   )
@@ -87,17 +90,18 @@ def test_turn_stop_hold_red_light_clears_at_standstill(monkeypatch):
   helper.update(_cs(v_ego=2.0, right=True), True, 0.0)
   assert helper.desire == log.Desire.turnRight
 
-
-def test_turn_stop_hold_forcing_stop_and_cancel(monkeypatch):
-  helper = _make_helper(monkeypatch, turn_desires=True)
-  helper.update(_cs(v_ego=5.0, left=True), True, 0.0, forcing_stop=True)
+  # cancelling the blinker also clears hold
+  helper.update(_cs(v_ego=5.0, right=True), True, 0.0, red_light=True)
   assert helper.turn_stop_hold
-  assert helper.desire == log.Desire.none
-
-  # cancelling blinker clears hold
   helper.update(_cs(v_ego=5.0), True, 0.0)
   assert not helper.turn_stop_hold
-  helper.update(_cs(v_ego=5.0, left=True), True, 0.0)
+
+
+def test_turn_desire_ignores_blindspot_like_starpilot(monkeypatch):
+  helper = _make_helper(monkeypatch, turn_desires=True)
+  helper.update(_cs(v_ego=5.0, right=True, right_blind=True), True, 0.0)
+  assert helper.desire == log.Desire.turnRight
+  helper.update(_cs(v_ego=5.0, left=True, left_blind=True), True, 0.0)
   assert helper.desire == log.Desire.turnLeft
 
 
@@ -133,3 +137,26 @@ def test_stop_light_detector_committed_turn_veto():
   cs_turning = _cs(v_ego=5.0, right=True, steer_deg=55.0)
   for i in range(40):
     assert not det.update(cs_turning, _model_v2(15.0), now=300.0 + i * 0.05)
+
+
+def test_stop_light_constants_match_planner(monkeypatch):
+  try:
+    from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import STOP_DISTANCE as MPC_STOP, get_T_FOLLOW
+  except ImportError:
+    # long_mpc imports generated acados at module level; stub that so the constants still load
+    import sys
+    import types
+    pkg = "openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.c_generated_code"
+    stub = types.ModuleType(pkg)
+    stub.__path__ = []
+    monkeypatch.setitem(sys.modules, pkg, stub)
+    mod = types.ModuleType(pkg + ".acados_ocp_solver_pyx")
+    mod.AcadosOcpSolverCython = object
+    monkeypatch.setitem(sys.modules, pkg + ".acados_ocp_solver_pyx", mod)
+    try:
+      from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import STOP_DISTANCE as MPC_STOP, get_T_FOLLOW
+    except ImportError as e:
+      pytest.skip(f"long_mpc unavailable: {e}")
+  from openpilot.selfdrive.controls.lib import stop_light_detector as sld
+  assert sld.STOP_DISTANCE == MPC_STOP
+  assert sld.DEFAULT_T_FOLLOW == get_T_FOLLOW()

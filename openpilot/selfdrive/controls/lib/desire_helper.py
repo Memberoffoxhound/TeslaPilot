@@ -14,15 +14,6 @@ TURN_SPEED_MAX = 20 * CV.MPH_TO_MS
 LANE_CHANGE_TIME_MAX = 10.
 LANE_CHANGE_START_TIME = 0.5
 
-TurnDirection = log.Desire
-
-TURN_DESIRES = {
-  TurnDirection.none: log.Desire.none,
-  TurnDirection.turnLeft: log.Desire.turnLeft,
-  TurnDirection.turnRight: log.Desire.turnRight,
-}
-
-
 class DesireHelper:
   def __init__(self):
     self.lane_change_state = LaneChangeState.off
@@ -30,7 +21,7 @@ class DesireHelper:
     self.lane_change_timer = 0.0
     self.prev_one_blinker = False
     self.desire = log.Desire.none
-    self.turn_direction = TurnDirection.none
+    self.turn_direction = log.Desire.none
     self.turn_stop_hold = False
     self.params = Params()
     self.turn_desires = False
@@ -50,16 +41,16 @@ class DesireHelper:
   def get_lane_change_direction(CS):
     return LaneChangeDirection.left if CS.leftBlinker else LaneChangeDirection.right
 
-  def update(self, carstate, lateral_active, lane_change_prob, red_light=False, forcing_stop=False, stop_sign_confirmed=False):
+  def update(self, carstate, lateral_active, lane_change_prob, red_light=False):
     self._update_params()
     self.alc.update_params()
     v_ego = carstate.vEgo
     one_blinker = carstate.leftBlinker != carstate.rightBlinker
-    standstill = bool(getattr(carstate, "standstill", False))
+    standstill = carstate.standstill
     below_lane_change_speed = v_ego < LANE_CHANGE_SPEED_MIN
     below_turn_speed = v_ego < TURN_SPEED_MAX
 
-    stop_imminent = bool(red_light) or bool(forcing_stop) or bool(stop_sign_confirmed)
+    stop_imminent = bool(red_light)
     if standstill or not one_blinker:
       self.turn_stop_hold = False
     elif stop_imminent:
@@ -111,11 +102,12 @@ class DesireHelper:
 
     self.prev_one_blinker = one_blinker and lateral_active
 
-    if lateral_active and one_blinker and below_turn_speed and not standstill and self.turn_desires and not self.turn_stop_hold:
-      self.turn_direction = TurnDirection.turnLeft if carstate.leftBlinker else TurnDirection.turnRight
-      self.desire = TURN_DESIRES[self.turn_direction]
+    if (lateral_active and one_blinker and below_turn_speed and not standstill and self.turn_desires
+        and not self.turn_stop_hold):
+      self.turn_direction = log.Desire.turnLeft if carstate.leftBlinker else log.Desire.turnRight
+      self.desire = self.turn_direction
     else:
-      self.turn_direction = TurnDirection.none
+      self.turn_direction = log.Desire.none
       self.desire = log.Desire.none
       if self.lane_change_state == LaneChangeState.laneChangeStarting:
         if self.lane_change_direction == LaneChangeDirection.left:

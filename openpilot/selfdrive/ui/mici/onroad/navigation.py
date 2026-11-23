@@ -12,12 +12,7 @@ from openpilot.system.ui.lib.application import FontWeight, TextAlignmentVertica
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import UnifiedLabel, gui_label
 
-try:
-  from openpilot.selfdrive.ui.layouts.settings.common import theme_rgb, THEME_OPENPILOT_RGB
-except Exception:
-  THEME_OPENPILOT_RGB = (0, 255, 64)
-  def theme_rgb(params=None):
-    return THEME_OPENPILOT_RGB
+from openpilot.selfdrive.ui.layouts.settings.common import theme_rgb, THEME_OPENPILOT_RGB
 
 PANEL_WIDTH = 261
 STALE_SECONDS = 3

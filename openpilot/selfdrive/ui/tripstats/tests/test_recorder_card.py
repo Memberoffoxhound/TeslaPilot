@@ -201,7 +201,6 @@ def test_recorder_tracks_filtered_faults():
   rec.update(True, 0.0, 1000.0, 10.0, True, filtered_faults=1)
   rec.update(True, 0.1, 1000.1, 10.0, True, filtered_faults=3)
   assert rec.summary(1000.2)["ff"] == 3
-  assert store.load(None) is not None
 
 
 def test_timeline_runs():

@@ -33,7 +33,8 @@ def dh_module(monkeypatch):
 
 
 def cs(left=True, blind=False, brake=False):
-  return SimpleNamespace(vEgo=30.0, leftBlinker=left, rightBlinker=False, steeringPressed=False, steeringTorque=0.0,
+  return SimpleNamespace(vEgo=30.0, leftBlinker=left, rightBlinker=False, standstill=False,
+                         steeringPressed=False, steeringTorque=0.0,
                          leftBlindspot=blind, rightBlindspot=False, brakePressed=brake)
 
 

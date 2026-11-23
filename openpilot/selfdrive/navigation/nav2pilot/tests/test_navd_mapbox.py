@@ -1,6 +1,8 @@
 # The Mapbox token sent from the phone: setMapboxToken and where navd sends the route request with and without it.
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+import requests
 
 from openpilot.common.api import API_HOST
 from openpilot.common.params import Params
@@ -57,6 +59,43 @@ class TestRouteEngineMapboxToken(unittest.TestCase):
       engine.calculate_route((0.004, 0))
       self.assertTrue(get.call_args.args[0].startswith(API_HOST.rstrip('/') + '/v1/nav'))
       self.assertEqual(get.call_args.kwargs['params']['access_token'], 'test-token')
+
+  def test_route_error_does_not_log_the_token(self):
+    values = {'NavDestination': {'latitude': 0, 'longitude': 0.004,
+                                 'waypoints': [{'latitude': 0, 'longitude': 0.002, 'via': False}]},
+              MAPBOX_TOKEN_PARAM: TOKEN}
+    engine = route_engine(values)
+    waypoints = ((0.002, 0.0, False),)
+    resp = MagicMock(status_code=404, text='nope')
+    url = f"https://api.mapbox.com{DIRECTIONS}0,0;0.002,0;0.004,0?access_token={TOKEN}"
+    resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+      f"404 Client Error: Not Found for url: {url}", response=resp)
+
+    logged = []
+
+    def _capture(method):
+      def _fn(*args, **kwargs):
+        logged.append((method, args, kwargs))
+      return _fn
+
+    with patch('requests.get', return_value=resp),          patch('openpilot.selfdrive.navigation.nav2pilot.navd.cloudlog') as clog:
+      for name in ('error', 'exception', 'event', 'warning'):
+        getattr(clog, name).side_effect = _capture(name)
+      engine.calculate_route((0.004, 0), waypoints=waypoints)
+
+    self.assertTrue(any(item[0] == 'error' and 'HTTPError' in str(item[1]) and '404' in str(item[1]) for item in logged))
+    self.assertFalse(any(item[0] == 'exception' for item in logged))
+    self.assertNotIn(TOKEN, repr(logged))
+
+    logged.clear()
+    conn = requests.exceptions.ConnectionError(f"HTTPSConnectionPool: {url}")
+    with patch('requests.get', side_effect=conn),          patch('openpilot.selfdrive.navigation.nav2pilot.navd.cloudlog') as clog:
+      for name in ('error', 'exception', 'event', 'warning'):
+        getattr(clog, name).side_effect = _capture(name)
+      engine.calculate_route((0.004, 0), waypoints=waypoints)
+    self.assertTrue(any(item[0] == 'error' and 'ConnectionError' in str(item[1]) for item in logged))
+    self.assertFalse(any(item[0] == 'exception' for item in logged))
+    self.assertNotIn(TOKEN, repr(logged))
 
 
 class TestSetMapboxToken(OpenpilotTestCase):
