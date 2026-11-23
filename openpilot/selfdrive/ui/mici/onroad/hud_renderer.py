@@ -28,6 +28,23 @@ SET_SPEED_PERSISTENCE = 2.5  # seconds
 COMPASS_FULL_ALPHA = 229.5
 COMPASS_TOP = 10  # dm icon top: 52 px centered 36 down
 COMPASS_RIGHT = 4
+NAV_TORQUE_CX = 137.5  # midpoint of the left pane (x=0) and nav panel (x=275)
+NAV_TORQUE_WIDTH = 442  # TORQUE_ANGLE_SPAN*w/476; 2px buffer at torque=1.0 after 0.1 deg quantize and AA
+NAV_COMPASS_PILL_W, NAV_COMPASS_PILL_H = 118, 60  # 60px = small compass; 118px stays 2-3px clear of the DM badge
+NAV_COMPASS_CY = 42  # visual ink center of the DM person+cone (layout slot is still centered at 36)
+PILL_BG = (10, 10, 14)  # TeslaPilot onroad pill fill
+NAV_LETTER_SIZE = 34  # Inter Bold, same as the nav panel maneuver distance and ETA
+# Small 60px compass only: step down from 34 when tight ink exceeds the circle chord, 2px margin
+SMALL_LETTER_SIZE = {"N": 34, "NE": 34, "E": 34, "SE": 34, "S": 34, "SW": 31, "W": 34, "NW": 30}
+# Stock dm_cone.png on a 60px badge (dest 52, same as the DM icon)
+FAN_SPAN = 73.0
+FAN_DEST = 52.0 / 60.0
+FAN_OUTER = 64.5 / 64.0  # outer r / half of the 128px texture
+FAN_INNER = 36.4 / 64.0  # inner r where the gradient starts
+FAN_PEAK_ALPHA = 251 / 255.0  # stock cone peak alpha (white, tinted at draw)
+NAV_WHEEL_GAP = 3  # px above the bar under the glow, nav only
+NAV_WHEEL_GLOW = 34  # visual glow radius (bbox at alpha > 4)
+NAV_WHEEL_CX = 46  # left-column center when nav is shown (left_rect width 92)
 SLOT_CX, SLOT_CY = 42, 50  # gpu icon center from the video's bottom right with the small compass, on the personality
 SLOT_SHOW, SLOT_PEEK, SLOT_FAILED, SLOT_COMPILE_EVERY = 3.0, 2.0, 4.0, 30.0  # s, how long it takes the slot
 WHEEL_SIZE = 52
@@ -91,6 +108,84 @@ def _wheel_part_textures(asset: str, size: int) -> tuple[rl.Texture, rl.Texture]
   return parts[0], parts[1]
 
 
+def _outline_point(cx: float, cy: float, hw: float, hh: float, heading_deg: float) -> tuple[float, float]:
+  # Point on a fully-rounded stadium (a circle when hw == hh). Heading 0 is up, clockwise.
+  th = math.radians(heading_deg)
+  dx, dy = math.sin(th), -math.cos(th)
+  cap_r = hh
+  straight = max(0.0, hw - cap_r)
+  if dy < 0:
+    t = -hh / dy
+    x = t * dx
+    if abs(x) <= straight + 1e-6:
+      return cx + x, cy - hh
+  if dy > 0:
+    t = hh / dy
+    x = t * dx
+    if abs(x) <= straight + 1e-6:
+      return cx + x, cy + hh
+  for side in (-1.0, 1.0):
+    ox = side * straight
+    # ray vs cap circle centered at (ox, 0) relative to (cx, cy)
+    b = -2 * dx * ox
+    c = ox * ox - cap_r * cap_r
+    disc = b * b - 4 * c
+    if disc < 0:
+      continue
+    root = math.sqrt(disc)
+    for t in ((-b + root) / 2, (-b - root) / 2):
+      if t <= 0:
+        continue
+      px, py = t * dx, t * dy
+      if (side < 0 and px <= -straight + 1e-6) or (side > 0 and px >= straight - 1e-6):
+        return cx + px, cy + py
+  return cx + hw * dx, cy + hh * dy
+
+
+def _draw_heading_fan(cx: float, cy: float, w: float, h: float, heading: float, color: rl.Color) -> None:
+  # Stock dm_cone styling along the shape outline: 73 deg span, radial alpha 0->251, hard angular ends
+  badge_r = min(w, h) / 2
+  outer_in = badge_r * (1.0 - FAN_DEST * FAN_OUTER)
+  inner_in = badge_r * (1.0 - FAN_DEST * FAN_INNER)
+  if w / 2 - inner_in <= 1 or h / 2 - inner_in <= 1:
+    return
+  n_ang, n_rad = 20, 10
+  for j in range(n_rad):
+    t0, t1 = j / n_rad, (j + 1) / n_rad
+    col = rl.Color(color.r, color.g, color.b, int(color.a * FAN_PEAK_ALPHA * (t0 + t1) / 2))
+    i0 = inner_in + (outer_in - inner_in) * t0
+    i1 = inner_in + (outer_in - inner_in) * t1
+    pts = []
+    for i in range(n_ang):
+      ang = heading - FAN_SPAN / 2 + FAN_SPAN * i / (n_ang - 1)
+      # outer then inner so the strip winds the way the software renderer fills
+      pts.append(_outline_point(cx, cy, w / 2 - i1, h / 2 - i1, ang))
+      pts.append(_outline_point(cx, cy, w / 2 - i0, h / 2 - i0, ang))
+    rl.draw_triangle_strip(pts, len(pts), col)
+
+
+def _nav_torque_top(x: float, rect_y: float, rect_h: float, torque: float = 1.0) -> float:
+  # Top of the torque bar at screen x, same geometry as TorqueBar (height/offset follow |torque|)
+  mag = min(1.0, abs(torque))
+  t = 0.0 if mag <= 0.5 else (mag - 0.5) / 0.5
+  offset = 22.0 + 4.0 * t
+  height = 14.0 + 42.0 * t
+  r_out = 1200.0 + height
+  cy = rect_y + rect_h + 1200.0 - offset
+  dx = x - NAV_TORQUE_CX
+  return cy - math.sqrt(max(0.0, r_out * r_out - dx * dx))
+
+
+def _nav_wheel_pos_y(torque: float, rect_y: float, rect_h: float) -> int:
+  # 3px above the bar at the glow's right edge (closest to the arc peak)
+  y_bar = _nav_torque_top(NAV_WHEEL_CX + NAV_WHEEL_GLOW, rect_y, rect_h, torque)
+  return int(round(y_bar - NAV_WHEEL_GAP - NAV_WHEEL_GLOW))
+
+
+def _rects_overlap(a, b) -> bool:
+  return a[2] > b[0] and a[0] < b[2] and a[3] > b[1] and a[1] < b[3]
+
+
 @dataclass(frozen=True)
 class FontSizes:
   current_speed: int = 176
@@ -152,6 +247,10 @@ class HudRenderer(Widget):
     self._set_speed_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
     self._set_speed_alpha = 0.0
     self._chestnut_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
+    self._wheel_alpha_filter = FirstOrderFilter(1.0, 0.1, 1 / gui_app.target_fps)
+    self._nav_shown = False
+    self._max_bbox = None
+    self._wheel_gpu_opacity = 1.0
     # shared slot with the small compass: personality alpha and highlight, show timer
     self._slot_partner = (0.0, False)
     self._slot_want = False
@@ -170,6 +269,9 @@ class HudRenderer(Widget):
     """Set whether to draw the top part of the HUD."""
     self._can_draw_top_icons = can_draw_top_icons
 
+  def set_navigation_shown(self, shown: bool) -> None:
+    self._nav_shown = shown
+
   def set_slot_partner(self, alpha: float, highlight: bool) -> None:
     self._slot_partner = (alpha, highlight)
 
@@ -182,6 +284,13 @@ class HudRenderer(Widget):
   def drawing_top_icons(self) -> bool:
     # whether we're drawing any top icons currently
     return bool(self._set_speed_alpha > 1e-2)
+
+  def _nav_wheel_hits_max(self, pos_x: int, pos_y: int) -> bool:
+    box = self._max_bbox
+    if not box:
+      return False
+    glow = [pos_x - NAV_WHEEL_GLOW, pos_y - NAV_WHEEL_GLOW, pos_x + NAV_WHEEL_GLOW, pos_y + NAV_WHEEL_GLOW]
+    return _rects_overlap(glow, box)
 
   def _update_state(self) -> None:
     """Update HUD state based on car state and controls state."""
@@ -214,7 +323,8 @@ class HudRenderer(Widget):
   def _render(self, rect: rl.Rectangle) -> None:
     """Render HUD elements to the screen."""
 
-    self._torque_bar.render(rect)
+    tb_rect = rl.Rectangle(rect.x + NAV_TORQUE_CX - NAV_TORQUE_WIDTH / 2, rect.y, NAV_TORQUE_WIDTH, rect.height) if self._nav_shown else rect
+    self._torque_bar.render(tb_rect)
 
     if self.is_cruise_set:
       self._draw_set_speed(rect)
@@ -231,9 +341,13 @@ class HudRenderer(Widget):
 
   def _draw_model_source(self, rect: rl.Rectangle) -> None:
     custom = custom_onroad_ui()
-    shared = custom and compass_size() != COMPASS_LARGE
-    # custom ui: under alerts like MAX
-    top_ok = self._can_draw_top_icons or not custom
+    shared = self._nav_shown or (custom and compass_size() != COMPASS_LARGE)
+    # custom ui: under alerts like MAX; nav GPU-over-wheel yields to MAX only while it overlaps
+    if self._nav_shown:
+      pos_y = _nav_wheel_pos_y(self._torque_bar._torque_filter.x, rect.y, rect.height)
+      top_ok = not self._nav_wheel_hits_max(NAV_WHEEL_CX, pos_y)
+    else:
+      top_ok = self._can_draw_top_icons or not custom
     now, progress, state = rl.get_time(), ui_state.accel_progress, ui_state.chestnut_state
     # leftover compile/download must not flash once the device is gone
     if state == ChestnutState.DISCONNECTED:
@@ -264,6 +378,11 @@ class HudRenderer(Widget):
     else:
       visible = progress is not None or loading or now - self._chestnut_fade_time < SET_SPEED_PERSISTENCE
     self._slot_want = shared and visible and top_ok
+    if self._nav_shown:
+      # nav hides the bottom-right slot and crossfades over the wheel instead
+      self._chestnut_alpha_filter.update(visible and top_ok)
+      self._wheel_gpu_opacity = opacity
+      return
     # shared: in only once the personality is out, out at once on a personality change
     alpha = self._chestnut_alpha_filter.update(visible and top_ok and not (shared and self._slot_partner[0] > 1e-2))
     if shared and self._slot_partner[1]:
@@ -320,46 +439,62 @@ class HudRenderer(Widget):
     glow = engaged + (1 - engaged) * critical
     wheel_txt = self._txt_wheel
 
-    # pos
+    # pos: bottom of the left column; nav: rides the bar, 3px above it at the current filtered torque
     pos_x = int(rect.x + rect.width / 2)
-    pos_y = int(rect.y + rect.height - 10 - wheel_txt.height / 2)
+    if self._nav_shown:
+      pos_y = _nav_wheel_pos_y(self._torque_bar._torque_filter.x, rect.y, rect.height)
+    else:
+      pos_y = int(rect.y + rect.height - 10 - wheel_txt.height / 2)
     rotation = -ui_state.sm['carState'].steeringAngleDeg if ui_state.started and ui_state.received_since_started('carState') else 0.0
 
-    alpha = 255 * (1 - (1 - DIMMED_ICON_ALPHA) * status_fade.weight(UIStatus.DISENGAGED) * (1 - critical))
+    hits_max = self._nav_shown and self._nav_wheel_hits_max(pos_x, pos_y)
+    hide_wheel = self._nav_shown and ((self._slot_want and not self._show_wheel_critical) or hits_max)
+    wheel_fade = self._wheel_alpha_filter.update(0.0 if hide_wheel else 1.0)
+    alpha = 255 * (1 - (1 - DIMMED_ICON_ALPHA) * status_fade.weight(UIStatus.DISENGAGED) * (1 - critical)) * wheel_fade
     mads = ui_state.sm['selfdriveStateSP'].mads
-    if ui_state.started and mads.enabled and not ui_state.engaged and critical < 0.5:
-      self._draw_mads_wheel(pos_x, pos_y, rotation, mads.active)
-      return
-    origin = rl.Vector2(self._txt_wheel_glow.width / 2, self._txt_wheel_glow.height / 2)
-    rl.draw_texture_pro(self._txt_wheel_glow, rl.Rectangle(0, 0, self._txt_wheel_glow.width, self._txt_wheel_glow.height),
-                        rl.Rectangle(pos_x, pos_y, self._txt_wheel_glow.width, self._txt_wheel_glow.height), origin, rotation,
-                        rl.Color(wheel_color.r, wheel_color.g, wheel_color.b, int(alpha * glow)))
-    rl.draw_texture_pro(wheel_txt, rl.Rectangle(0, 0, wheel_txt.width, wheel_txt.height),
-                        rl.Rectangle(pos_x, pos_y, wheel_txt.width, wheel_txt.height),
-                        rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(wheel_color.r, wheel_color.g, wheel_color.b, int(alpha)))
-    rl.draw_texture_pro(self._txt_wheel_highlight, rl.Rectangle(0, 0, wheel_txt.width, wheel_txt.height),
-                        rl.Rectangle(pos_x, pos_y, wheel_txt.width, wheel_txt.height),
-                        rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(255, 255, 255, int(alpha * glow)))
+    if wheel_fade >= 1e-2:
+      if ui_state.started and mads.enabled and not ui_state.engaged and critical < 0.5:
+        self._draw_mads_wheel(pos_x, pos_y, rotation, mads.active, wheel_fade)
+      else:
+        origin = rl.Vector2(self._txt_wheel_glow.width / 2, self._txt_wheel_glow.height / 2)
+        rl.draw_texture_pro(self._txt_wheel_glow, rl.Rectangle(0, 0, self._txt_wheel_glow.width, self._txt_wheel_glow.height),
+                            rl.Rectangle(pos_x, pos_y, self._txt_wheel_glow.width, self._txt_wheel_glow.height), origin, rotation,
+                            rl.Color(wheel_color.r, wheel_color.g, wheel_color.b, int(alpha * glow)))
+        rl.draw_texture_pro(wheel_txt, rl.Rectangle(0, 0, wheel_txt.width, wheel_txt.height),
+                            rl.Rectangle(pos_x, pos_y, wheel_txt.width, wheel_txt.height),
+                            rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(wheel_color.r, wheel_color.g, wheel_color.b, int(alpha)))
+        rl.draw_texture_pro(self._txt_wheel_highlight, rl.Rectangle(0, 0, wheel_txt.width, wheel_txt.height),
+                            rl.Rectangle(pos_x, pos_y, wheel_txt.width, wheel_txt.height),
+                            rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(255, 255, 255, int(alpha * glow)))
 
-  def _draw_mads_wheel(self, pos_x: int, pos_y: int, rotation: float, active: bool) -> None:
+    gpu_alpha = self._chestnut_alpha_filter.x if (self._nav_shown and not self._show_wheel_critical and not hits_max) else 0.0
+    if gpu_alpha >= 1e-2 and self._chestnut_icon is not None:
+      icon = self._chestnut_icon
+      gx, gy = pos_x - icon.width / 2, pos_y - icon.height / 2
+      if not draw_progress(icon, gx, gy, gpu_alpha):
+        rl.draw_texture_ex(icon, rl.Vector2(gx, gy), 0.0, 1.0, rl.Color(255, 255, 255, int(255 * self._wheel_gpu_opacity * gpu_alpha)))
+
+  def _draw_mads_wheel(self, pos_x: int, pos_y: int, rotation: float, active: bool, fade: float = 1.0) -> None:
     # MADS steering alone: rim in the theme color (comma green fallback), hub white; paused dims both
     r, g, b = theme_rgb()
-    rim_alpha = 255 if active else int(255 * MADS_PAUSED_ALPHA)
-    hub_alpha = int(255 * (MADS_HUB_ALPHA if active else DIMMED_ICON_ALPHA))
+    rim_alpha = int((255 if active else 255 * MADS_PAUSED_ALPHA) * fade)
+    hub_alpha = int(255 * (MADS_HUB_ALPHA if active else DIMMED_ICON_ALPHA) * fade)
     dst = rl.Rectangle(pos_x, pos_y, self._txt_wheel_rim.width, self._txt_wheel_rim.height)
     src = rl.Rectangle(0, 0, self._txt_wheel_rim.width, self._txt_wheel_rim.height)
     origin = rl.Vector2(self._txt_wheel_rim.width / 2, self._txt_wheel_rim.height / 2)
     if active:
       glow = self._txt_wheel_glow
       rl.draw_texture_pro(glow, rl.Rectangle(0, 0, glow.width, glow.height), rl.Rectangle(pos_x, pos_y, glow.width, glow.height),
-                          rl.Vector2(glow.width / 2, glow.height / 2), rotation, rl.Color(r, g, b, 255))
+                          rl.Vector2(glow.width / 2, glow.height / 2), rotation, rl.Color(r, g, b, int(255 * fade)))
     rl.draw_texture_pro(self._txt_wheel_rim, src, dst, origin, rotation, rl.Color(r, g, b, rim_alpha))
     rl.draw_texture_pro(self._txt_wheel_hub, src, dst, origin, rotation, rl.Color(255, 255, 255, hub_alpha))
 
   def _draw_compass(self, rect: rl.Rectangle, panel_visible: bool | None = None) -> None:
-    # large draws from render(), small from the side panel
-    large = compass_size() == COMPASS_LARGE
-    if large == (panel_visible is not None):
+    # large draws from render(), small from the side panel; nav draws a pill from render()
+    if self._nav_shown and panel_visible is not None:
+      return
+    large = not self._nav_shown and compass_size() == COMPASS_LARGE
+    if not self._nav_shown and large == (panel_visible is not None):
       return
     letter, deg = heading_letter(), heading_deg()
     if letter:
@@ -371,39 +506,59 @@ class HudRenderer(Widget):
 
     custom = custom_onroad_ui()
     # large sits under alerts and fades out disengaged like MAX, small dims like the other panel icons
-    shown = custom and (self._can_draw_top_icons if large else bool(panel_visible))
+    # nav pill yields to MAX with the same trigger and rc=0.05 fade as dmoji
+    if self._nav_shown:
+      shown, fade_i, dim_like_large = custom and not self.drawing_top_icons(), 0, False
+    else:
+      shown, fade_i, dim_like_large = custom and (self._can_draw_top_icons if large else bool(panel_visible)), int(large), large
     disengaged = steer_fade.weight(UIStatus.DISENGAGED)
-    dim = 1 - disengaged if large else 1 - (1 - DIMMED_ICON_ALPHA / 0.9) * disengaged
-    a = int(255 * 0.9 * self._compass_fade[large].update(float(shown)) * dim)
+    dim = 1 - disengaged if dim_like_large else 1 - (1 - DIMMED_ICON_ALPHA / 0.9) * disengaged
+    fade_x = self._compass_fade[fade_i].update(float(shown))
+    a = int(255 * 0.9 * fade_x * dim)
     if not custom or a < 3:
       return
+    if self._nav_shown:
+      self._draw_compass_pill(rect, heading, letter, a, fade_x * dim)
+      return
     if large:
-      size, fan, sz = 90, 78, 42
+      size = 90
       cx, cy = rect.x + rect.width - COMPASS_RIGHT - size / 2, rect.y + COMPASS_TOP + size / 2
-      bg, fan_tex = self._txt_compass_bg90, self._txt_compass_fan90
+      bg = self._txt_compass_bg90
     else:
-      size, fan, sz = 60, 52, 28
+      size = 60
       cx, cy = rect.x + rect.width / 2, rect.y + rect.height / 2
-      bg, fan_tex = self._txt_compass_bg, self._txt_compass_fan
+      bg = self._txt_compass_bg
     fade = rl.Color(255, 255, 255, a)
     rl.draw_texture_ex(bg, rl.Vector2(cx - size / 2, cy - size / 2), 0.0, 1.0, fade)
-    rl.draw_texture_pro(fan_tex, rl.Rectangle(0, 0, fan_tex.width, fan_tex.height), rl.Rectangle(cx, cy, fan, fan),
-                        rl.Vector2(fan / 2, fan / 2), heading, theme_color(a / 255.0))
-    rl.draw_ring(rl.Vector2(cx, cy), fan / 2 + 1, fan / 2 + 3, 0, 360, 36, rl.Color(255, 255, 255, int(255 * 0.25 * (a / COMPASS_FULL_ALPHA))))
+    _draw_heading_fan(cx, cy, size, size, heading, theme_color(a / 255.0))
     if not letter:
       return
+    # Inter Bold 34; small compass only shrinks letters that overflow the circle
+    sz = NAV_LETTER_SIZE if large else SMALL_LETTER_SIZE.get(letter, NAV_LETTER_SIZE)
     ts = measure_text_cached(self._font_bold, letter, sz)
-    while ts.x > size * 0.62 and sz > 12:
-      sz -= 1
-      ts = measure_text_cached(self._font_bold, letter, sz)
     rl.draw_text_ex(self._font_bold, letter, rl.Vector2(cx - ts.x / 2, cy - ts.y / 2), sz, 0, fade)
+
+  def _draw_compass_pill(self, rect: rl.Rectangle, heading: float, letter: str | None, a: int, fade: float) -> None:
+    # 60px TeslaPilot onroad pill, centered in the left pane, vertically on the DM ink
+    w, h = NAV_COMPASS_PILL_W, NAV_COMPASS_PILL_H
+    cx, cy = rect.x + rect.width / 2, rect.y + NAV_COMPASS_CY
+    px, py = cx - w / 2, cy - h / 2
+    rl.draw_rectangle_rounded(rl.Rectangle(px, py, w, h), 1.0, 16, rl.Color(*PILL_BG, int(255 * 0.82 * fade)))
+    _draw_heading_fan(cx, cy, w, h, heading, theme_color(a / 255.0))
+    if not letter:
+      return
+    ts = measure_text_cached(self._font_bold, letter, NAV_LETTER_SIZE)
+    rl.draw_text_ex(self._font_bold, letter, rl.Vector2(cx - ts.x / 2, cy - ts.y / 2), NAV_LETTER_SIZE, 0, rl.Color(255, 255, 255, a))
 
   def _draw_set_speed(self, rect: rl.Rectangle) -> None:
     """Draw the MAX speed indicator box."""
     alpha = self._set_speed_alpha_filter.update(0 < rl.get_time() - self._set_speed_changed_time < SET_SPEED_PERSISTENCE and self._can_draw_top_icons)
     alpha = self._set_speed_alpha = alpha * (1 - status_fade.weight(UIStatus.DISENGAGED))
     if alpha < 1e-2:
+      self._max_bbox = None
       return
+    # tight 3-digit MAX chrome on mici (shadow + numerals); 1-2 digit is narrower but still overlaps the left-end wheel
+    self._max_bbox = [int(rect.x + 22), int(rect.y + 20), int(rect.x + 207), int(rect.y + 143)]
 
     x = rect.x
     y = rect.y

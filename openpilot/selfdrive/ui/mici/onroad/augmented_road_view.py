@@ -228,6 +228,7 @@ class AugmentedRoadView(CameraView):
       rl.draw_rectangle_rec(self.rect, rl.BLACK)
       if not (self._summary and self._summary.render(self._rect)):
         self._render_offroad_text(rl.Rectangle(self.rect.x + SIDE_PANEL_WIDTH, self.rect.y, self.rect.width - SIDE_PANEL_WIDTH, self.rect.height))
+        self._hud_renderer.set_navigation_shown(False)
         self._hud_renderer.set_wheel_critical_icon(False)
         self._render_left_panel(False)
       return
@@ -277,15 +278,18 @@ class AugmentedRoadView(CameraView):
       self._confidence_ball.set_hidden(alert_to_render is not None and not not_animating_out)
       self._confidence_ball.set_left(custom_onroad_ui(), self._hud_renderer.set_speed_alpha())
       self._confidence_ball.render(self._content_rect)
+    self._hud_renderer.set_navigation_shown(show_navigation)
     # with the small compass the personality moves to the video's bottom right, under alerts, and shares it with the gpu icon
-    small_compass = custom_onroad_ui() and compass_size() != COMPASS_LARGE
-    if small_compass:
+    small_compass = custom_onroad_ui() and (show_navigation or compass_size() != COMPASS_LARGE)
+    if small_compass and not show_navigation:
       self._hud_renderer.set_slot_partner(self._long_indicator.shown, self._long_indicator.highlighting)
     self._hud_renderer.render(self._content_rect)
-    if small_compass:
+    if small_compass and not show_navigation:
       c = self._content_rect
       self._long_indicator.set_should_draw(alert_to_render is None and not self._hud_renderer.slot_busy())
       self._long_indicator.render(rl.Rectangle(c.x + c.width - LONG_MARGIN - LONG_RECT_W, c.y + c.height - LONG_RECT_BOTTOM, LONG_RECT_W, c.height))
+    elif show_navigation:
+      self._long_indicator.set_should_draw(False)
     self._alert_renderer.render(self._content_rect)
 
     # Draw fake rounded border
@@ -321,9 +325,10 @@ class AugmentedRoadView(CameraView):
     self._driver_state_renderer.set_position(left_rect.x + (left_rect.width - dm_size) / 2, left_rect.y + 36 - dm_size / 2)
     self._driver_state_renderer.render()
     top_ok = not show_navigation or not self._hud_renderer.drawing_top_icons()
-    if custom_onroad_ui() and compass_size() != COMPASS_LARGE:
+    # nav compass is the pill drawn from HudRenderer.render(), not the left column
+    if custom_onroad_ui() and not show_navigation and compass_size() != COMPASS_LARGE:
       self._hud_renderer.render_small_compass(left_rect, top_ok)
-    else:
+    elif not show_navigation:
       self._long_indicator.set_should_draw(top_ok)
       self._long_indicator.render(left_rect)
     self._hud_renderer.render_steering_wheel(left_rect)
