@@ -2,15 +2,21 @@
 
 Images used in the root [README](../../README.md).
 
-The GIF and the `onroad-tesla`, `trip-card` and `home-stats` stills were rendered at 3x scale from public route
-`3e2de7ed673817c2/00000076--63bd4c94a4` (Oct 29, 2026), replayed through the device UI code. The lead car marker is hidden in the render.
+The onroad, trip summary, Home, and Statistics stills were rendered at 3x scale from public route
+`3e2de7ed673817c2/00000076--63bd4c94a4` (Oct 29, 2026), replayed through the device UI code on
+Highland-Dev `e8681d627` (version 0.11.24). The lead car marker is hidden in the onroad render.
+The Settings stills are headless renders of the same UI. The demo GIF is from an earlier render
+of the same route.
 
 | File | Shot |
 |---|---|
 | `teslapilot-demo.gif` | Onroad Tesla theme with compass, trip summary card, Home, swipe back |
-| `onroad-tesla.jpg` | Custom onroad UI, Tesla blue, small compass |
+| `onroad-tesla.jpg` | Custom onroad UI, Tesla blue lanes, small compass |
 | `trip-card.png` | Trip summary card |
-| `home-stats.png` | Home with Day and Week stats |
+| `home-stats.png` | Home with day and week stats, version 0.11.24 |
+| `settings.png` | Settings, with driving where toggles used to be |
+| `settings-driving.png` | Settings → driving, lowercase labels |
+| `settings-models.png` | Settings → models, lowercase labels |
 | `icon-tacc.png` | TACC badge |
 | `icon-long.png` | LONG badge |
 | `icon-mads.png` | MADS badge |

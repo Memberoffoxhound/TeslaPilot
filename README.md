@@ -14,6 +14,10 @@ This is a one-person project. There's no support, and you install it at your own
 
 The fork reports version **0.11.24** and is synced with comma openpilot **0.11.4** (`4bd73298e`). On the comma 4, TeslaPilot's own labels are lowercase, matching comma 0.11.4, with acronyms like MADS and TACC left as they are. The old toggles page is now **Settings → driving**.
 
+| Settings | Driving |
+|:---:|:---:|
+| ![Settings, with driving where toggles used to be](docs/screenshots/settings.png) | ![Settings → driving](docs/screenshots/settings-driving.png) |
+
 ## Install
 
 On the comma's setup screen, pick **Custom Software** and enter:
@@ -96,6 +100,8 @@ Runs a big driving model on a comma chestnut, or with Jetlink on a phone or comp
 **Jetlink.** Jetlink is off until you turn it on in **Settings → models**: **USB** for a Mac, Jetson, Linux PC or Android, **iOS** for an iPhone or iPad. The switch is hidden while a chestnut is plugged in, since the chestnut runs the big model itself. The list of models comes from Jetlink, and the phone or computer downloads and builds the one you pick. Turning on ADB (**Settings → developer**) turns Jetlink off.
 
 Pick a model in **Settings → models**. The list is grouped by folder, and **refresh models** fetches it again. **Clear cache** deletes every downloaded model except the one you picked. A download shows its progress and speed there, and you can cancel it.
+
+![Settings → models](docs/screenshots/settings-models.png)
 
 The chestnut icon on Home and onroad shows progress. It dims and fills white while a model downloads. It only turns orange if something failed. Tap it on Home to open **Settings → models**.
 
