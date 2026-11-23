@@ -98,7 +98,7 @@ git fetch https://github.com/Memberoffoxhound/openpilot port/tripstats && git ch
 - the card and the Day / Week row (`mici/widgets/drive_summary_card.py`, `trip_row.py`)
 - the Statistics page (`mici/layouts/settings/stats.py`), with a button in Settings
 - small hooks in `mici/layouts/main.py`, `mici/onroad/augmented_road_view.py`, `mici/layouts/home.py` and `mici/layouts/settings/settings.py`
-- a "drive summary" toggle in `mici/layouts/settings/toggles.py`
+- a "drive summary" toggle in `mici/layouts/settings/driving.py`
 - three params in `common/params_keys.h`: `DriveSummary`, `DriveSummaryLast` and `Timezone`
 
 Turn on "drive summary" in Toggles. The Day / Week row takes the line on Home that showed the commit hash.

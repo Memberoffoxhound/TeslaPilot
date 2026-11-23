@@ -3,6 +3,7 @@ import numpy as np
 
 import openpilot.cereal.messaging as messaging
 from opendbc.car.interfaces import ACCEL_MIN, ACCEL_MAX
+from openpilot.cereal import log
 from openpilot.common.constants import CV
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import DT_MDL
@@ -10,6 +11,7 @@ from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.common.params import Params
 from openpilot.selfdrive.controls.lib.cruise_braking import A_CRUISE_MIN, clamp_cruise_min, cruise_min_from_params
 from openpilot.selfdrive.controls.lib.set_speed_assist import SetSpeedAssist, approach_accel
+from openpilot.selfdrive.controls.lib.curve_speed import CurveSpeed
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import LongitudinalMpc, LongitudinalPlanSource
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
@@ -19,6 +21,7 @@ from openpilot.common.swaglog import cloudlog
 
 J_CRUISE_VALS = [1.6, 1.2, 0.8, 0.6]
 J_CRUISE_BP = [0., 10.0, 25., 40.]
+AGGRESSIVE_ACCEL_BOOST = 0.1  # m/s^2
 CONTROL_N_T_IDX = ModelConstants.T_IDXS[:CONTROL_N]
 
 
@@ -38,6 +41,7 @@ class LongitudinalPlanner:
     self.mpc = LongitudinalMpc(dt=dt)
     self.fcw = False
     self.dt = dt
+    self.curve_speed = CurveSpeed(dt)
     self.set_speed_assist = SetSpeedAssist(CP)
     self.params = Params() if params is None else params
     self.a_cruise_min = A_CRUISE_MIN
@@ -57,6 +61,7 @@ class LongitudinalPlanner:
 
   def update(self, sm):
     v_ego = sm['carState'].vEgo
+    personality = sm['selfdriveState'].personality
     v_cruise_kph = min(sm['carState'].vCruise, V_CRUISE_MAX)
     v_cruise = v_cruise_kph * CV.KPH_TO_MS
     if sm['controlsState'].forceDecel:
@@ -74,6 +79,7 @@ class LongitudinalPlanner:
       self.v_desired_filter.x = v_ego
       self.output_a_target = np.clip(sm['carState'].aEgo, ACCEL_MIN, ACCEL_MAX)
       self.a_cruise = self.output_a_target
+      self.curve_speed.reset()
 
     # Prevent divergence, smooth in current v_ego
     self.v_desired_filter.x = max(0.0, self.v_desired_filter.update(v_ego))
@@ -81,12 +87,12 @@ class LongitudinalPlanner:
     # No change cost when user is controlling the speed, or when standstill
     prev_accel_constraint = not (reset_state or sm['carState'].standstill)
 
-    self.mpc.set_weights(prev_accel_constraint, personality=sm['selfdriveState'].personality)
+    self.mpc.set_weights(prev_accel_constraint, personality=personality)
     if self.CP.openpilotLongitudinalControl:
       self.mpc.set_cur_state(self.v_desired_filter.x, self.output_a_target)
     else:
       self.mpc.set_cur_state(v_ego, sm['carState'].aEgo)
-    self.mpc.update(sm['radarState'], personality=sm['selfdriveState'].personality)
+    self.mpc.update(sm['radarState'], personality=personality)
 
     self.v_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.v_solution)
     self.a_desired_trajectory = np.interp(CONTROL_N_T_IDX, T_IDXS_MPC, self.mpc.a_solution)
@@ -104,7 +110,12 @@ class LongitudinalPlanner:
     output_a_target_mpc = get_accel_from_plan(self.v_desired_trajectory, self.a_desired_trajectory, CONTROL_N_T_IDX,
                                               action_t=action_t)
     output_should_stop_mpc = should_stop(v_ego, output_a_target_mpc)
-    output_a_target_e2e = sm['modelV2'].action.desiredAcceleration
+    curve_offset = self.curve_speed.update(sm['modelV2'], sm['vehicleParameters'].roll)
+    output_a_target_e2e = sm['modelV2'].action.desiredAcceleration + curve_offset
+    if personality == log.LongitudinalPersonality.aggressive:
+      speed_scale = np.interp(v_ego, [5.0, 10.0], [0.0, 1.0])
+      accel_scale = np.interp(output_a_target_e2e, [-1.0, -0.5], [0.0, 1.0])
+      output_a_target_e2e += AGGRESSIVE_ACCEL_BOOST * speed_scale * accel_scale
     output_should_stop_e2e = sm['modelV2'].action.shouldStop
 
     self.a_cruise = get_cruise_accel(v_cruise, v_ego, self.a_cruise, self.output_a_target, self.dt, self.a_cruise_min)

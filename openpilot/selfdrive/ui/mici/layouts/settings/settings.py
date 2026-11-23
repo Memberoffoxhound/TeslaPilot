@@ -1,7 +1,7 @@
 from openpilot.common.params import Params
 from openpilot.system.ui.widgets.scroller import NavScroller
 from openpilot.selfdrive.ui.mici.widgets.button import BigButton
-from openpilot.selfdrive.ui.mici.layouts.settings.toggles import TogglesLayoutMici, ThemeLayoutMici
+from openpilot.selfdrive.ui.mici.layouts.settings.driving import DrivingLayoutMici, ThemeLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.network.network_layout import NetworkLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.device.device_layout import DeviceLayoutMici
 from openpilot.selfdrive.ui.mici.layouts.settings.developer import DeveloperLayoutMici
@@ -22,9 +22,9 @@ class SettingsLayout(NavScroller):
     super().__init__()
     self._params = Params()
 
-    self._toggles_panel = toggles_panel = TogglesLayoutMici()
-    toggles_btn = SettingsBigButton("toggles", "", gui_app.texture("icons_mici/settings.png", 64, 64))
-    toggles_btn.set_click_callback(lambda: gui_app.push_widget(toggles_panel))
+    self._driving_panel = driving_panel = DrivingLayoutMici()
+    driving_btn = SettingsBigButton("driving", "", gui_app.texture("icons_mici/wheel.png", 64, 64))
+    driving_btn.set_click_callback(lambda: gui_app.push_widget(driving_panel))
 
     theme_panel = ThemeLayoutMici()
     theme_btn = SettingsBigButton("theme", "", gui_app.texture("icons_mici/settings/theme.png", 64, 58))
@@ -59,7 +59,7 @@ class SettingsLayout(NavScroller):
     firehose_btn.set_click_callback(lambda: gui_app.push_widget(firehose_panel))
 
     self._scroller.add_widgets([
-      toggles_btn,
+      driving_btn,
       theme_btn,
       stats_btn,
       models_btn,
@@ -77,12 +77,12 @@ class SettingsLayout(NavScroller):
     return self._stats_layout
 
   def show_set_speed_assist(self):
-    gui_app.push_widget(self._toggles_panel)
-    self._toggles_panel.set_shown_callback(self._toggles_panel.scroll_to_set_speed_assist)
+    gui_app.push_widget(self._driving_panel)
+    self._driving_panel.set_shown_callback(self._driving_panel.scroll_to_set_speed_assist)
 
   def show_mads(self):
-    gui_app.push_widget(self._toggles_panel)
-    self._toggles_panel.set_shown_callback(self._toggles_panel.scroll_to_mads)
+    gui_app.push_widget(self._driving_panel)
+    self._driving_panel.set_shown_callback(self._driving_panel.scroll_to_mads)
 
   def show_models(self):
     gui_app.push_widget(self._models_layout)

@@ -18,11 +18,11 @@ def test_braking_toggle_hidden_without_long_and_disabled_onroad(params_root, mon
     pytest.skip(str(e))
 
   from openpilot.selfdrive.ui.ui_state import ui_state
-  from openpilot.selfdrive.ui.mici.layouts.settings.toggles import TogglesLayoutMici
+  from openpilot.selfdrive.ui.mici.layouts.settings.driving import DrivingLayoutMici
 
   monkeypatch.setattr(ui_state, "has_longitudinal_control", False)
   monkeypatch.setattr(ui_state, "started", False)
-  layout = TogglesLayoutMici()
+  layout = DrivingLayoutMici()
   toggle = layout._braking_toggle
   assert toggle.is_visible is False
   assert toggle.enabled is True

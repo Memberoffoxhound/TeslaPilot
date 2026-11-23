@@ -59,6 +59,12 @@ def _label_font() -> rl.Font:
     _LABEL_FONT = font if font.glyphCount > 0 else gui_app.font(FontWeight.BOLD)
   return _LABEL_FONT
 
+# wake animation: (start, duration, slide distance) in seconds and px
+WAKE_TITLE = (0.0, 0.8, 44)
+WAKE_VERSION = (0.2, 0.8, 22)
+WAKE_ICONS_START = 0.7
+WAKE_ICON_STAGGER = 0.1
+WAKE_ICON_DURATION = 0.5
 
 NetworkType = log.DeviceState.NetworkType
 
@@ -340,6 +346,23 @@ class MiciHomeLayout(Widget):
     self._ssa_on = ui_state.params.get_bool("SetSpeedAssist")
     self._mads_on = ui_state.mads_enabled
 
+    self._wake_pending = True  # greet on boot
+    self._wake_start: float | None = None
+
+  def play_wake_animation(self):
+    self._wake_pending = True
+
+  def _wake_progress(self, start: float, duration: float) -> float:
+    if self._wake_start is None:
+      return 1.0
+    return min(max((rl.get_time() - self._wake_start - start) / duration, 0.0), 1.0)
+
+  @staticmethod
+  def _fade_in(rect: rl.Rectangle, progress: float):
+    # background is black, so fading in is drawing black over it
+    if progress < 1.0:
+      rl.draw_rectangle_rec(rect, rl.Color(0, 0, 0, int(255 * (1.0 - progress))))
+
   def set_callbacks(self, on_settings: Callable | None = None, on_alerts: Callable | None = None,
                     on_stats: Callable | None = None,
                     on_set_speed_assist: Callable | None = None,
@@ -396,17 +419,27 @@ class MiciHomeLayout(Widget):
     return version, branch, commit[:7], date_str
 
   def _render(self, _):
+    # start once home is actually on screen, e.g. after swiping past boot alerts
+    if self._wake_pending and abs(self.rect.x) < self.rect.width / 2:
+      self._wake_pending = False
+      self._wake_start = rl.get_time()
+
     text_pos = rl.Vector2(self.rect.x - 2 + HOME_PADDING, self.rect.y + 2)
     mark = "TESLAPILOT"
     avail = max(200, self.rect.width - HOME_PADDING * 2)
     wm = MICI_WORDMARK_SIZE
     while wm > 28 and measure_text_cached(self._wordmark_font, mark, wm).x > avail:
       wm -= 2
-    rl.draw_text_ex(self._wordmark_font, mark, text_pos, wm, 0, WHITE)
+    title_progress = self._wake_progress(*WAKE_TITLE[:2])
+    title_y = text_pos.y + WAKE_TITLE[2] * (1.0 - title_progress) ** 3
+    rl.draw_text_ex(self._wordmark_font, mark, rl.Vector2(text_pos.x, title_y), wm, 0, WHITE)
+    self._fade_in(rl.Rectangle(self.rect.x, title_y, self.rect.width, wm + 16), title_progress)
 
     if self._version_text is not None:
       release_branch = self._version_text[1] in RELEASE_BRANCHES
-      version_pos = rl.Rectangle(text_pos.x, text_pos.y + wm + 16, 100, 44)
+      version_progress = self._wake_progress(*WAKE_VERSION[:2])
+      version_y = text_pos.y + wm + 16 + WAKE_VERSION[2] * (1.0 - version_progress) ** 3
+      version_pos = rl.Rectangle(text_pos.x, version_y, 100, 44)
       self._version_label.set_text(self._version_text[0])
       self._version_label.set_position(version_pos.x, version_pos.y)
       self._version_label.render()
@@ -424,6 +457,10 @@ class MiciHomeLayout(Widget):
       avail = self.rect.width - HOME_PADDING * 2
       row_w, lsz = draw_trip_row(gui_app.font(FontWeight.ROMAN), gui_app.font(FontWeight.DISPLAY), version_pos.x, y2, avail, self._day_txt, self._week_txt)
       self._trip_hit = rl.Rectangle(version_pos.x - 4, y2 - 4, min(avail, row_w) + 8, lsz * 1.16 + 8)
+
+      # TeslaPilot: the trip row sits under the version line
+      version_h = y2 + lsz * 1.16 - version_y
+      self._fade_in(rl.Rectangle(self.rect.x, version_y, self.rect.width, version_h), version_progress)
 
     # ***** Center-aligned bottom section icons *****
     usb_connected = ui_state.usb_connected
@@ -471,3 +508,11 @@ class MiciHomeLayout(Widget):
     self._alerts_pill.set_position(self.rect.x + self.rect.width - self._alerts_pill.rect.width - HOME_PADDING,
                                    self.rect.y + self.rect.height - self._alerts_pill.rect.height)
     self._alerts_pill.render()
+
+    # status icons fade in one after another, alerts pill last
+    if self._wake_start is not None:
+      icons = [w.rect for w in self._status_bar_layout.widgets if w.is_visible] + [self._alerts_pill.rect]
+      for i, rect in enumerate(icons):
+        self._fade_in(rect, self._wake_progress(WAKE_ICONS_START + i * WAKE_ICON_STAGGER, WAKE_ICON_DURATION))
+      if self._wake_progress(WAKE_ICONS_START + len(icons) * WAKE_ICON_STAGGER, WAKE_ICON_DURATION) >= 1.0:
+        self._wake_start = None

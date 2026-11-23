@@ -20,7 +20,7 @@ def lerp_color(a: rl.Color, b: rl.Color, t: float) -> rl.Color:
 
 
 class StatusFade:
-  """ui_state.<attr> as weights, stepped once per frame"""
+  # ui_state.<attr> as weights, stepped once per frame
   def __init__(self, attr: str = "status"):
     self._attr = attr
     self._weights: FirstOrderFilter | None = None

@@ -644,7 +644,7 @@ UIDIR = OP / "selfdrive/ui"
 
 
 def test_toggles_set_both_params():
-  for path in (UIDIR / "layouts/settings/toggles.py", UIDIR / "mici/layouts/settings/toggles.py"):
+  for path in (UIDIR / "layouts/settings/toggles.py", UIDIR / "mici/layouts/settings/driving.py"):
     src = path.read_text()
     assert "park_offroad.PARAM_ENABLED, on" in src and "tripstats.set_enabled(" in src
     assert "ParkOffroadConfirmPage" in src or "ConfirmDialog(content" in src

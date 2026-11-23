@@ -1,32 +1,5 @@
 Version 0.11.23 — TeslaPilot Highland (2026-08-28)
-========================================
-Tesla fork on openpilot 0.11.2. Reports 0.11.23 to Connect. See README.md.
-
-* Auto lane change (off by default) with Tesla stock BSM and a slide-to-enable warning — rav4kumar / Jason Wen (sunnypilot)
-* Cooperative steering — dzid26 VTB; AmyJeanes Tesla native LKAS path
-* Stalkless scroll-wheel cancel — dkiiv, via dzid26's Tesla fork
-* Optional custom HUD: Tesla Autopilot-blue theme, compass
-* Today / Week home stats. Boot uses the JSON cache; parked fold fills history
-* Statistics widget (ring, weekly, monthly). Theme accents. WIP
-* LAN web GUI on :8089, always on — stats, screenshots, UI screen recording
-* 3s display-hold screenshots
-
-Version 0.11.12 — TeslaPilot Highland (2026-08-22)
-========================================
-Connect-compatible version. Tesla fork on 0.11.12. See README.md.
-
-Version 0.11.2.1 — DELAMAIN (2026-08-20)
-========================================
-Tesla Model 3 Highland fork on top of openpilot 0.11.2. See CHANGELOG.md.
-
-* Auto lane change (off by default) with Tesla stock BSM and a slide-to-enable warning
-* Theme: Tesla blue or comma green lane lines
-* Calibration card shows pitch, yaw, and roll
-* On-Air local Wi-Fi viewer (removed in 0.11.23)
-* White Tesla T boot mark; home wordmark DELAMAIN
-
-Version 0.11.3 (2026-XX-XX)
-========================
+=========================================================
 * Autospeed
   * On supported cars, openpilot will intelligently decide what speed to drive based on the scene, including:
     * stopping at red lights, and going at green lights
@@ -34,6 +7,12 @@ Version 0.11.3 (2026-XX-XX)
     * adjusting speed based on surrounding traffic
   * This behavior was previously available with openpilot's "Experimental mode", but is now out of beta and always enabled
   * With openpilot deciding which speed to drive, the car's cruise speed is treated as a maximum speed openpilot will not exceed
+
+Version 0.11.3 (2026-11-20)
+========================
+* New driver monitoring model
+* comma four UI updates
+* Romanian translation thanks to adriantabirta!
 
 Version 0.11.2 (2026-10-14)
 =======================

@@ -42,9 +42,8 @@ class LongIndicator(Widget):
     return rl.get_time() - self._personality_changed_time < HIGHLIGHT_TIME
 
   def _render(self, rect: rl.Rectangle) -> None:
-    sm = ui_state.sm
     # offroad shows the disengaged state
-    if not ui_state.has_longitudinal_control or (ui_state.started and sm.recv_frame['selfdriveState'] < ui_state.started_frame):
+    if not ui_state.has_longitudinal_control or (ui_state.started and not ui_state.received_since_started('selfdriveState')):
       self._personality = None
       self._personality_changed_time = -HIGHLIGHT_TIME
       self._alpha_filter.x = 0.0

@@ -22,6 +22,9 @@ from openpilot.selfdrive import jetlink_adapter
 from openpilot.selfdrive.selfdrived.alertmanager import OFFROAD_ALERTS
 
 BACKLIGHT_OFFROAD = 65 if HARDWARE.get_device_type() == "mici" else 50
+BACKLIGHT_MIN = 30  # the lowest backlight the display shows properly
+# auto brightness goes below the backlight's floor by dimming the UI, down to 40% black
+BRIGHTNESS_MIN = BACKLIGHT_MIN * 0.6 if HARDWARE.get_device_type() == "mici" else BACKLIGHT_MIN
 PARAM_UPDATE_TIME = 1 / 5.0
 
 
@@ -103,7 +106,7 @@ class UIState:
     # UI Status tracking
     self.status: UIStatus = UIStatus.DISENGAGED
     self.steer_status: UIStatus = UIStatus.DISENGAGED
-    self.started_frame: int = 0
+    self._started_frame: int = 0
     self.started_time: float = 0.0
     self._engaged_prev: bool = False
     self._started_prev: bool = False
@@ -171,6 +174,18 @@ class UIState:
 
   def is_offroad(self) -> bool:
     return not self.started
+
+  # TeslaPilot code reads and resets the start frame directly
+  @property
+  def started_frame(self) -> int:
+    return self._started_frame
+
+  @started_frame.setter
+  def started_frame(self, frame: int) -> None:
+    self._started_frame = frame
+
+  def received_since_started(self, service: str) -> bool:
+    return self.sm.recv_frame[service] > self._started_frame
 
   def update(self) -> None:
     self.prime_state.start()  # start thread after manager forks ui
@@ -243,7 +258,7 @@ class UIState:
     if self.started != self._started_prev or self.sm.frame == 1:
       self.status = self.steer_status = UIStatus.DISENGAGED
       if self.started:
-        self.started_frame = self.sm.frame
+        self._started_frame = self.sm.frame
         self.started_time = time.monotonic()
         self.chestnut_present = self.sm["deviceState"].chestnutPresent
 
@@ -302,7 +317,7 @@ class UIState:
                              ChestnutState.UNCOMPILED if detected else ChestnutState.DISCONNECTED)
       return
 
-    model_seen = self.sm.recv_frame["modelV2"] > self.started_frame
+    model_seen = self.received_since_started("modelV2")
     if not self.chestnut_present:
       self.chestnut_state = ChestnutState.DISCONNECTED
     elif not self.chestnut_compiled:
@@ -452,16 +467,18 @@ class Device:
       else:
         clipped_brightness = ((clipped_brightness + 16.0) / 116.0) ** 3.0
 
-      clipped_brightness = float(np.interp(clipped_brightness, [0, 1], [30, 100]))
+      clipped_brightness = float(np.interp(clipped_brightness, [0, 1], [BRIGHTNESS_MIN, 100]))
 
     park = ui_state.park.brightness(time.monotonic(), ui_state.started, ui_state.light_sensor >= 0)
     if park == HOLD:
-      brightness = round(self._brightness_filter.x)
+      brightness = self._brightness_filter.x
     elif park == JUMP:
       self._brightness_filter.x = clipped_brightness
-      brightness = round(clipped_brightness)
+      brightness = clipped_brightness
     else:
-      brightness = round(self._brightness_filter.update(clipped_brightness))
+      brightness = self._brightness_filter.update(clipped_brightness)
+    gui_app.set_dim(1 - brightness / BACKLIGHT_MIN)
+    brightness = round(max(brightness, BACKLIGHT_MIN))
     if not self._awake:
       brightness = 0
 

@@ -86,7 +86,7 @@ class ThemeLayoutMici(NavScroller):
     ])
 
 
-class TogglesLayoutMici(NavScroller):
+class DrivingLayoutMici(NavScroller):
   def __init__(self):
     super().__init__()
 
@@ -137,18 +137,10 @@ class TogglesLayoutMici(NavScroller):
     for w in (self._mads_btn, self._mads_main_cruise, self._mads_unified, self._mads_brake, self._mads_screen):
       w.set_enabled(lambda: not ui_state.started)
     self._initial_cruise_speed.set_visible(lambda: ui_state.CP is not None and ui_state.has_longitudinal_control and not ui_state.CP.pcmCruise)
-    is_metric_toggle = BigToggle("use metric units", initial_state=ui_state.params.get_bool("IsMetric"), toggle_callback=self._on_metric_toggle)
     ldw_toggle = BigParamControl("lane departure warnings", "IsLdwEnabled",
                                  description="Warn when you drift across a detected lane line.\n" +
                                              "Only above 31 mph (50 km/h), with no turn signal.")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM", description="Monitor the driver even when openpilot is not engaged.")
-    record_front = BigParamControl("record & upload cabin camera", "RecordFront",
-                                   description_icon=gui_app.texture("icons_mici/settings/device/cameras.png", 64, 64),
-                                   toggle_callback=restart_needed_callback, description="Upload cabin camera data to help improve driver monitoring.")
-    record_mic = BigParamControl("record & upload mic audio", "RecordAudio", description_icon=gui_app.texture("icons_mici/microphone.png", 64, 64),
-                                 toggle_callback=restart_needed_callback,
-                                 description="Record microphone audio while driving.\n" +
-                                             "Audio is included in dashcam videos in comma connect.")
     enable_openpilot = BigParamControl("enable TeslaPilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback,
                                        description="Enable to use TeslaPilot driver assistance.\n" +
                                                    "Disable to use your car's stock driver assistance.")
@@ -178,11 +170,8 @@ class TogglesLayoutMici(NavScroller):
       self._mads_unified,
       self._mads_brake,
       self._mads_screen,
-      is_metric_toggle,
-      ldw_toggle,
       always_on_dm_toggle,
-      record_front,
-      record_mic,
+      ldw_toggle,
       self._step_aside_btn,
       self._park_offroad_btn,
       enable_openpilot,
@@ -195,18 +184,13 @@ class TogglesLayoutMici(NavScroller):
       ("Mads", self._mads_btn),
       (mads.MAIN_CRUISE, self._mads_main_cruise),
       (mads.UNIFIED, self._mads_unified),
-      ("IsMetric", is_metric_toggle),
       ("IsLdwEnabled", ldw_toggle),
       ("AlwaysOnDM", always_on_dm_toggle),
-      ("RecordFront", record_front),
-      ("RecordAudio", record_mic),
       ("OpenpilotEnabledToggle", enable_openpilot),
     )
 
     enable_openpilot.set_enabled(lambda: not ui_state.engaged)
     always_on_dm_toggle.set_enabled(not ui_state.params.get_bool("AlwaysOnDMLock"))
-    record_front.set_enabled(False if ui_state.params.get_bool("RecordFrontLock") else (lambda: not ui_state.engaged))
-    record_mic.set_enabled(lambda: not ui_state.engaged)
 
     if ui_state.params.get_bool("ShowDebugInfo"):
       gui_app.set_show_touches(True)
@@ -262,10 +246,6 @@ class TogglesLayoutMici(NavScroller):
     else:
       ui_state.params.put_bool("Mads", False, block=True)
       self._update_toggles()
-
-  def _on_metric_toggle(self, state: bool):
-    ui_state.params.put_bool("IsMetric", state, block=True)
-    self._update_toggles()
 
   def _update_toggles(self):
     ui_state.update_params()
