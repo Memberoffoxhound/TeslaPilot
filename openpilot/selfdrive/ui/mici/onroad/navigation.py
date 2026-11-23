@@ -12,14 +12,42 @@ from openpilot.system.ui.lib.application import FontWeight, TextAlignmentVertica
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import UnifiedLabel, gui_label
 
+try:
+  from openpilot.selfdrive.ui.layouts.settings.common import theme_rgb, THEME_OPENPILOT_RGB
+except Exception:
+  THEME_OPENPILOT_RGB = (0, 255, 64)
+  def theme_rgb(params=None):
+    return THEME_OPENPILOT_RGB
+
 PANEL_WIDTH = 261
 STALE_SECONDS = 3
 MARKER_MARGIN = 18  # pixels kept below the ego so its marker stays visible
+# Maneuver row shares y=42 with the DM ink and compass pill. Original arrow/label mid was ~30.
+NAV_ROW_CY = 42
+NAV_HEADER_SHIFT = 12  # 42 - 30
+NAV_MAP_TOP = 68  # 3px below the shifted header ink (was 61)
 
-# Recolor the model's grayscale frame for people: dim the white roads and make the grey route pop. Only the route's
-# exact level (and its neighbors) is recolored, so antialiased road edges passing through that grey stay grey.
-MAP_COLORS = np.repeat(np.round(np.arange(256) * 0.45).astype(np.uint8)[:, None], 3, axis=1)
-MAP_COLORS[ROUTE_INTENSITY - 1:ROUTE_INTENSITY + 2] = (72, 235, 132)
+# Dim the white roads; the route intensity is tinted separately with the selected theme.
+MAP_GREY = np.repeat(np.round(np.arange(256) * 0.45).astype(np.uint8)[:, None], 3, axis=1)
+
+
+def _nav_theme_rgb() -> tuple[int, int, int]:
+  # Selected theme (Tesla blue when LaneColor is tesla); stock/comma green if the theme manager is missing.
+  try:
+    return tuple(max(0, min(255, int(c))) for c in theme_rgb())
+  except Exception:
+    return THEME_OPENPILOT_RGB
+
+
+def _nav_accent(alpha: float = 1.0) -> rl.Color:
+  r, g, b = _nav_theme_rgb()
+  return rl.Color(r, g, b, int(max(0.0, min(1.0, float(alpha))) * 255))
+
+
+def _map_colors() -> np.ndarray:
+  colors = MAP_GREY.copy()
+  colors[ROUTE_INTENSITY - 1:ROUTE_INTENSITY + 2] = _nav_theme_rgb()
+  return colors
 
 
 def format_distance(meters: float) -> str:
@@ -39,7 +67,6 @@ class NavigationPanel(Widget):
     self._frame_time = 0.0
     self._texture = None
     self._eta_label = UnifiedLabel('', 34, FontWeight.BOLD, rl.WHITE, scroll=True)
-    self._accent = rl.Color(155, 230, 185, 255)
     self._muted = rl.Color(162, 175, 185, 255)
 
   def _update_state(self):
@@ -54,7 +81,7 @@ class NavigationPanel(Widget):
     frame = self._client.recv(timeout_ms=0)
     if frame is not None:
       gray = np.frombuffer(frame.data, dtype=np.uint8, count=SIZE * SIZE)
-      rl.update_texture(self._texture, MAP_COLORS[gray])
+      rl.update_texture(self._texture, _map_colors()[gray])
       # Without a usable map, mapsd publishes black frames with a zero timestamp.
       self._frame_time = rl.get_time() if self._client.timestamp_sof else 0.0
 
@@ -75,7 +102,7 @@ class NavigationPanel(Widget):
     )
     for i, (name, ok) in enumerate(statuses):
       gui_label(rl.Rectangle(rect.x + 10, rect.y + 12 + i * 28, rect.width - 20, 26), f'{name}: {"yes" if ok else "no"}', 22,
-                self._accent if ok else self._muted, FontWeight.MEDIUM, alignment_vertical=TextAlignmentVertical.TOP)
+                _nav_accent() if ok else self._muted, FontWeight.MEDIUM, alignment_vertical=TextAlignmentVertical.TOP)
 
   def _render(self, rect):
     x, y = rect.x, rect.y
@@ -89,17 +116,18 @@ class NavigationPanel(Widget):
         shape = [(0, 14), (0, -12), (-6, -5), (0, -12), (6, -5)]
       else:
         shape = [(-flip*9, 14), (-flip*9, -4), (-flip*2, -9), (flip*9, -9), (flip*3, -15), (flip*9, -9), (flip*3, -3)]
-      points = [rl.Vector2(x + 31 + 1.4*px, y + 30 + 1.4*py) for px, py in shape]
+      points = [rl.Vector2(x + 31 + 1.4*px, y + NAV_ROW_CY + 1.4*py) for px, py in shape]
       for a, b in zip(points[:-1], points[1:], strict=True):
-        rl.draw_line_ex(a, b, 7, self._accent)
+        rl.draw_line_ex(a, b, 7, _nav_accent())
       for point in points:
-        rl.draw_circle_v(point, 3.5, self._accent)
-      gui_label(rl.Rectangle(x+64, y+11, rect.width-72, 40), format_distance(max(0, instruction.maneuverDistance)), 34, rl.WHITE, FontWeight.BOLD,
+        rl.draw_circle_v(point, 3.5, _nav_accent())
+      gui_label(rl.Rectangle(x+64, y+11+NAV_HEADER_SHIFT, rect.width-72, 40),
+                format_distance(max(0, instruction.maneuverDistance)), 34, rl.WHITE, FontWeight.BOLD,
                 alignment_vertical=TextAlignmentVertical.TOP)
     else:
-      gui_label(rl.Rectangle(x+12, y+18, rect.width-24, 30), 'Waiting for route', 26, rl.WHITE, FontWeight.BOLD,
+      gui_label(rl.Rectangle(x+12, y+NAV_ROW_CY-15, rect.width-24, 30), 'Waiting for route', 26, rl.WHITE, FontWeight.BOLD,
                 alignment_vertical=TextAlignmentVertical.TOP)
-    map_rect = rl.Rectangle(x+8, y+61, rect.width-16, rect.height-111)
+    map_rect = rl.Rectangle(x+8, y+NAV_MAP_TOP, rect.width-16, rect.height-50-NAV_MAP_TOP)
     rl.draw_rectangle_rec(map_rect, rl.BLACK)
     if self.map_ready:
       # A 1:1 crop of the model's frame, centered horizontally with the ego near the bottom.
