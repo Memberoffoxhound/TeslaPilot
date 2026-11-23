@@ -19,6 +19,18 @@ def _known(params, key: str) -> bool:
     return False
 
 
+def is_set(params, key: str) -> bool:
+  if not _known(params, key):
+    try:
+      return os.path.exists(_path(params, key))
+    except Exception:
+      return False
+  try:
+    return params.get(key) is not None
+  except Exception:
+    return False
+
+
 def get(params, key: str):
   """params.get with its default, the raw file's bytes for an unknown key, None when unreadable."""
   if not _known(params, key):

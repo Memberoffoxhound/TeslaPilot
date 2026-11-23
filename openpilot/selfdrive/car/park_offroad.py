@@ -24,7 +24,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import NamedTuple
 
-from openpilot.common.params_compat import get, get_bool, put, put_bool as put_bool
+from openpilot.common.params_compat import get, get_bool, is_set, put, put_bool as put_bool
 
 PARAM_ENABLED = "ParkOffroad"           # Settings toggle (PERSISTENT, default 0)
 PARAM_STATE = "ParkOffroadState"        # parkd's output (CLEAR_ON_MANAGER_START only: manager's
@@ -200,6 +200,15 @@ def put_state(params, state: int, block: bool = False) -> None:
 
 def enabled(params) -> bool:
   return get_bool(params, PARAM_ENABLED, False)
+
+
+def apply_tesla_default(params, car_brand: str) -> bool:
+  if car_brand != "tesla" or is_set(params, PARAM_ENABLED):
+    return False
+  put_bool(params, PARAM_ENABLED, True, block=True)
+  if not is_set(params, "DriveSummary"):
+    put_bool(params, "DriveSummary", True, block=True)
+  return True
 
 
 # -- hooks ---------------------------------------------------------------------

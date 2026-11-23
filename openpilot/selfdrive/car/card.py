@@ -116,6 +116,7 @@ class Car:
     # keep parkd's state only when the previous route (CarParamsPersistent, not yet overwritten) was also a Tesla
     if self.CP.brand != "tesla" or park_offroad.brand(self.params, "CarParamsPersistent") != "tesla":
       park_offroad.put_state(self.params, park_offroad.NONE, block=True)
+    park_offroad.apply_tesla_default(self.params, self.CP.brand)
     self.CP.alternativeExperience = 0
 
     # MADS, car state hooks only when the toggle is on

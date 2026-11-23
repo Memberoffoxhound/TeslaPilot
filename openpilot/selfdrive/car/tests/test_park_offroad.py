@@ -660,3 +660,26 @@ def test_brand_survives_park_offroad(tmp_path):
   assert not po.not_parked(p)
   p.clear_all(ParamKeyFlag.CLEAR_ON_ONROAD_TRANSITION)   # CarParams gone: stock ignition
   assert po.not_parked(p)
+
+def test_apply_tesla_default(tmp_path):
+  from openpilot.common.params import Params
+  p_tesla = Params(str(tmp_path / "tesla"))
+  assert po.apply_tesla_default(p_tesla, "tesla") is True
+  assert po.enabled(p_tesla) is True
+  assert p_tesla.get_bool("DriveSummary") is True
+
+  p_explicit_off = Params(str(tmp_path / "explicit_off"))
+  p_explicit_off.put_bool("ParkOffroad", False, block=True)
+  assert po.apply_tesla_default(p_explicit_off, "tesla") is False
+  assert po.enabled(p_explicit_off) is False
+
+  p_summary_off = Params(str(tmp_path / "summary_off"))
+  p_summary_off.put_bool("DriveSummary", False, block=True)
+  assert po.apply_tesla_default(p_summary_off, "tesla") is True
+  assert po.enabled(p_summary_off) is True
+  assert p_summary_off.get_bool("DriveSummary") is False
+
+  p_other = Params(str(tmp_path / "other"))
+  assert po.apply_tesla_default(p_other, "toyota") is False
+  assert po.enabled(p_other) is False
+  assert (OP / "selfdrive/car/card.py").read_text().count("park_offroad.apply_tesla_default(") == 1
