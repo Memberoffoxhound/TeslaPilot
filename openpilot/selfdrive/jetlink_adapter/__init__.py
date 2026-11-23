@@ -1,13 +1,9 @@
 """
-Copyright (c) 2026-, Zeph Leggett.
+Ported from zoompilot (421d151cf), see LICENSE.zoompilot.
 
-This file is part of zoompilot and is licensed under the MIT License.
-See the LICENSE.md file in the root directory for more details.
-
-Highland path: openpilot/selfdrive/jetlink_adapter (no sunnypilot tree).
-Layout, names and hooks match zoompilot develop so their Jetlink commits merge
-cleanly. Unavoidable diffs: Stock defaults (no MADS / modeld_v2), and
-default_big_model without sunnypilot.models; runtime is exported for the UI
+Highland path: openpilot/selfdrive/jetlink_adapter. Layout, names and hooks
+match zoompilot develop so their Jetlink commits merge cleanly. Unavoidable
+diffs: Stock defaults (no MADS / modeld_v2); runtime is exported for the UI
 (Highland has no modelDataV2SP).
 
 jetlink on this fork: the adapter jetlink runs over, and the hooks manager,
@@ -83,33 +79,12 @@ def link_on() -> bool:
     return False
 
 
-def remembered() -> str:
-  # the last accelerator AccelDetect saw
-  from openpilot.selfdrive.modeld.accel_keys import DEVICE_KEY, known
-  try:
-    device = (_params_dir() / DEVICE_KEY).read_text().strip()
-  except OSError:
-    return 'none'
-  return known(device)
-
-
-def accel_mode(chestnut: bool | None = None) -> str:
-  # 'chestnut', 'jetlink' or 'none'; a chestnut seen now wins over the memory
-  if chestnut is None:
-    from openpilot.selfdrive.modeld.helpers import chestnut_present
-    chestnut = chestnut_present()
-  from openpilot.selfdrive.modeld.accel_keys import mode_of
-  return 'chestnut' if chestnut else mode_of(remembered())
-
-
 def chestnut_cable(connected: bool | None = None) -> bool:
-  """A cable on the port, for modeld's and the UI's chestnut guess: `connected`,
-  or the port read now. A Jetson or an iPhone on the port is a cable too, so it
-  counts only while Jetlink is off (jetlink docs/porting.md)."""
+  # zoompilot: a cable counts only with Jetlink off, and a USB host (a PC) never does
+  from openpilot.common.hardware.usb import cable_connected, usb_host_connected
   if connected is None:
-    from openpilot.common.hardware.usb import cable_connected
     connected = cable_connected()
-  return connected and not link_on()
+  return connected and not link_on() and not usb_host_connected()
 
 
 @functools.cache
@@ -248,20 +223,10 @@ HOOK_NAMES = (*_Off.ANSWERS, 'reason')
  big_catalog, listed_ref, swap_events, runtime, reason) = map(_hook, HOOK_NAMES)
 
 
-CHESTNUT_DEFAULT = "comma big model"
-
-
 def default_big_model(chestnut: bool, jetlink) -> str:
-  """What an empty big-model slot runs, by name: jetlink's default with no
-  chestnut fitted, else the bundled comma big model. `jetlink` is a
-  status() snapshot or None; the UI passes its own."""
-  if chestnut:
-    return CHESTNUT_DEFAULT
-  try:
-    from jetlink.registry.index import DEFAULT_BIG_MODEL_NAME
-    default = str(DEFAULT_BIG_MODEL_NAME)
-  except Exception:
-    default = "default"
-  if jetlink is not None and getattr(jetlink, 'default_model', None):
+  # zoompilot: what an empty big-model slot runs, by name: jetlink's default with no chestnut
+  # fitted, else the Default bundle the model manager downloads. `jetlink` is a status() snapshot or None
+  from openpilot.sunnypilot.models.model_name import DEFAULT_BIG_MODEL
+  if not chestnut and jetlink is not None and getattr(jetlink, 'default_model', None):
     return jetlink.default_model
-  return default
+  return DEFAULT_BIG_MODEL

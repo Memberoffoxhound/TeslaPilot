@@ -15,17 +15,32 @@ ACCELERATOR_OFF_WAIT_T = 25.0 + 5.0
 
 
 class JetlinkPower:
-  def __init__(self, now: Callable[[], float] = time.monotonic, log=None) -> None:
+  def __init__(self, now: Callable[[], float] = time.monotonic, log=None, params=None) -> None:
     self.now = now
     self.log = log
+    self.params = params
     self.accelerator_off_ts: float | None = None
     self._alert_error: str | None = None
+    # zoompilot hardwared_ext: remembered, as the chestnut may only have power onroad and the
+    # model manager (offroad only) downloads its model on it
+    self.chestnut_seen = params.get_bool("ChestnutSeen") if params is not None else False
+    self._chestnut_boot = False
 
   @property
   def powering_off(self) -> bool:
     return self.accelerator_off_ts is not None
 
-  def alerts(self, set_offroad_alert: Callable[..., None]) -> None:
+  def alerts(self, set_offroad_alert: Callable[..., None], device_state=None) -> None:
+    if device_state is not None and self.params is not None:
+      if not self._chestnut_boot:
+        self._chestnut_boot = True
+        if not device_state.chestnutPresent and not (self.params.get("JetlinkLink", return_default=True) or 0):
+          if self.chestnut_seen:
+            self.chestnut_seen = False
+            self.params.put_bool("ChestnutSeen", False)
+      if device_state.chestnutPresent and not self.chestnut_seen:
+        self.chestnut_seen = True
+        self.params.put_bool("ChestnutSeen", True)
     # an enabled accelerator that cannot come up is otherwise silently absent.
     # Highland: never takes hardwared down (a params library older than the key)
     try:

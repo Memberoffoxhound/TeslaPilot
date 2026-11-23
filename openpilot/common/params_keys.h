@@ -159,27 +159,21 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     // See openpilot/selfdrive/jetlink_adapter/. JetlinkLink: 0 off, 1 usb, 2 ios.
     // JetlinkChargePhone: kept for jetlink KEYS (default off); no UI toggle (zoompilot).
     {"AcceleratorProgress", {CLEAR_ON_MANAGER_START, JSON}},
-    {"JetlinkLink", {PERSISTENT, INT, "0"}},
-    {"AcceleratorDevice", {PERSISTENT, STRING, "none"}},  // none, chestnut, jetlink-usb, jetlink-ios; see accel_detect.py
-    {"JetlinkIos", {PERSISTENT, BOOL, "0"}},  // Jetlink over an iPhone: manual, iOS is not auto-detected
-    {"AcceleratorAck", {PERSISTENT, STRING, "none"}},  // the device the one-time card last showed
+    {"JetlinkLink", {PERSISTENT, INT, "0"}},  // the models panel's Jetlink setting (zoompilot): manual, never auto-detected
     {"JetlinkSpec", {PERSISTENT, JSON}},
     {"JetlinkChargePhone", {PERSISTENT, BOOL, "0"}},
     // hardwared reports an enabled but unavailable accelerator.
     {"Offroad_AcceleratorUnavailable", {CLEAR_ON_MANAGER_START, JSON}},
-    // Model manager: jetlink keys.big_model / keys.catalog / keys.select.
+    // zoompilot's model manager (openpilot/sunnypilot/models); jetlink reads keys.big_model / keys.catalog / keys.select
     {"ModelManager_ActiveBundleChestnut", {PERSISTENT, JSON}},
     {"ModelManager_ModelsCache_Chestnut", {PERSISTENT, JSON}},
-    {"ModelManager_LastSyncTime_Chestnut", {CLEAR_ON_MANAGER_START, INT, "0"}},
-    {"ModelManager_DownloadRef", {CLEAR_ON_MANAGER_START, STRING}},
-    {"ModelManager_Status", {CLEAR_ON_MANAGER_START, JSON}},
-    // chestnut's own pick and catalog
-    {"ChestnutModelPick", {PERSISTENT, JSON}},
-    {"ChestnutModelsCache", {PERSISTENT, JSON}},
-    {"ChestnutModelsSync", {CLEAR_ON_MANAGER_START, INT, "0"}},
-    {"ChestnutModelRef", {CLEAR_ON_MANAGER_START, STRING}},
-    {"ChestnutModelFailed", {PERSISTENT, STRING}},
-    {"ChestnutCompileProgress", {CLEAR_ON_MANAGER_START, JSON}},
+    {"ModelManager_LastSyncTime_Chestnut", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, INT, "0"}},
+    {"ModelManager_DownloadRef", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, STRING}},
+    {"ModelManager_ClearCache", {CLEAR_ON_MANAGER_START, BOOL}},
+    {"ModelManager_CarryOver", {PERSISTENT, JSON}},  // a big-model pick waiting to be re-queued after a catalog change
+    {"ChestnutSeen", {PERSISTENT, BOOL}},  // hardwared latches it: the chestnut may only have power onroad
+    {"Offroad_ChestnutModelDownloading", {CLEAR_ON_MANAGER_START, JSON}},
+    {"Offroad_ChestnutModelMissing", {CLEAR_ON_MANAGER_START, JSON}},
     {"ChestnutRetry", {CLEAR_ON_MANAGER_START | CLEAR_ON_IGNITION_ON, BOOL}},
     // MADS, ported from sunnypilot, see LICENSE.sunnypilot
     {"CarParamsSP", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BYTES}},

@@ -1,20 +1,49 @@
-"""
-Copyright (c) 2026-, Zeph Leggett.
-
-This file is part of zoompilot and is licensed under the MIT License.
-Ported to Highland from zoompilot develop
-(selfdrive/ui/sunnypilot/accelerator_link.py). Layout and names match so
-zoompilot Jetlink UI commits merge cleanly; import path is Highland's
-openpilot.selfdrive.jetlink_adapter.
-
-Models panel helpers. Everything reads ui_state.jetlink; the link itself is
-switched by hardwared's accel_detect.
-"""
+# Ported from zoompilot (421d151cf), see LICENSE.zoompilot.
+# Layout and names match zoompilot selfdrive/ui/sunnypilot/accelerator_link.py;
+# import path is openpilot.selfdrive.jetlink_adapter.
+# Models panel helpers: everything reads ui_state.jetlink; the link itself is
+# switched by the JetlinkLink setting.
 from __future__ import annotations
 
+from openpilot.selfdrive import jetlink_adapter
+from openpilot.selfdrive.jetlink_adapter import KEYS, MODES
 from openpilot.selfdrive.ui.ui_state import ui_state
 
-IOS_KEY = "JetlinkIos"  # iPhone is manual; a Jetson over USB is auto-detected (accel_detect.py)
+LINK_MODE_TITLES = {"off": "Off", "usb": "USB", "ios": "iOS"}
+
+
+def link_mode() -> str:
+  # the JetlinkLink setting as stored, one of MODES: shown even when jetlink cannot run,
+  # so a link that will not start can be turned off
+  index = ui_state.params.get(KEYS.link, return_default=True)
+  return MODES[index] if isinstance(index, int) and 0 <= index < len(MODES) else "off"
+
+
+def link_toggle_meaningful() -> bool:
+  # offered wherever jetlink is checked out, except beside a chestnut, which runs the big
+  # model itself; and always while the setting is on. Never gated on presence: with the
+  # link off there is no gadget for a Jetson to enumerate
+  if link_mode() != "off":
+    return True
+  return not ui_state.chestnut_present and ui_state.jetlink is not None
+
+
+def link_status() -> str:
+  # one line on what is on the USB-C port now: jetlink knows a Jetson or a phone, below
+  # that only the CC pin says a cable with a host is plugged in. Empty where unknown
+  jetlink = ui_state.jetlink
+  port = getattr(jetlink, 'port_state', None) if jetlink is not None else None
+  if port == "connected":
+    return f"Jetlink connected: {jetlink.transport}."
+  return {"empty": "Nothing on the USB port.", "device": "A device is on the USB port."}.get(port, "")
+
+
+def big_model_note(ref: str) -> str | None:
+  # what jetlink says of one big model for the list: built on the Jetson, or downloaded
+  # to the comma. None with a chestnut fitted
+  if ui_state.chestnut_present or ui_state.jetlink is None:
+    return None
+  return {'ready': "ready on Jetson", 'downloaded': "downloaded"}.get(jetlink_adapter.model_state(ref))
 
 
 def big_model_progress(jetlink=None, progress=None) -> tuple[str, float, str] | None:

@@ -2,6 +2,7 @@
 from collections.abc import Callable, Mapping
 import base64
 import ctypes
+import io
 import gc
 from functools import cached_property
 import os
@@ -29,7 +30,6 @@ from msgq.visionipc import VisionIpcClient, VisionBuf
 from opendbc.car.car_helpers import get_demo_car_params
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
-from openpilot.common.hardware.usb import usb_host_connected
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.realtime import config_realtime_process, DT_MDL
 from openpilot.common.transformations.camera import DEVICE_CAMERAS
@@ -41,9 +41,9 @@ from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive import jetlink_adapter
-from openpilot.selfdrive.modeld.accel_keys import CHESTNUT_FAILED
-from openpilot.selfdrive.modeld.helpers import (MODELS_DIR, chestnut_pick, chestnut_pick_pkl, chestnut_present, chestnut_compiled, modeld_pkl_path,
-                                               load_oob, wait_for_chestnut)
+from openpilot.selfdrive.modeld.helpers import (MODELS_DIR, big_model_file, chestnut_present, chestnut_compiled, is_plain, modeld_pkl_path, load_oob,
+                                               wait_for_chestnut)
+from openpilot.selfdrive.modeld import plain_jit
 
 SEND_RAW_PRED = os.getenv('SEND_RAW_PRED')
 
@@ -151,12 +151,13 @@ class ModelState:
   prev_desire: np.ndarray  # for tracking the rising edge of the pulse
 
   def __init__(self, cam_w: int, cam_h: int, chestnut: bool, pkl=None):
-    jits = load_oob(pkl or modeld_pkl_path(chestnut), chestnut)
+    pkl = pkl or modeld_pkl_path(chestnut)
+    jits = load_oob(pkl, chestnut)
     self.model_device = jits['input_specs']['new_img'][2]
     self.input_shapes = {name: (shape, np.dtype(dtype)) for name, (shape, dtype, _) in jits['input_specs'].items()}
     self.state_pairs = {name: f'next_{name}' for name in self.input_shapes if f'next_{name}' in jits['metadata']['output_shapes']}
     self.vision_input_names = ('img', 'big_img')
-    self.output_slices = pickle.loads(base64.b64decode(jits['metadata']['metadata']['output_slices']))
+    self.output_slices = plain_jit._MetadataUnpickler(io.BytesIO(base64.b64decode(jits['metadata']['metadata']['output_slices']))).load()
 
     self.prev_desire = np.zeros(ModelConstants.DESIRE_LEN, dtype=np.float32)
     self.chestnut = chestnut
@@ -171,7 +172,8 @@ class ModelState:
       self.run_warp = pickle.load(f)['run']
     self.run_warp.captured._linear = lower_and_compile(self.run_warp.captured._linear)
     self.run_model = jits['run']
-    self.run_model.captured._linear = lower_and_compile(self.run_model.captured._linear)
+    if not is_plain(pkl):  # a prebuilt model is compiled as it loads
+      self.run_model.captured._linear = lower_and_compile(self.run_model.captured._linear)
     self.outputs = {name: Tensor(np.zeros(shape, dtype=dtype), device=device).realize() for name, (shape, dtype, device) in jits['output_specs'].items()}
     for name, next_name in self.state_pairs.items():
       state = self.input_queues[name]
@@ -244,19 +246,20 @@ class ModelState:
     self.prev_desire[:] = 0
 
 
+def chestnut_pkls() -> list:
+  # the downloaded pick first, then the bundled big model when it is pulled (not an LFS pointer)
+  return [p for p in (big_model_file(), modeld_pkl_path(True) if chestnut_compiled() else None) if p is not None]
+
+
 def load_chestnut(params, cam_w, cam_h, model_state=None):
-  # the pick if compiled for this tinygrad, else the bundled comma big model
   model_state = model_state or ModelState
-  pkl = chestnut_pick_pkl(params)
-  for path in ([pkl] if pkl else []) + [None]:
+  for pkl in chestnut_pkls():
     try:
-      m = model_state(cam_w, cam_h, True, path)
+      m = model_state(cam_w, cam_h, True, pkl=pkl)
       m.warmup()
       return m
     except Exception:
-      cloudlog.exception(f"big model load failed: {path or 'bundled'}")
-      if path is not None:
-        params.put(CHESTNUT_FAILED, chestnut_pick(params) or "")
+      cloudlog.exception(f"big model load failed: {pkl}")
   return None
 
 
@@ -264,8 +267,7 @@ def main(demo=False):
   cloudlog.warning("modeld init")
 
   # a remembered chestnut on the cable may still be enumerating; a random cable is not one
-  CHESTNUT = chestnut_compiled() and (chestnut_present() or (jetlink_adapter.accel_mode(False) == 'chestnut'
-                                                             and jetlink_adapter.chestnut_cable() and not usb_host_connected()))
+  CHESTNUT = bool(chestnut_pkls()) and (chestnut_present() or jetlink_adapter.chestnut_cable())
   if CHESTNUT:
     from tinygrad.runtime.ops_amd import AMDDevice
     AMDDevice.wait_timeout_ms = 3000

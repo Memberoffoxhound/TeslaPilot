@@ -1,26 +1,34 @@
-import json
-import subprocess
 import sys
 import time
-from functools import cache
 from pathlib import Path
 
 from openpilot.common.hardware import AGNOS
 from openpilot.common.hardware.usb import CHESTNUT_USB_PRODUCT, USB_DEVICES_PATH, is_chestnut_usb_id
-from openpilot.selfdrive.modeld.accel_keys import CHESTNUT_PICK
 
 MODELS_DIR = Path(__file__).resolve().parent / 'models'
-CHESTNUT_DIR = Path('/data/models/chestnut')  # <ref>/driving_tinygrad.pkl, compiled on device
 
 
 def modeld_pkl_path(chestnut: bool):
   prefix = 'big_' if chestnut else ''
   return MODELS_DIR / f'{prefix}driving_tinygrad.pkl'
 
+PLAIN_MAGIC = b'SPTGPLN1'
+
+def is_plain(path) -> bool:
+  # a sunnypilot/zoompilot prebuilt model (plain_jit.py), not a tinygrad pickle
+  try:
+    with open(path, 'rb') as f:
+      return f.read(len(PLAIN_MAGIC)) == PLAIN_MAGIC
+  except OSError:
+    return False
+
 def load_oob(path, chestnut=False):
   from tinygrad import Context
   device = 'USB+AMD:LLVM' if chestnut else 'QCOM' if AGNOS else 'METAL' if sys.platform == 'darwin' else 'CPU:LLVM'
   with Context(DEV=device):
+    if is_plain(path):
+      from openpilot.selfdrive.modeld.plain_jit import load_model
+      return load_model(str(path))
     from tinygrad_repo.examples.openpilot.helpers import load_pickle
     return load_pickle(path, out_of_band=True)
 
@@ -55,38 +63,19 @@ def is_lfs_pointer(path: Path) -> bool:
 def chestnut_compiled() -> bool:
   path = modeld_pkl_path(chestnut=True)
   warps = [MODELS_DIR / f'big_driving_warp_{size}_tinygrad.pkl' for size in ('1344x760', '1928x1208')]
-  # the big model is an LFS pointer until launch fetches it; never load a placeholder
+  # the bundled big model is an LFS pointer unless pulled by hand; never load a placeholder
   return all(p.is_file() and not is_lfs_pointer(p) for p in (path, *warps))
 
-
-@cache
-def tinygrad_ref() -> str:
-  # a compiled pkl only loads on the tinygrad that built it
+def big_model_file() -> str | None:
+  # the downloaded chestnut model (openpilot/sunnypilot/models), once its files are all here
   try:
-    root = Path(__file__).resolve().parents[3]
-    return subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD:tinygrad_repo'], text=True, stderr=subprocess.DEVNULL).strip()
-  except Exception:
-    return ''
-
-def compiled_dir(ref: str) -> Path:
-  return CHESTNUT_DIR / ref
-
-def compiled_ready(ref: str) -> bool:
-  d = compiled_dir(ref)
-  try:
-    return (d / 'driving_tinygrad.pkl').is_file() and (d / 'tinygrad_ref').read_text().strip() == tinygrad_ref() != ''
-  except OSError:
-    return False
-
-def chestnut_pick(params) -> str | None:
-  try:
-    pick = params.get(CHESTNUT_PICK)
-    pick = json.loads(pick) if isinstance(pick, (bytes, str)) else pick
+    from openpilot.sunnypilot.models.helpers import big_model_file as active_file
+    path = active_file()
   except Exception:
     return None
-  ref = pick.get('ref') if isinstance(pick, dict) else pick
-  return str(ref) if ref else None
+  return path if path and Path(path).is_file() and not is_lfs_pointer(Path(path)) else None
 
-def chestnut_pick_pkl(params) -> Path | None:
-  ref = chestnut_pick(params)
-  return compiled_dir(ref) / 'driving_tinygrad.pkl' if ref and compiled_ready(ref) else None
+
+def chestnut_model_ready() -> bool:
+  # a big model modeld can load on a chestnut: the downloaded pick or the pulled bundled one
+  return big_model_file() is not None or chestnut_compiled()

@@ -2651,7 +2651,7 @@ struct Event {
     # DON'T change the ID (e.g. @107)
     # DON'T change which struct it points to
     selfdriveStateSP @107 :Custom.SelfdriveStateSP;
-    customReserved1 @108 :Custom.CustomReserved1;
+    modelManagerSP @108 :Custom.ModelManagerSP;
     customReserved2 @109 :Custom.CustomReserved2;
     onroadEventsSP @110 :Custom.OnroadEventSP;
     carParamsSP @111 :Custom.CarParamsSP;

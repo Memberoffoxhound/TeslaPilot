@@ -14,8 +14,8 @@ from openpilot.selfdrive.ui.lib.notifications import Notifications
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.common.hardware import HARDWARE, PC
 from openpilot.common.hardware.usb import cable_connected, get_usb_state, is_chestnut_usb_id
-from openpilot.selfdrive.modeld.helpers import chestnut_compiled
-from openpilot.selfdrive.ui import accel_progress, model_picker
+from openpilot.selfdrive.modeld.helpers import chestnut_model_ready
+from openpilot.selfdrive.ui import accel_progress
 from openpilot.selfdrive.car import tesla_step_aside, park_offroad
 from openpilot.selfdrive.ui.lib.park_view import HOLD, JUMP, ParkView
 from openpilot.selfdrive import jetlink_adapter
@@ -26,6 +26,8 @@ BACKLIGHT_MIN = 30  # the lowest backlight the display shows properly
 # auto brightness goes below the backlight's floor by dimming the UI, down to 40% black
 BRIGHTNESS_MIN = BACKLIGHT_MIN * 0.6 if HARDWARE.get_device_type() == "mici" else BACKLIGHT_MIN
 PARAM_UPDATE_TIME = 1 / 5.0
+# the chestnut model being fetched or not yet fetched: the icon shows it as not ready, not failed
+CHESTNUT_MODEL_ALERTS = ("Offroad_ChestnutModelDownloading", "Offroad_ChestnutModelMissing")
 
 
 class UIStatus(Enum):
@@ -97,6 +99,7 @@ class UIState:
         "testJoystick",
         "rawAudioData",
         "selfdriveStateSP",
+        "modelManagerSP",
       ]
     )
 
@@ -119,7 +122,8 @@ class UIState:
     self.navigation_enabled: bool = self.params.get_bool("NavigationEnabled")
     self.nav_destination_set: bool = self.params.get("NavDestination") is not None
     self.chestnut_present: bool = False
-    self.chestnut_compiled: bool = chestnut_compiled()
+    self.chestnut_compiled: bool = chestnut_model_ready()  # a big model to load: downloaded or bundled
+    self.chestnut_download: float | None = None  # accel_progress.chestnut_download()
     self.chestnut_active: bool | None = None
     self.chestnut_loading: bool = False
     self.chestnut_alert: bool = False
@@ -227,6 +231,12 @@ class UIState:
     elif not self.sm.alive["wideRoadCameraState"] or not self.sm.valid["wideRoadCameraState"]:
       self.light_sensor = -1
 
+    if self.sm.updated["modelManagerSP"]:
+      self.chestnut_download = accel_progress.chestnut_download(self.sm["modelManagerSP"])
+      self.chestnut_compiled = chestnut_model_ready()
+    elif not self.sm.alive["modelManagerSP"]:
+      self.chestnut_download = None
+
     # Update started state
     self.started = self.sm["deviceState"].started and self.ignition
     self.park.update(time.monotonic(), self.started, self.ignition, self._park_state)
@@ -260,7 +270,10 @@ class UIState:
       if self.started:
         self._started_frame = self.sm.frame
         self.started_time = time.monotonic()
-        self.chestnut_present = self.sm["deviceState"].chestnutPresent
+        present = self.sm["deviceState"].chestnutPresent
+        if present != self.chestnut_present:
+          self.chestnut_compiled = chestnut_model_ready()
+        self.chestnut_present = present
 
       for callback in self._offroad_transition_callbacks:
         callback()
@@ -296,11 +309,8 @@ class UIState:
       if not (self.chestnut_present or getattr(self.jetlink, 'present', False)):
         self.accel_progress = None
         return
-      mode = jetlink_adapter.accel_mode(self.chestnut_present)
-      bundled = accel_progress.bundled_download() if mode == 'chestnut' and not self.chestnut_compiled else None
-      # one mode read; only a chestnut uses its compile progress
-      compiling = model_picker.compile_progress(mode) if mode == 'chestnut' and bundled is None else None
-      self.accel_progress = accel_progress.provisioning(mode, compiling, getattr(self.jetlink, 'progress', None), bundled)
+      mode = 'chestnut' if self.chestnut_present else 'jetlink'
+      self.accel_progress = accel_progress.provisioning(mode, self.chestnut_download, getattr(self.jetlink, 'progress', None))
     except Exception:
       self.accel_progress = None
 
@@ -311,6 +321,8 @@ class UIState:
 
     detected = self.sm["deviceState"].chestnutPresent
     if not self.started:
+      if detected != self.chestnut_present:
+        self.chestnut_compiled = chestnut_model_ready()
       self.chestnut_present = detected
       self.chestnut_state = (ChestnutState.FAILED if self.chestnut_alert else
                              ChestnutState.READY if detected and self.chestnut_compiled else
@@ -356,11 +368,10 @@ class UIState:
     self.personality_param = self.params.get("LongitudinalPersonality", return_default=True)
     self.navigation_enabled = self.params.get_bool("NavigationEnabled")
     self.nav_destination_set = self.params.get("NavDestination") is not None
-    if not self.chestnut_compiled:
-      self.chestnut_compiled = chestnut_compiled()
     self.chestnut_active = self.params.get("ChestnutActive")
     self.chestnut_loading = self.params.get_bool("ChestnutLoading")
-    self.chestnut_alert = any(self.params.get(k) is not None for k, a in OFFROAD_ALERTS.items() if k.startswith("Offroad_Chestnut") and a["severity"] >= 0)
+    self.chestnut_alert = any(self.params.get(k) is not None for k, a in OFFROAD_ALERTS.items()
+                              if k.startswith("Offroad_Chestnut") and a["severity"] >= 0 and k not in CHESTNUT_MODEL_ALERTS)
     self._update_jetlink()
     self._update_accel_progress()
     # the Jetson configures the gadget ~25 s after a cold boot, after the one-shot

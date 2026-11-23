@@ -12,7 +12,6 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.scroller import Scroller
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.layouts.fingerprint_prompt import FingerprintPrompt
-from openpilot.selfdrive.ui.mici.layouts.accel_card import AccelCard
 from openpilot.selfdrive.ui.mici.widgets.drive_summary_card import DriveSummaryCard
 from openpilot.system.ui.lib.application import gui_app
 
@@ -29,7 +28,6 @@ class MiciMainLayout(Scroller):
     self._pm = messaging.PubMaster(['bookmarkButton', 'userBookmark'])
 
     self._fingerprint = FingerprintPrompt(self)
-    self._accel_card = AccelCard(self)
     self._prev_onroad = False
     self._prev_standstill = False
     self._prev_parked = False
@@ -128,9 +126,6 @@ class MiciMainLayout(Scroller):
       return
 
     if self._fingerprint.tick():
-      return
-
-    if self._accel_card.tick():
       return
 
     # trip summary: up from Park (or the offroad edge below) while the car is parked or off

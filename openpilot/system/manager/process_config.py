@@ -128,8 +128,8 @@ procs = [
   RestartingPythonProcess(jetlink_adapter.OWNER, "openpilot.selfdrive.jetlink_adapter", jetlink_adapter.should_run, enabled=not PC),
   # parkd watches gear onroad and offroad; hardwared consumes ParkOffroadState.
   RestartingPythonProcess("parkd", "openpilot.selfdrive.car.park_offroad", park_offroad.should_run, enabled=not PC),
-  # the big-model catalog and pick (from sunnypilot's model manager); offroad only
-  RestartingPythonProcess("modelmanagerd", "openpilot.selfdrive.modelmanager.manager", only_offroad, enabled=not PC),
+  # zoompilot's model manager: the chestnut big model's catalog, download and cache; offroad only
+  PythonProcess("models_manager", "openpilot.sunnypilot.models.manager", only_offroad),
 
   # debug procs
   PythonProcess("webrtcd", "openpilot.system.webrtc.webrtcd", or_(livestream, notcar)),
