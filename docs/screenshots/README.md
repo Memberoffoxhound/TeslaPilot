@@ -6,12 +6,15 @@ The onroad, trip summary, Home, and Statistics stills were rendered at 3x scale 
 `3e2de7ed673817c2/00000076--63bd4c94a4` (Oct 29, 2026), replayed through the device UI code on
 Highland-Dev `e8681d627` (version 0.11.24). The lead car marker is hidden in the onroad render.
 The Settings stills are headless renders of the same UI. The demo GIF is from an earlier render
-of the same route.
+of the same route. The onroad navigation stills were rendered at 3x scale from the same route
+with Nav2Pilot guidance.
 
 | File | Shot |
 |---|---|
 | `teslapilot-demo.gif` | Onroad Tesla theme with compass, trip summary card, Home, swipe back |
 | `onroad-tesla.jpg` | Custom onroad UI, Tesla blue lanes, small compass |
+| `onroad-nav.jpg` | Custom onroad UI with Nav2Pilot guidance, Tesla blue route |
+| `onroad-nav-mads.jpg` | Same nav layout with MADS steering and the desire path |
 | `trip-card.png` | Trip summary card |
 | `home-stats.png` | Home with day and week stats, version 0.11.24 |
 | `settings.png` | Settings, with driving where toggles used to be |

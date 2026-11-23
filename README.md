@@ -119,6 +119,18 @@ On by default. If Tesla Autosteer, FSD, or Summon is selected or active, TeslaPi
 
 ![Onroad, Tesla theme with compass](docs/screenshots/onroad-tesla.jpg)
 
+### Navigation and turn desires
+
+Credit: [cristianku](https://github.com/cristianku)'s [Nav2Pilot](https://github.com/cristianku/nav2pilot) app ([iOS](https://github.com/cristianku/nav2pilot-ios)) and [nav-alpha](https://github.com/cristianku/openpilot/tree/nav-alpha) overlay, and turn desires from [FrogAi](https://github.com/FrogAi)'s [FrogPilot](https://github.com/FrogAi/FrogPilot), as carried in [StarPilotHQ/StarPilot](https://github.com/StarPilotHQ/StarPilot). Ported by [Memberoffoxhound](https://github.com/Memberoffoxhound).
+
+Send a destination with stops from the Nav2Pilot app. On the comma, turn on **Settings → developer → navigation (alpha)**. Sign in to the app with a token from [jwt.comma.ai](https://jwt.comma.ai), using the account your comma is paired to. If you don't have comma prime, enter a public Mapbox token in the app (it starts with `pk.`). The app stores it in the `MapboxToken` param, which is never logged and is never kept in git. Without prime, the route still works, but the map tiles may stay black. Going offroad (shifting into Park on a Tesla) clears the destination, so send it again before the next drive. This is on-screen guidance only; it doesn't steer the car through turns.
+
+![Onroad with Nav2Pilot guidance](docs/screenshots/onroad-nav.jpg)
+
+![Onroad navigation with MADS](docs/screenshots/onroad-nav-mads.jpg)
+
+**Turn desires** is off by default. Turn it on in **Settings → driving → turn desires**. Signal anytime below 45 mph as you approach a turn. Once you slow under 20 mph, the model takes the turn. At a red light it holds until you stop or cancel the blinker. It doesn't check the blind spot (similar to StarPilot). At 45 mph and up, the blinker still means a lane change.
+
 ### Drive stats, kept on your device
 
 Your drive stats stay on the comma and nothing gets uploaded. On a Tesla, **go offroad in park** is on by default if you haven't set it; you can change it in **Settings → driving**. On other cars it stays off until you turn it on. There's a note below on why a Tesla needs this.
@@ -196,6 +208,8 @@ TeslaPilot is built on the work of these people and projects. Thank you!
 | Jetlink big model | Zeph Leggett / zoompilot (MIT) | [zoompilot/jetlink](https://github.com/zoompilot/jetlink), [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot) |
 | Model manager, chestnut models, `SPTGPLN1` loader, models UI | zoompilot's wiring of sunnypilot's model manager and plain tinygrad loader | [zoompilot/zoompilot](https://github.com/zoompilot/zoompilot), [sunnypilot/sunnypilot](https://github.com/sunnypilot/sunnypilot) |
 | MADS | sunnypilot | [sunnypilot/sunnypilot](https://github.com/sunnypilot/sunnypilot), [sunnypilot/opendbc](https://github.com/sunnypilot/opendbc), [sunnypilot/panda](https://github.com/sunnypilot/panda) |
+| Nav2Pilot and nav-alpha overlay | cristianku, ported by Memberoffoxhound | [cristianku/nav2pilot](https://github.com/cristianku/nav2pilot), [nav-alpha](https://github.com/cristianku/openpilot/tree/nav-alpha) |
+| Turn desires | FrogAi / FrogPilot, as carried in StarPilotHQ/StarPilot, ported by Memberoffoxhound | [FrogAi/FrogPilot](https://github.com/FrogAi/FrogPilot), [StarPilotHQ/StarPilot](https://github.com/StarPilotHQ/StarPilot) |
 | Step aside, fingerprint fallback, Tesla theme, drive stats, web page | Memberoffoxhound | [TeslaPilot](https://github.com/Memberoffoxhound/TeslaPilot) |
 | TESLA font (wordmark) | KAYOver, based on TeslaNikolaCaps by Shane Milburn | [dafont](https://www.dafont.com/tesla.font) |
 | Inter font | Rasmus Andersson | [rsms/inter](https://github.com/rsms/inter) |
