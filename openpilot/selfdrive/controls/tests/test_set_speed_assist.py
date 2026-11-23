@@ -1,5 +1,5 @@
 """
-Set Speed Assist tests, from sunnypilot PR #2083 by Zeph Leggett (MIT), plus the openpilot longitudinal gate.
+Set Speed Assist tests, ported from zoompilot (sunnypilot PR #2083), see LICENSE.zoompilot, plus the openpilot longitudinal gate.
 """
 import numpy as np
 
@@ -234,6 +234,7 @@ def planner_sm(engaged=False, personality=STANDARD):
   cs.carState.vEgo = V_EGO
   cs.carState.vCruise = V_CRUISE_MS * 3.6
   sm['carState'] = cs.carState
+  sm['vehicleParameters'] = messaging.new_message('vehicleParameters').vehicleParameters  # comma's curve slowdown reads roll
   return sm
 
 

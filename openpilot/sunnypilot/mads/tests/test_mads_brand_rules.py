@@ -11,7 +11,7 @@ from openpilot.sunnypilot.mads.helpers import MadsSteeringModeOnBrake, mads_has_
 
 BUS = int(TeslaFlagsSP.HAS_VEHICLE_BUS)
 
-_MADS = dict(MadsSteeringMode=0, MadsUnifiedEngagementMode=False, MadsMainCruiseAllowed=True, TeslaMadsScreenButton=0)
+_MADS = {"MadsSteeringMode": 0, "MadsUnifiedEngagementMode": False, "MadsMainCruiseAllowed": True, "TeslaMadsScreenButton": 0}
 
 
 def FakeMadsParams(**values):

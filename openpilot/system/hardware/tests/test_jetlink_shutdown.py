@@ -91,7 +91,7 @@ def test_alert_says_why_and_never_raises(monkeypatch):
 
 def test_hardwared_carries_the_lines():
   src = (ROOT / 'openpilot/system/hardware/hardwared.py').read_text()
-  assert 'jetlink_power.alerts(set_offroad_alert_if_changed)' in src
+  assert 'jetlink_power.alerts(set_offroad_alert_if_changed, msg.deviceState)' in src
   assert 'startup_conditions["not_powering_off"] = not jetlink_power.powering_off' in src
   assert re.search(r'if jetlink_power\.shutdown_ready\(power_monitor\.should_shutdown\(.*\), off_ts\):\n\s+params\.put_bool\("DoShutdown"', src)
 

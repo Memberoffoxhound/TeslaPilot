@@ -1,5 +1,5 @@
 # MADS settings shown per car, rules ported from sunnypilot, see LICENSE.sunnypilot.
-from opendbc.sunnypilot.car.tesla.values import MadsScreenButtonType, TeslaFlagsSP
+from opendbc.sunnypilot.car.tesla.values import TeslaFlagsSP
 from openpilot.sunnypilot.mads.helpers import MADS_NO_ACC_MAIN_BUTTON, get_mads_limited_brands, mads_has_button, mads_main_reported
 
 MADS_TITLE = "MADS - Modular Assistive Driving System"

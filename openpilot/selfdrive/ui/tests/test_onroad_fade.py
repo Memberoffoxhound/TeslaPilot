@@ -25,7 +25,7 @@ HEAD = textwrap.dedent('''
   sm = SM(selfdriveState=ss, carState=car, longitudinalPlan=SimpleNamespace(hasLead=False))
   from openpilot.common.params import Params
   ui = SimpleNamespace(sm=sm, params=Params(), status=UIStatus.ENGAGED, steer_status=UIStatus.ENGAGED, engaged=True,
-                       started=True, started_frame=0, is_metric=False,
+                       started=True, started_frame=0, is_metric=False, received_since_started=lambda s: True,
                        chestnut_state=CS.ACTIVE, accel_progress=None, has_longitudinal_control=True)
   mod = types.ModuleType("openpilot.selfdrive.ui.ui_state")
   mod.ui_state, mod.UIStatus, mod.ChestnutState = ui, UIStatus, CS
