@@ -22,7 +22,7 @@ PROBE = textwrap.dedent('''
 
   out_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else None
   params = Params()
-  for k, v in {"Version": "0.11.23", "GitBranch": "Highland-Dev-sweep",
+  for k, v in {"Version": "0.11.24", "GitBranch": "Highland-Dev-sweep",
                "GitCommit": "deadbeef", "GitCommitDate": "'0 2026'"}.items():
     params.put(k, v, block=True)
 

@@ -2,9 +2,9 @@
 
 # TeslaPilot: Highland
 
-These notes describe **Highland-Dev**: version **0.11.23**, synced through comma master `89e7e0a4c` (openpilot **0.11.3**).
+These notes describe **Highland-Dev**: version **0.11.24**, synced through comma master `4bd73298e` (openpilot **0.11.4**).
 
-AGNOS is **20.3** (`launch_env.sh`). The first boot on an older OS flashes it. Other branches may use different versions.
+AGNOS is **20.6** (`launch_env.sh`). The first boot on an older OS flashes it. Other branches may use different versions.
 
 ## opendbc pin
 
@@ -12,7 +12,7 @@ AGNOS is **20.3** (`launch_env.sh`). The first boot on an older OS flashes it. O
 
 Structure matches comma: gitlink SHA is what ships, not the branch tip. The SHA is **comma openpilot master's opendbc pin plus Tesla-only commits**:
 
-- comma base: `1df34867` (the pin in comma master `89e7e0a4c`)
+- comma base: `5cb4ca34` (the pin in comma master `4bd73298e`)
 - extras: 3-bit `DAS_steeringControlType`, cooperative steering, scroll-wheel cancel, local EPS fingerprint overlay after stock identification
 
 ```bash
@@ -24,7 +24,7 @@ git add opendbc_repo
 git commit -m "opendbc: bump Highland (comma pin + Tesla extras)"
 ```
 
-Current gitlink: `bfff3f6e` (comma `1df34867` plus Highland changes).
+Current gitlink: `39a6559c` (comma `5cb4ca34` merged into the Highland changes).
 
 ## Fingerprint
 
@@ -74,8 +74,9 @@ Hold display 3s → `/data/media/0/screenshots`. Web GUI `system/webgui` on **80
 `jetlink_repo` is pinned at `9cfde98` (**v0.9.0**, adapter API 4). The comma, Jetson and phone runtime versions must agree.
 
 - `selfdrive/jetlink_adapter` uses Jetlink's `Stock` adapter and `Hooks`; keep it aligned with zoompilot's porting guide.
-- **Settings → models** offers the big-model picker and a jetlink over iPhone toggle; hardwared detects a chestnut or a Jetson over USB on its own (`system/hardware/accel_detect.py`). There is no charge-phone control; `JetlinkChargePhone` remains default-off because Jetlink's keys require it.
-- Both modes list Jetlink's model index, each with its own pick. Jetlink downloads its pick's ONNX; a chestnut compiles its pick on device, offroad, and falls back to the bundled comma big model.
+- **Settings → models** is zoompilot's mici panel (`mici/layouts/settings/models.py`, `ui/model_info.py`), big models only: select model, cancel download, the **jetlink** Off/USB/iOS setting (`JetlinkLink`, never auto-detected, hidden beside a chestnut), refresh models and clear cache. There is no charge-phone control; `JetlinkChargePhone` remains default-off because Jetlink's keys require it.
+- The model manager is zoompilot's (`sunnypilot/models`, process `models_manager`, offroad only, publishes `modelManagerSP`). With a chestnut fitted or seen (`ChestnutSeen`, latched by hardwared) the big-model list is sunnypilot's `driving_models_chestnut_v28` and the pick's prebuilt SPTGPLN1 file downloads to `Paths.model_root()` (`/data/media/0/models`); an empty slot downloads the Default (Light Speed 2). Without a chestnut the list is Jetlink's index (`jetlink_adapter.big_catalog`) and nothing downloads on the comma. `BigCatalogCache` refetches once when the hardware flips. Clear cache keeps only the pick's files.
+- modeld loads the downloaded pick through zoompilot's `plain_jit.py` loader, then the bundled big model if it was pulled by hand, then the small model. Nothing compiles on the comma.
 - Jetlink's `Status` and `/dev/shm/jetlink/modeld.json` feed the existing chestnut icons. Waiting is dim; active is green.
 - selfdrived reports available/lost/active events (`log.capnp` @107–109; Tesla step-aside is @106). A swap briefly blocks entry with `bigModelLoading`; link events do not disengage.
 - hardwared reports an unavailable accelerator and coordinates shutdown. The launch hook stops USB-C charging while the link is enabled; turning ADB on turns Jetlink off.
@@ -87,7 +88,7 @@ Like sunnypilot, this tree carries no CommaView code, toggle or daemon. CommaVie
 
 ## Git LFS
 
-Every file comma keeps in LFS is a normal git blob here (`.gitattributes` exempts it), with two exceptions. The AGNOS updater (`common/hardware/comma/updater`) stays in LFS like comma: updated runs `tools/lfs.sh pull` (comma's Hugging Face store `commaai/openpilot-lfs`) before it finalizes an update, so the device gets the real binary. The chestnut-only `models/big_driving_tinygrad.pkl` (776 MB, over GitHub's 100 MB limit) stays in LFS like comma: once hardwared has seen a chestnut or Jetlink (`AcceleratorDevice`), launch pulls it in the background in one stream that resumes across reboots (`scripts/fetch_big_model.py`); installs without one never download it, and updated skips it for them too. `chestnut_compiled()` is false while it is still a pointer, so the small model drives until then.
+Every file comma keeps in LFS is a normal git blob here (`.gitattributes` exempts it), with two exceptions. The AGNOS updater (`common/hardware/comma/updater`) stays in LFS like comma: updated runs `tools/lfs.sh pull` (comma's Hugging Face store `commaai/openpilot-lfs`) before it finalizes an update, so the device gets the real binary. The chestnut-only `models/big_driving_tinygrad.pkl` (776 MB, over GitHub's 100 MB limit) stays in LFS like comma, but neither launch nor updated pulls it: a chestnut runs the model manager's download instead. `chestnut_compiled()` is false while it is a pointer, so modeld never loads a placeholder. Its warps (`big_driving_warp_*.pkl`) are normal blobs, which downloaded models use.
 
 `python3 scripts/teslapilot_lfs.py` checks this (`--fix` converts newly added LFS files). `selfdrive/test/test_no_lfs_pointers.py` runs it in the test suite.
 

@@ -105,7 +105,7 @@ def mock() -> dict:
               "week_days": [{"id": d, "m": m, "e": e} for d, m, e in days], "today_i": 4},
     "current": {"route": "0000012a--4f3c9e1d2b", "m": 8400.0, "e": 7900.0},
     "timezone": {"name": "America/Denver", "source": "gps"},
-    "sw": {"version": "0.11.23", "branch": "jetlink-sync-agnos19", "commit": "4c6ce3d32"},
+    "sw": {"version": "0.11.24", "branch": "jetlink-sync-agnos19", "commit": "4c6ce3d32"},
     "state": {"onroad": True, "engaged": True, "metric": False, "route": "0000012a--4f3c9e1d2b", "personality": "Aggressive"},
     "drives_on_device": 37,
     "storage": {"total": 476_000_000_000, "free": 311_000_000_000},

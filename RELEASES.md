@@ -1,5 +1,47 @@
-Version 0.11.23 — TeslaPilot Highland (2026-08-28)
-=========================================================
+Version 0.11.24: TeslaPilot Highland-Dev (2026-11-22)
+========================================
+TeslaPilot on comma openpilot 0.11.4 (master 4bd73298e). Reports 0.11.24 to Connect. See README.md.
+
+* Synced comma openpilot 0.11.4 (https://github.com/commaai/openpilot/commit/4bd73298e, https://github.com/Memberoffoxhound/TeslaPilot/commit/ad0ec796bf727a0827bbe2484102bae81484e58a):
+  * Autospeed out of beta and always on; Cheddar driving model (https://github.com/commaai/openpilot/pull/39255), Super Leicht 2 DM model (https://github.com/commaai/openpilot/pull/39303)
+  * Gentler curve slowdowns (https://github.com/commaai/openpilot/pull/39307), 1 s cruise accel filter (https://github.com/commaai/openpilot/pull/39266), gas boost removed (https://github.com/commaai/openpilot/pull/39306), Aggressive boost restored (https://github.com/commaai/openpilot/pull/39430)
+  * comma 4 UI: night mode (https://github.com/commaai/openpilot/pull/39134), alerts popup (https://github.com/commaai/openpilot/pull/39345), offroad alert cards (https://github.com/commaai/openpilot/pull/39319), left side panel (https://github.com/commaai/openpilot/pull/39317), wake animation (https://github.com/commaai/openpilot/pull/39331), lane-wide stop bar (https://github.com/commaai/openpilot/pull/39429), lowercase labels (https://github.com/commaai/openpilot/pull/39322), driving settings rename (https://github.com/commaai/openpilot/pull/39338)
+  * AGNOS 20.6 (https://github.com/commaai/openpilot/pull/39314)
+* Removed the old model picker, on-device chestnut compiler, AccelDetect, and the launch big-model fetch (https://github.com/Memberoffoxhound/TeslaPilot/commit/08ad0f453b3fbd0ee7b32209d850e249dbe10a5d)
+* Big models ported from zoompilot (421d151cf): prebuilt sunnypilot chestnut models, `SPTGPLN1` loader, Settings -> models with cancel/clear cache, and a manual Jetlink Off/USB/iOS toggle (https://github.com/Memberoffoxhound/TeslaPilot/commit/af05a2b0c55051257d1a6a462cae89f8e8ce7e2b)
+* Lowercase TeslaPilot mici labels and fix home wake/footer overlap (https://github.com/Memberoffoxhound/TeslaPilot/commit/2c9ee6760aa700ed951a065ce6cef9e4c7c0b13b)
+* Default go offroad in park (`ParkOffroad`) ON for Tesla when unset (https://github.com/Memberoffoxhound/TeslaPilot/commit/966b6dfd2eb5263bcfbfae59397c9e7c2d4929fa)
+* Includes MADS, Set Speed Assist, chestnut support, Tesla fingerprint fallback, and stalkless scroll-wheel cancel over 0.11.23
+
+Version 0.11.23: TeslaPilot Highland (2026-08-28)
+========================================
+Tesla fork on openpilot 0.11.2. Reports 0.11.23 to Connect. See README.md.
+
+* Auto lane change (off by default) with Tesla stock BSM and a slide-to-enable warning: rav4kumar / Jason Wen (sunnypilot)
+* Cooperative steering: dzid26 VTB; AmyJeanes Tesla native LKAS path
+* Stalkless scroll-wheel cancel: dkiiv, via dzid26's Tesla fork
+* Optional custom HUD: Tesla Autopilot-blue theme, compass
+* Today / Week home stats. Boot uses the JSON cache; parked fold fills history
+* Statistics widget (ring, weekly, monthly). Theme accents. WIP
+* LAN web GUI on :8089, always on: stats, screenshots, UI screen recording
+* 3s display-hold screenshots
+
+Version 0.11.12: TeslaPilot Highland (2026-08-22)
+========================================
+Connect-compatible version. Tesla fork on 0.11.12. See README.md.
+
+Version 0.11.2.1: DELAMAIN (2026-08-20)
+========================================
+Tesla Model 3 Highland fork on top of openpilot 0.11.2. See CHANGELOG.md.
+
+* Auto lane change (off by default) with Tesla stock BSM and a slide-to-enable warning
+* Theme: Tesla blue or comma green lane lines
+* Calibration card shows pitch, yaw, and roll
+* On-Air local Wi-Fi viewer (removed in 0.11.23)
+* White Tesla T boot mark; home wordmark DELAMAIN
+
+Version 0.11.4 (2026-XX-XX)
+========================
 * Autospeed
   * On supported cars, openpilot will intelligently decide what speed to drive based on the scene, including:
     * stopping at red lights, and going at green lights

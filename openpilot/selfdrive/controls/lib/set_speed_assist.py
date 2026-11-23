@@ -1,5 +1,5 @@
 """
-Set Speed Assist, from sunnypilot PR #2083 by Zeph Leggett (MIT).
+Set Speed Assist, ported from zoompilot (sunnypilot PR #2083), see LICENSE.zoompilot.
 https://github.com/sunnypilot/sunnypilot/pull/2083
 """
 import math
