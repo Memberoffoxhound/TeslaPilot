@@ -98,6 +98,10 @@ class DrivingLayoutMici(NavScroller):
     # Based on rav4kumar's implementation of Automatic Lane Change (sunnypilot).
     self._alc_btn = BigToggle("auto lane change", initial_state=ui_state.params.get_bool("AutoLaneChangeEnabled"),
                              toggle_callback=self._on_alc)
+    self._turn_desires_toggle = BigParamControl("turn desires", "TurnDesires",
+                                                description="Below 20 mph, a turn signal asks the model to turn.\n" +
+                                                            "Held at an inferred red light until stopped.\n" +
+                                                            "Lane changes still require 45 mph.")
     # Set Speed Assist, from sunnypilot (zephleggett). Only with openpilot longitudinal.
     self._ssa_toggle = BigParamControl("set speed assist", "SetSpeedAssist",
                                        description="Accelerate up to the set speed, or the following distance behind a lead,\n" +
@@ -161,6 +165,7 @@ class DrivingLayoutMici(NavScroller):
 
     self._scroller.add_widgets([
       self._alc_btn,
+      self._turn_desires_toggle,
       self._personality_toggle,
       self._ssa_toggle,
       self._braking_toggle,
@@ -180,6 +185,7 @@ class DrivingLayoutMici(NavScroller):
     # Toggle lists
     self._refresh_toggles = (
       ("AutoLaneChangeEnabled", self._alc_btn),
+      ("TurnDesires", self._turn_desires_toggle),
       ("SetSpeedAssist", self._ssa_toggle),
       ("Mads", self._mads_btn),
       (mads.MAIN_CRUISE, self._mads_main_cruise),
