@@ -33,8 +33,8 @@ def prompt(monkeypatch):
 def test_question_no_stock_continues(prompt):
   p, ui, stack = prompt
   assert p.tick()
-  assert stack[-1].title == "Are you on a Tesla?"
-  stack[-1].choices["No"]()
+  assert stack[-1].title == "are you on a tesla?"
+  stack[-1].choices["no"]()
   assert "Sorry" in stack[-1].text
   stack.pop()
   assert not p.tick()
@@ -47,11 +47,11 @@ def test_question_no_stock_continues(prompt):
 def test_yes_picker_review(prompt):
   p, ui, stack = prompt
   p.tick()
-  stack[-1].choices["Yes"]()
+  stack[-1].choices["yes"]()
   assert list(stack[-1].choices)[0].startswith("2026")
-  assert not any("Model X" in title for title in stack[-1].choices)
+  assert not any("model x" in title.lower() for title in stack[-1].choices)
   next(iter(stack[-1].choices.values()))()
-  assert list(stack[-1].choices) == ["This is my car"]
+  assert list(stack[-1].choices) == ["this is my car"]
 
 
 def test_route_end_cancels_and_no_reprompt(prompt):

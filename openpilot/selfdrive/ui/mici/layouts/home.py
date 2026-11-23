@@ -319,8 +319,8 @@ class MiciHomeLayout(Widget):
     self._date_label = UnifiedLabel("", font_size=36, text_color=GREY, font_weight=FontWeight.ROMAN, max_width=480, wrap_text=False)
     self._branch_label = UnifiedLabel("", font_size=36, text_color=GREY, font_weight=FontWeight.ROMAN, scroll=True)
     self._trip_at = 0.0
-    self._day_txt = ("Day", "0mi 0%")
-    self._week_txt = ("Week", "0mi 0%")
+    self._day_txt = ("day", "0mi 0%")
+    self._week_txt = ("week", "0mi 0%")
     self._trip_hit = rl.Rectangle(0, 0, 0, 0)
     self._on_stats_click: Callable | None = None
     self._ssa_on = False
@@ -331,6 +331,8 @@ class MiciHomeLayout(Widget):
     self._on_mads_click: Callable | None = None
     self._accel_hit = rl.Rectangle(0, 0, 0, 0)
     self._on_models_click: Callable | None = None
+    self._wake_pending = True  # greet on boot
+    self._wake_start: float | None = None
 
   def _update_state(self):
     self._refresh_trip()
@@ -341,13 +343,10 @@ class MiciHomeLayout(Widget):
       return
     self._trip_at = now
     t = tripstats.view(ui_state.params)
-    self._day_txt = ("Day", fmt_trip(t["today_m"], t["today_e"], ui_state.is_metric))
-    self._week_txt = ("Week", fmt_trip(t["week_m"], t["week_e"], ui_state.is_metric))
+    self._day_txt = ("day", fmt_trip(t["today_m"], t["today_e"], ui_state.is_metric))
+    self._week_txt = ("week", fmt_trip(t["week_m"], t["week_e"], ui_state.is_metric))
     self._ssa_on = ui_state.params.get_bool("SetSpeedAssist")
     self._mads_on = ui_state.mads_enabled
-
-    self._wake_pending = True  # greet on boot
-    self._wake_start: float | None = None
 
   def play_wake_animation(self):
     self._wake_pending = True
@@ -487,6 +486,12 @@ class MiciHomeLayout(Widget):
     self._body_icon.set_visible(bool(ui_state.is_body))
     self._ssa_icon.set_visible(self._ssa_on and bool(ui_state.has_longitudinal_control))
     self._mads_badge.set_visible(self._mads_on)
+
+    visible = [w for w in self._status_bar_layout.widgets if w.is_visible]
+    if len(visible) > 1:
+      has_alerts = bool(self._alert_count_callback and self._alert_count_callback() > 0)
+      right_limit = (self.rect.width - self._alerts_pill.rect.width - HOME_PADDING * 2) if has_alerts else (self.rect.width - HOME_PADDING * 2)
+      self._status_bar_layout._spacing = min(18, max(6, int((right_limit - sum(w.rect.width for w in visible)) // (len(visible) - 1))))
 
     footer_rect = rl.Rectangle(self.rect.x + HOME_PADDING, self.rect.y + self.rect.height - 48, self.rect.width - HOME_PADDING, 48)
     self._status_bar_layout.render(footer_rect)

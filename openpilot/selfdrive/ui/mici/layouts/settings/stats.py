@@ -22,9 +22,9 @@ LABEL = rl.Color(142, 142, 147, 255)
 DIM = rl.Color(100, 100, 100, 255)
 TRACK = rl.Color(42, 42, 48, 255)
 BAR = rl.Color(170, 170, 170, 255)
-WEEKDAYS_H = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
-MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
-          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+WEEKDAYS_H = ("sun", "mon", "tue", "wed", "thu", "fri", "sat")
+MONTHS = ("jan", "feb", "mar", "apr", "may", "jun",
+          "jul", "aug", "sep", "oct", "nov", "dec")
 
 
 def _unit_m() -> float:
@@ -150,9 +150,9 @@ class StatsEngageWidget(_StatsPage):
     lfont = gui_app.font(FontWeight.ROMAN)
     vfont = gui_app.font(FontWeight.BOLD)
     rows = (
-      ("Total Miles", _fmt_dist(v["life_m"]), WHITE),
-      ("Engaged", _fmt_dist(v["life_e"]), WHITE),
-      ("Longest streak", _fmt_dist(v["longest_m"], tenths=True), theme_color()),
+      ("total miles", _fmt_dist(v["life_m"]), WHITE),
+      ("engaged", _fmt_dist(v["life_e"]), WHITE),
+      ("longest streak", _fmt_dist(v["longest_m"], tenths=True), theme_color()),
     )
     gap_lv = 12.0
     for lab_sz, val_sz in ((36, 34), (36, 32), (34, 30), (32, 28)):
@@ -180,7 +180,7 @@ class StatsEngageWidget(_StatsPage):
     num = f"{pct}%"
     nfont = gui_app.font(FontWeight.DISPLAY)
     sfont = gui_app.font(FontWeight.BOLD)
-    sub = "Engaged"
+    sub = "engaged"
     nsz = 86
     nw = measure_text_cached(nfont, num, nsz)
     while nsz > 52 and nw.x > hole:
@@ -197,7 +197,7 @@ class StatsEngageWidget(_StatsPage):
     rl.draw_text_ex(sfont, sub, rl.Vector2(cx - sw.x / 2, ny + nw.y + 1), ssz, 0, LABEL)
 
     y = r.y + 8
-    title = f"{v['streak_days']} Day Streak"
+    title = f"{v['streak_days']} day streak"
     tw = measure_text_cached(vfont, title, lab_sz)
     rl.draw_text_ex(vfont, title, rl.Vector2(right - tw.x, y), lab_sz, 0, WHITE)
     y += 40
@@ -234,7 +234,7 @@ class StatsWeekHWidget(_StatsPage):
     r = self.rect
     pad = 12.0
     font_b = gui_app.font(FontWeight.BOLD)
-    rl.draw_text_ex(font_b, "Weekly Engaged", rl.Vector2(r.x + pad, r.y + 6), 36, 0, WHITE)
+    rl.draw_text_ex(font_b, "weekly engaged", rl.Vector2(r.x + pad, r.y + 6), 36, 0, WHITE)
     right = _fmt_pair(v["week_e"], v["week_m"])
     rw = measure_text_cached(font_b, right, 30)
     rl.draw_text_ex(font_b, right, rl.Vector2(r.x + r.width - 18 - rw.x, r.y + 10), 30, 0, WHITE)
@@ -249,7 +249,7 @@ class StatsHistoryHWidget(_StatsPage):
     r = self.rect
     pad = 12.0
     font_b = gui_app.font(FontWeight.BOLD)
-    rl.draw_text_ex(font_b, "Monthly Engaged", rl.Vector2(r.x + pad, r.y + 6), 36, 0, WHITE)
+    rl.draw_text_ex(font_b, "monthly engaged", rl.Vector2(r.x + pad, r.y + 6), 36, 0, WHITE)
     life = _fmt_pair(v["life_e"], v["life_m"])
     lw = measure_text_cached(font_b, life, 30)
     rl.draw_text_ex(font_b, life, rl.Vector2(r.x + r.width - 18 - lw.x, r.y + 10), 30, 0, WHITE)

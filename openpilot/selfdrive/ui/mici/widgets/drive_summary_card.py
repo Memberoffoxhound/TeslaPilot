@@ -77,8 +77,8 @@ class DriveSummaryCard:
     self._slots_w = -1.0
     self._runs: list[tuple[int, int, int]] = []
     self._n_buckets = 0
-    self._today = ("Day", "")
-    self._week = ("Week", "")
+    self._today = ("day", "")
+    self._week = ("week", "")
 
   def begin(self, last: bool = False) -> bool:
     """The trip just ended (last: the stored trip whose card never came up): True if the card is up."""
@@ -119,8 +119,8 @@ class DriveSummaryCard:
     self._slots_w = -1.0
     tl = str(drive.get("tl") or "")
     self._runs, self._n_buckets = tc.timeline_runs(tl), len(tl)
-    self._today = ("Day", fmt_trip(st["today_m"], st["today_e"], metric))
-    self._week = ("Week", fmt_trip(st["week_m"], st["week_e"], metric))
+    self._today = ("day", fmt_trip(st["today_m"], st["today_e"], metric))
+    self._week = ("week", fmt_trip(st["week_m"], st["week_e"], metric))
 
   def draw(self, x: float, y: float, w: float, h: float) -> None:
     rl.draw_rectangle(int(x), int(y), int(w), int(h), rl.BLACK)   # opaque, over the camera while parking

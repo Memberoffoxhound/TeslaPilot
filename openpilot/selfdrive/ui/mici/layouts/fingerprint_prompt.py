@@ -30,7 +30,7 @@ class FingerprintPrompt:
     if eligible and not self.asked:
       self.asked = True
       self.cp = cp.as_builder()
-      self.page = self._show("Are you on a Tesla?", [("Yes", self._pick), ("No", self._no)])
+      self.page = self._show("are you on a tesla?", [("yes", self._pick), ("no", self._no)])
     return self.active
 
   def _show(self, title, choices):
@@ -50,11 +50,11 @@ class FingerprintPrompt:
     gui_app.push_widget(self.page)
 
   def _pick(self):
-    self._show("Choose year and model", [(f"{year} {model}", lambda p=platform, y=year, m=model: self._review(p, y, m))
+    self._show("choose year and model", [(f"{year} {model.lower()}", lambda p=platform, y=year, m=model: self._review(p, y, m))
                                         for year, platform, model in catalog()])
 
   def _review(self, platform, year, model):
-    self._show(f"{year} Tesla {model}", [("This is my car", lambda: self._confirm(platform, model))])
+    self._show(f"{year} tesla {model.lower()}", [("this is my car", lambda: self._confirm(platform, model))])
 
   def _confirm(self, platform, model):
     page = NavScroller()
@@ -77,7 +77,7 @@ class FingerprintPrompt:
     gui_app.pop_widgets_to(self.parent, instant=True)
     self.page = ConfirmDialog("Fingerprint saved. Please wait in Park until the device restarts and goes onroad so your "
                               + f"Tesla {model} stays happy. Fingerprint sharing is coming later.",
-                              "Restart to apply", callback=self._restart)
+                              "restart to apply", callback=self._restart)
     gui_app.push_widget(self.page)
 
   @staticmethod

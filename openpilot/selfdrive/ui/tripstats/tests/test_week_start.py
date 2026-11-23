@@ -95,6 +95,6 @@ def test_statistics_rows_follow_the_week():
   if not any(common.glob("libparams_c.*")):                  # a tree without the built params library skips this
     pytest.skip("params library not built (libparams_c)")
   from openpilot.selfdrive.ui.mici.layouts.settings.stats import _week_labels
-  assert _week_labels(store.view(fresh(), at=at(2026, 10, 28, 12), first=MON)["week_days"])[::6] == ["Mon", "Sun"]
-  assert _week_labels(store.view(fresh(), at=at(2026, 10, 28, 12), first=SAT)["week_days"])[:2] == ["Sat", "Sun"]
-  assert _week_labels([{"m": 0.0}] * 7)[0] == "Sun"                   # mock rows without dates
+  assert _week_labels(store.view(fresh(), at=at(2026, 10, 28, 12), first=MON)["week_days"])[::6] == ["mon", "sun"]
+  assert _week_labels(store.view(fresh(), at=at(2026, 10, 28, 12), first=SAT)["week_days"])[:2] == ["sat", "sun"]
+  assert _week_labels([{"m": 0.0}] * 7)[0] == "sun"                   # mock rows without dates

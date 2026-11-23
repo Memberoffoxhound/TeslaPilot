@@ -104,7 +104,7 @@ class DrivingLayoutMici(NavScroller):
                                                    "when the driving model would drive slower. The model still decides when to slow down.\n" +
                                                    "Needs openpilot longitudinal control.")
     self._ssa_toggle.set_enabled(lambda: ui_state.has_longitudinal_control)
-    self._braking_toggle = BigMultiBoolParamToggle("Braking", "BrakingFirm", ["soft", "firm"],
+    self._braking_toggle = BigMultiBoolParamToggle("braking", "BrakingFirm", ["soft", "firm"],
                                                    description="Firm is the default. Cruise may slow more quickly to hold the set speed, down to -1.2 m/s².\n" +
                                                                "Soft eases off more gently, down to -0.5 m/s².\n" +
                                                                "Only with openpilot longitudinal control.")
@@ -141,7 +141,7 @@ class DrivingLayoutMici(NavScroller):
                                  description="Warn when you drift across a detected lane line.\n" +
                                              "Only above 31 mph (50 km/h), with no turn signal.")
     always_on_dm_toggle = BigParamControl("always-on driver monitor", "AlwaysOnDM", description="Monitor the driver even when openpilot is not engaged.")
-    enable_openpilot = BigParamControl("enable TeslaPilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback,
+    enable_openpilot = BigParamControl("enable teslapilot", "OpenpilotEnabledToggle", toggle_callback=restart_needed_callback,
                                        description="Enable to use TeslaPilot driver assistance.\n" +
                                                    "Disable to use your car's stock driver assistance.")
 
