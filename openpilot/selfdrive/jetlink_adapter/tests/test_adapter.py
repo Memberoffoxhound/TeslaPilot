@@ -147,8 +147,16 @@ def test_launch_draws_nothing_from_the_port_from_boot():
 def test_the_cable_counts_only_with_the_link_off(monkeypatch, cable, link, counted):
   from openpilot.common.hardware import usb
   monkeypatch.setattr(usb, 'cable_connected', lambda: cable)
+  monkeypatch.setattr(usb, 'usb_host_connected', lambda: False)
   monkeypatch.setattr(ja, 'link_on', lambda: link)
   assert ja.chestnut_cable() is counted
+
+
+def test_a_usb_host_is_never_a_chestnut_cable(monkeypatch):
+  from openpilot.common.hardware import usb
+  monkeypatch.setattr(usb, 'usb_host_connected', lambda: True)
+  monkeypatch.setattr(ja, 'link_on', lambda: False)
+  assert ja.chestnut_cable(True) is False
 
 
 def test_modeld_asks_the_adapter_about_the_cable():
@@ -161,20 +169,6 @@ def test_modeld_asks_the_adapter_about_the_cable():
   assert 'jetlink_adapter.attach(' in source
 
 
-def test_accel_mode(params_root):
-  params_root.mkdir(parents=True, exist_ok=True)
-  from openpilot.selfdrive.modeld.accel_keys import DEVICE_KEY
-  key = params_root / DEVICE_KEY
-  assert ja.accel_mode(chestnut=False) == 'none'
-  key.write_text('jetlink-ios')
-  assert ja.accel_mode(chestnut=False) == 'jetlink'
-  assert ja.accel_mode(chestnut=True) == 'chestnut'
-  key.write_text('chestnut')
-  assert ja.accel_mode(chestnut=False) == 'chestnut'
-  key.write_text('bogus')
-  assert ja.remembered() == 'none'
-
-
-def test_device_keys_declared():
+def test_picker_keys_removed():
   header = (ROOT / 'openpilot/common/params_keys.h').read_text()
-  assert '"AcceleratorDevice"' in header and '"AcceleratorAck"' in header
+  assert '"AcceleratorDevice"' not in header and '"AcceleratorAck"' not in header

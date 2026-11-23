@@ -18,7 +18,6 @@ from openpilot.common.markdown import parse_markdown
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.common.hardware import AGNOS, HARDWARE
-from openpilot.selfdrive.modeld.accel_keys import BIG_MODEL, DEVICE_KEY
 
 LOCK_FILE = os.getenv("UPDATER_LOCK_FILE", "/tmp/safe_staging_overlay.lock")
 STAGING_ROOT = os.getenv("UPDATER_STAGING_ROOT", "/data/safe_staging")
@@ -173,10 +172,9 @@ def init_overlay() -> None:
   cloudlog.info(f"git diff output:\n{git_diff}")
 
 
-def lfs_exclude(params) -> list[str]:
-  # the big model downloads only once an accelerator has been seen (launch's fetch_big_model)
-  dev = params.get(DEVICE_KEY) or "none"
-  return [] if dev == "chestnut" or dev.startswith("jetlink") else ["--exclude", BIG_MODEL]
+# the bundled big model is never pulled (zoompilot .lfsconfig); a chestnut downloads its model
+BIG_MODEL = "openpilot/selfdrive/modeld/models/big_driving_tinygrad.pkl"
+LFS_EXCLUDE = ["--exclude", BIG_MODEL]
 
 
 def finalize_update() -> None:
@@ -411,7 +409,7 @@ class Updater:
     # Only checkouts with LFS files need a client, so release updates don't depend on git-lfs
     if run(["git", "ls-files", ":(attr:filter=lfs)"], OVERLAY_MERGED):
       lfs = os.path.join(OVERLAY_MERGED, "tools/lfs.sh")
-      run([lfs, "pull", *lfs_exclude(self.params)] if os.path.isfile(lfs) else ["git", "lfs", "pull"], OVERLAY_MERGED)
+      run([lfs, "pull", *LFS_EXCLUDE] if os.path.isfile(lfs) else ["git", "lfs", "pull", *LFS_EXCLUDE], OVERLAY_MERGED)
 
     # TODO: show agnos download progress
     if AGNOS:

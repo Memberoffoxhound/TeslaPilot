@@ -102,5 +102,5 @@ def test_selfdrived_carries_the_lines():
   assert 'self.jetlink_events = JetlinkEvents()' in src
   assert 'self.jetlink_events.update(self.sm, self.enabled, self.events)' in src
   assert 'or self.jetlink_events.settling' in src
-  assert "*JetlinkEvents.OPTIONAL_PROCESSES" in src
+  assert "p.name not in JetlinkEvents.OPTIONAL_PROCESSES" in src
   assert DT_CTRL == 0.01

@@ -12,19 +12,8 @@ function fetch_updater {
   until [ "$(head -c 4 "$u" 2>/dev/null)" = $'\x7fELF' ]; do
     sleep $t; t=10
     echo "AGNOS updater is an LFS pointer, pulling"
-    # don't wait on the big model fetch_big_model is pulling
+    # the bundled big model stays a pointer; a chestnut downloads its model
     "$DIR/tools/lfs.sh" pull --exclude "$BIG_MODEL"
-  done
-}
-
-# pull the 767 MB big model in the background once hardwared has seen an accelerator; resumes across reboots
-function fetch_big_model {
-  local m="$DIR/$BIG_MODEL" d=/data/params/d/AcceleratorDevice t=0
-  while [ "$(head -c 7 "$m" 2>/dev/null)" = "version" ]; do
-    sleep $t; t=10
-    case "$(cat "$d" 2>/dev/null)" in
-      chestnut|jetlink-*) nice -n 19 "$DIR/scripts/fetch_big_model.py" || t=60 ;;
-    esac
   done
 }
 
@@ -114,7 +103,6 @@ function launch {
   if [ -f /AGNOS ]; then
     # with Jetlink on, draw nothing from its USB-C port from boot (docs/porting.md in jetlink)
     sudo -n bash jetlink/comma/jetlink-root.sh boot /data/params/d/JetlinkLink &
-    fetch_big_model &
     agnos_init
   fi
 

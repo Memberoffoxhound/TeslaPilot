@@ -89,5 +89,5 @@ def test_ui_does_not_guess_a_chestnut_from_a_cable():
   ui = (UI / 'ui_state.py').read_text()
   modeld = (UI.parent / 'modeld/modeld.py').read_text()
   assert 'chestnut_cable(self.usb_connected)' not in ui
-  assert "accel_mode(False) == 'chestnut'" in modeld
+  assert 'accel_mode' not in modeld
   assert 'jetlink_adapter.chestnut_cable()' in modeld

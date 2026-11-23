@@ -88,18 +88,3 @@ def test_tap_opens_models(probe):
   assert probe["none"]["clicks"] == []
   assert probe["gone"]["clicks"] == []
   assert not any(probe["gone"][k] for k in ("fill", "failed", "ready", "usb"))
-
-
-
-@pytest.mark.parametrize('mode,progress,info', [('chestnut', ('download', 0.4), 'downloading 40%'), ('chestnut', ('download', 0.0), 'downloading'),
-                                                ('chestnut', None, 'unavailable'), ('jetlink', ('download', 0.4), 'unavailable')])
-def test_models_page_shows_the_bundled_download(monkeypatch, mode, progress, info):
-  from types import SimpleNamespace
-  sys.modules.pop('openpilot.selfdrive.ui.mici.layouts.settings.models', None)
-  from openpilot.selfdrive.ui.mici.layouts.settings import models
-  ui = SimpleNamespace(accel_progress=progress, chestnut_state=SimpleNamespace(value='uncompiled'), chestnut_present=mode == 'chestnut',
-                       jetlink=SimpleNamespace())
-  monkeypatch.setattr(models, 'ui_state', ui)
-  monkeypatch.setattr(models, 'mp', SimpleNamespace(mode=lambda: mode, compile_progress=lambda: None, SMALL_MODEL='built-in',
-                                                    big_model_label=lambda: 'cinque terre'))
-  assert models.ModelsLayoutMici._model_info()[2] == info
