@@ -143,10 +143,12 @@ def tick(ui_state) -> None:
     sm = ui_state.sm
     started = bool(ui_state.started)
     v = engaged = False
+    ff = 0
     state, alert, alert_type = "", "normal", ""
     if started:
       cs = sm["carState"]
       v = max(0.0, float(cs.vEgo))
+      ff = int(getattr(cs, "canFilteredFaults", 0))
       if sm.recv_frame["selfdriveState"] >= ui_state.started_frame:
         ss = sm["selfdriveState"]
         engaged = bool(ss.enabled)
@@ -156,7 +158,7 @@ def tick(ui_state) -> None:
     if started and (not live.active or live.drive_id.startswith("t")) and now - _route_t > 1.0:
       _route_t = now
       route = params.get("CurrentRoute") or ""
-    done = live.update(started, now, wall_now(), float(v), engaged, state, alert, alert_type, route)
+    done = live.update(started, now, wall_now(), float(v), engaged, state, alert, alert_type, route, ff)
     if done is not None:
       _held.append(done)
     if _held and system_time_valid():     # a stale clock would date it on the wrong day: wait for a valid one

@@ -26,7 +26,8 @@ def card_columns(drive: dict, streak_days: int, metric: bool) -> list[tuple[str,
   dv, du = fmt_dist(m, metric)
   bv, bu = fmt_dist(best, metric)
   return [(dv, du, "driven"), (str(engaged_pct(e, m)), "%", "engaged"),
-          (bv, bu, "streak"), (str(int(streak_days)), "", "day streak")]
+          (bv, bu, "streak"), (str(int(streak_days)), "", "day streak"),
+          (str(int(drive.get("ff") or 0)), "", "filtered")]
 
 
 def column_slots(cols, avail: float, value_w, label_w, gap: float = COL_GAP) -> list[tuple[float, float, float]]:

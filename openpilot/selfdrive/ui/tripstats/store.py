@@ -57,7 +57,7 @@ def _day(k: str, v) -> list[float]:
 
 def _drive(d) -> dict:
   return {**d, "m": float(d["m"]), "e": float(d["e"]), "best_m": float(d.get("best_m") or 0),
-          "end": float(d["end"]), "off": int(d["off"]), "ok": bool(d.get("ok"))}
+          "end": float(d["end"]), "off": int(d["off"]), "ok": bool(d.get("ok")), "ff": int(d.get("ff") or 0)}
 
 
 def load(params) -> dict:

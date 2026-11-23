@@ -120,10 +120,11 @@ class DriveRecorder:
     self._off_wall = 0.0
     self.last_v = 0.0               # vEgo on the last onroad frame: a trip ends stopped
     self.shown = False              # its card was up
+    self.filtered_faults = 0
 
   def update(self, started: bool, now: float, wall: float, v_ego: float, enabled: bool,
              state: str = "", alert_status: str = "normal", alert_type: str = "",
-             drive_id: str = "") -> dict | None:
+             drive_id: str = "", filtered_faults: int = 0) -> dict | None:
     """Feed one frame. Returns the finished drive once offroad has lasted MERGE_S; shorter gaps
     (an onroad cycle is ~1 s) continue the same drive."""
     if started:
@@ -140,6 +141,7 @@ class DriveRecorder:
       dt = 0.0 if self._t is None else min(1.0, max(0.0, now - self._t))
       self._t = now
       self.last_v = v_ego
+      self.filtered_faults = max(self.filtered_faults, int(filtered_faults))
       d = v_ego * dt if v_ego > MOVING_V else 0.0
       self.m += d
       self.dur += dt
@@ -165,5 +167,5 @@ class DriveRecorder:
     return {
       "id": self.drive_id, "start": self.start_wall, "end": end_wall, "dur": round(self.dur, 1),
       "m": round(self.m, 1), "e": round(self.e, 1), "best_m": round(self.best_m, 1),
-      "tl": self.timeline.codes(), "shown": self.shown
+      "tl": self.timeline.codes(), "shown": self.shown, "ff": int(self.filtered_faults)
     }

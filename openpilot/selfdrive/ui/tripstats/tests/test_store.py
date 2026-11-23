@@ -137,7 +137,11 @@ def test_roundtrip_through_params_and_raw_file(tmp_path):
     p = Params(tmp_path, known)
     d = add(fresh(), drv(), wall(2026, 10, 29, 12))
     store.save(p, d)
-    assert store.load(p) == {**d, "open": []}
+    loaded = store.load(p)
+    if "last" in loaded:
+      assert loaded["last"].get("ff", 0) == int(d.get("last", {}).get("ff") or 0)
+      d = {**d, "last": {**d["last"], "ff": loaded["last"]["ff"]}}
+    assert loaded == {**d, "open": []}
 
 
 # -- device-local days, any zone -----------------------------------------------------------

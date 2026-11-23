@@ -189,9 +189,19 @@ def test_best_stretch_resets_on_every_engagement_and_record_keeps_best():
 
 def test_card_columns():
   cols = tc.card_columns(summary(m=6.78 * MI, best_m=1.21 * MI) | {"e": 0.81 * 6.78 * MI}, 4, metric=False)
-  assert cols == [("6.8", "mi", "driven"), ("81", "%", "engaged"), ("1.2", "mi", "streak"), ("4", "", "day streak")]
+  assert cols == [("6.8", "mi", "driven"), ("81", "%", "engaged"), ("1.2", "mi", "streak"), ("4", "", "day streak"),
+                  ("0", "", "filtered")]
+  assert tc.card_columns(summary(m=52 * MI, ff=3), 0, metric=False)[4] == ("3", "", "filtered")
   assert tc.card_columns(summary(m=52 * MI), 0, metric=False)[0] == ("52", "mi", "driven")
   assert tc.card_columns(summary(m=5000), 0, metric=True)[0] == ("5.0", "km", "driven")
+
+
+def test_recorder_tracks_filtered_faults():
+  rec = rc.DriveRecorder()
+  rec.update(True, 0.0, 1000.0, 10.0, True, filtered_faults=1)
+  rec.update(True, 0.1, 1000.1, 10.0, True, filtered_faults=3)
+  assert rec.summary(1000.2)["ff"] == 3
+  assert store.load(None) is not None
 
 
 def test_timeline_runs():

@@ -140,7 +140,7 @@ class DriveSummaryCard:
     draw_check_badge(bcx, y + HEAD_Y + HEAD_SIZE * 1.16 * 0.56, br, tc.accent_rgb())
 
     # Center each value and unit above its label.
-    vs, us, ls = VAL_SIZE, UNIT_SIZE, LBL_SIZE
+    vs, us, ls = (38, 20, 19) if len(self._cols) == 5 else (VAL_SIZE, UNIT_SIZE, LBL_SIZE)
     vy, ly = y + VAL_Y, y + LBL_Y
     if self._slots_w != w:
       self._slots_w = w
