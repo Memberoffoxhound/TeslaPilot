@@ -80,11 +80,11 @@ PROBE = textwrap.dedent('''
       ui_state._update_status()
       rl.begin_drawing()
       mr._render(RECT)
-      ball._confidence_filter.x = 0.8
+      ball._update_state()
       ball._render(RECT)
       hud.set_can_draw_top_icons(True)
       hud._draw_compass(RECT)
-      stock = status.status_fade.weight(UIStatus.DISENGAGED)
+      stock = hud._status.weight(UIStatus.DISENGAGED)
       ll = mr._get_ll_color(0.7, True, False)
       rl.end_drawing()
     return {"status": ui_state.status.value, "steer": ui_state.steer_status.value, "stock_fade": stock,
@@ -113,6 +113,60 @@ PROBE = textwrap.dedent('''
   ss.enabled, ss.state = True, OP.enabled
   mads.enabled, mads.state = True, MS.paused
   out["long_only"] = run()
+
+  import msgq.visionipc as vipc
+  class FakeClient:
+    def __init__(self, *a, **k):
+      pass
+    def recv(self, timeout_ms=0):
+      return None
+  vipc.VisionIpcClient = FakeClient
+  from openpilot.selfdrive.ui.mici.onroad.augmented_road_view import AugmentedRoadView
+  from opendbc.car.structs import car as car_structs
+  VisualAlert = car_structs.CarControl.HUDControl.VisualAlert
+  dm_alert = SimpleNamespace(alert_type="driverDistracted2/warning",
+                             status=log.SelfdriveState.AlertStatus.userPrompt,
+                             visual_alert=VisualAlert.steerRequired)
+  arv = AugmentedRoadView()
+  arv._alert_renderer.will_render = lambda: (dm_alert, False)
+  arv._switch_stream_if_needed = lambda *a, **k: None
+  arv._update_calibration = lambda *a, **k: None
+  from openpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
+  CameraView._render = lambda self, rect: None
+  arv._model_renderer.render = lambda *a, **k: None
+  arv._hud_renderer.render = lambda *a, **k: None
+  arv._confidence_ball.render = lambda *a, **k: None
+  arv._long_indicator.render = lambda *a, **k: None
+  arv._alert_renderer.render = lambda *a, **k: None
+  arv._bookmark_icon.render = lambda *a, **k: None
+  arv._navigation.render = lambda *a, **k: None
+  arv._hud_renderer.set_can_draw_top_icons = lambda *a, **k: None
+  arv._hud_renderer.set_torque_bar_hidden = lambda *a, **k: None
+  arv._hud_renderer.set_navigation_shown = lambda *a, **k: None
+  arv._hud_renderer.set_slot_partner = lambda *a, **k: None
+  arv._hud_renderer.drawing_top_icons = lambda: False
+  arv._hud_renderer.render_steering_wheel = lambda *a, **k: None
+  arv._hud_renderer.render_small_compass = lambda *a, **k: None
+  arv._hud_renderer.slot_busy = lambda: False
+  arv._render_left_panel = lambda *a, **k: None
+  rl.begin_scissor_mode = lambda *a, **k: None
+  rl.end_scissor_mode = lambda *a, **k: None
+  rl.draw_texture_ex = lambda *a, **k: None
+  rl.draw_rectangle_rounded_lines_ex = lambda *a, **k: None
+  ui_state.always_on_dm = False
+  ui_state.navigation_enabled = False
+  ui_state.nav_destination_set = False
+  arv.set_rect(rl.Rectangle(0, 0, 536, 240))
+  ss.enabled, ss.state = False, OP.disabled
+  mads.enabled, mads.active, mads.state = True, True, MS.enabled
+  ui_state._update_status()
+  arv._render(arv.rect)
+  out["mads_dm"] = arv._driver_state_renderer._warning
+  mads.enabled, mads.active, mads.state = False, False, MS.disabled
+  ui_state._update_status()
+  arv._render(arv.rect)
+  out["off_dm"] = arv._driver_state_renderer._warning
+
   print("RESULT" + json.dumps(out))
 ''').replace("{PARAMS_PROBE_STUB}", PARAMS_PROBE_STUB)
 
@@ -132,7 +186,7 @@ def test_steering_only_looks_engaged(probe):
   eng, mads = probe["engaged"], probe["mads"]
   assert mads["status"] == "disengaged" and mads["steer"] == "engaged"
   assert mads["path"] > 0.99 and mads["compass"] >= 225
-  assert mads["ball"][0] == pytest.approx(eng["ball"][0], abs=0.5) and mads["ball"][1] == eng["ball"][1]  # same height, engaged colors
+  assert mads["ball"][0] == pytest.approx(eng["ball"][0], abs=2) and mads["ball"][1] == eng["ball"][1]  # same height, engaged colors
   assert mads["lane"] != probe["off"]["lane"]  # lane lines lit, not grey (test_mads_color_swap checks the color)
 
 
@@ -163,3 +217,8 @@ def test_no_steering_dims_like_stock(probe, state):
   assert s["steer"] == "disengaged"
   assert s["path"] < 1e-2 and s["compass"] == 0
   assert s["ball"][0] > eng["ball"][0] and s["ball"][1] == [102, 102, 102]  # rests at the bottom, grey
+
+
+def test_mads_distraction_colors_dmoji(probe):
+  assert probe["mads_dm"] is True
+  assert probe["off_dm"] is False

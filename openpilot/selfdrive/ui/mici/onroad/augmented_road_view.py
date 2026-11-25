@@ -281,7 +281,7 @@ class AugmentedRoadView(CameraView):
     warning = showing and event not in UNCOLORED_ALERTS and (alert_to_render.status != log.SelfdriveState.AlertStatus.normal or
                                                              alert_to_render.visual_alert == VisualAlert.steerRequired)
     self._hud_renderer.set_wheel_critical_icon(warning and event not in DM_ALERTS)
-    self._driver_state_renderer.set_warning(warning and event in DM_ALERTS and (ui_state.status != UIStatus.DISENGAGED or ui_state.always_on_dm))
+    self._driver_state_renderer.set_warning(warning and event in DM_ALERTS and (ui_state.steer_status != UIStatus.DISENGAGED or ui_state.always_on_dm))
     # ball under the hud and alerts
     if not show_navigation:
       self._confidence_ball.set_hidden(alert_to_render is not None and not not_animating_out)
@@ -340,7 +340,6 @@ class AugmentedRoadView(CameraView):
       self._hud_renderer.render_small_compass(left_rect, top_ok)
     elif not show_navigation:
       self._long_indicator.set_should_draw(top_ok)
-      self._long_indicator.set_has_lead(ui_state.started and self._model_renderer.has_lead)
       self._long_indicator.render(left_rect)
     self._hud_renderer.render_steering_wheel(left_rect)
 

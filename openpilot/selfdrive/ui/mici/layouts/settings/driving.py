@@ -124,7 +124,8 @@ class DrivingLayoutMici(NavScroller):
                                                description="Between 20 and 31 mph, ask for a turn only if the model also forecasts one.\n" +
                                                            "Needs force turn desires on, a turn signal, and slowing down.")
     self._nav_turns_toggle = BigParamControl("navigation turns", "TurnDesiresNav",
-                                             description="When navigation has an upcoming turn, the matching turn signal asks the model to turn, below 31 mph.\n" +
+                                             description="When navigation has an upcoming turn, the matching turn signal "
+                                                         "asks the model to turn, below 31 mph.\n" +
                                                          "Needs force turn desires on.")
     self._turn_desires_on = self._turn_desires_toggle._checked
     self._model_turns_toggle.set_enabled(lambda: self._turn_desires_on)
