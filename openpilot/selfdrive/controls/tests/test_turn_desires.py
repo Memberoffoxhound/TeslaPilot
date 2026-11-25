@@ -23,7 +23,7 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.controls.lib import auto_lane_change as alc
 from openpilot.selfdrive.controls.lib import desire_helper as dh
 from openpilot.selfdrive.controls.lib.turn_intent import TurnIntent
-from openpilot.selfdrive.controls.lib.signal_turn import CONFIRM_NS, SignalTurnEvidence
+from openpilot.selfdrive.controls.lib.signal_turn import CONFIRM_NS, MAX_AGE_NS, SignalTurnEvidence
 
 
 def _cs(v_ego=5.0, left=False, right=False, standstill=False, a_ego=-1.0,
@@ -66,6 +66,7 @@ class FakeSM:
     }
     self.valid = {k: valid for k in self._d}
     self.alive = {k: valid for k in self._d}
+    self.seen = {k: True for k in self._d}
 
   def __getitem__(self, key):
     return self._d[key]
@@ -269,3 +270,111 @@ def test_select_does_not_override_lane_change():
   intent = _intent(force=True)
   sm = FakeSM(_cs(v_ego=5.0, right=True), _cc())
   assert intent.select(sm, 1, log.Desire.laneChangeRight) == log.Desire.laneChangeRight
+
+
+def test_nav_should_stop_flicker_holds():
+  intent = _intent(force=True, nav=True)
+  nav = _nav(modifier="right", distance=40.0)
+  v = 25.0 * CV.MPH_TO_MS
+  sm = FakeSM(_cs(v_ego=v, right=True), _cc(), plan=_plan(True), nav=nav)
+  assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
+  assert intent.signal_stop_hold
+  sm = FakeSM(_cs(v_ego=v, right=True), _cc(), plan=_plan(False), nav=nav)
+  assert intent.select(sm, 2, log.Desire.none) == log.Desire.none
+  assert intent.signal_stop_hold
+  sm = FakeSM(_cs(v_ego=0.0, right=True, standstill=True), _cc(), plan=_plan(True), nav=nav)
+  assert intent.select(sm, 3, log.Desire.none) == log.Desire.none
+  assert not intent.signal_stop_hold
+  sm = FakeSM(_cs(v_ego=v, right=True), _cc(), plan=_plan(False), nav=nav)
+  assert intent.select(sm, 4, log.Desire.none) == log.Desire.turnRight
+
+
+def test_stop_hold_clears_on_disengage():
+  intent = _intent(force=True)
+  sm = FakeSM(_cs(v_ego=5.0, right=True), _cc(), plan=_plan(True))
+  assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
+  assert intent.signal_stop_hold
+  sm = FakeSM(_cs(v_ego=5.0), _cc(lat_active=False), plan=_plan(False))
+  assert intent.select(sm, 2, log.Desire.none) == log.Desire.none
+  assert not intent.signal_stop_hold
+  sm = FakeSM(_cs(v_ego=5.0, right=True), _cc())
+  assert intent.select(sm, 3, log.Desire.none) == log.Desire.turnRight
+
+
+def test_stop_hold_clears_above_20_mph_when_blinker_off():
+  intent = _intent(force=True, model_confirm=False)
+  sm = FakeSM(_cs(v_ego=5.0, right=True), _cc(), plan=_plan(True))
+  assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
+  assert intent.signal_stop_hold
+  v = 25.0 * CV.MPH_TO_MS
+  sm = FakeSM(_cs(v_ego=v, right=True), _cc(), plan=_plan(False))
+  assert intent.select(sm, 2, log.Desire.none) == log.Desire.none
+  assert intent.signal_stop_hold
+  sm = FakeSM(_cs(v_ego=v), _cc(), plan=_plan(False))
+  assert intent.select(sm, 3, log.Desire.none) == log.Desire.none
+  assert not intent.signal_stop_hold
+  sm = FakeSM(_cs(v_ego=5.0, right=True), _cc())
+  assert intent.select(sm, 4, log.Desire.none) == log.Desire.turnRight
+
+
+def test_hazards_clear_hold_and_do_not_fire():
+  intent = _intent(force=True)
+  sm = FakeSM(_cs(v_ego=5.0, right=True), _cc(), plan=_plan(True))
+  assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
+  assert intent.signal_stop_hold
+  sm = FakeSM(_cs(v_ego=5.0, left=True, right=True), _cc())
+  assert intent.select(sm, 2, log.Desire.none) == log.Desire.none
+  assert not intent.signal_stop_hold
+  sm = FakeSM(_cs(v_ego=5.0, right=True), _cc())
+  assert intent.select(sm, 3, log.Desire.none) == log.Desire.turnRight
+
+
+def test_parent_off_blocks_child_toggles():
+  intent = _intent(force=False, model_confirm=True, nav=True)
+  nav = _nav(modifier="right", distance=40.0)
+  sm = FakeSM(_cs(v_ego=5.0, right=True), _cc(), nav=nav)
+  assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
+  sm = FakeSM(_cs(v_ego=25.0 * CV.MPH_TO_MS, right=True, a_ego=-1.0), _cc(), nav=nav)
+  assert intent.select(sm, 2, log.Desire.none) == log.Desire.none
+  assert not intent.signal_stop_hold
+
+
+def test_v_ego_at_or_below_0_1_does_not_fire():
+  intent = _intent(force=True, nav=True)
+  nav = _nav(modifier="right", distance=40.0)
+  for v in (0.0, 0.05, 0.1):
+    sm = FakeSM(_cs(v_ego=v, right=True), _cc(), nav=nav)
+    assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
+  sm = FakeSM(_cs(v_ego=0.2, right=True), _cc(), nav=nav)
+  assert intent.select(sm, 2, log.Desire.none) == log.Desire.turnRight
+
+
+def test_steer_fault_and_stale_carstate_block():
+  intent = _intent(force=True)
+  cs = _cs(v_ego=5.0, right=True)
+  cs.steerFaultTemporary = True
+  assert intent.select(FakeSM(cs, _cc()), 1, log.Desire.none) == log.Desire.none
+  sm = FakeSM(_cs(v_ego=5.0, right=True), _cc())
+  sm.valid["carState"] = False
+  assert intent.select(sm, 2, log.Desire.none) == log.Desire.none
+
+
+def test_observe_gated_and_evidence_expiry():
+  intent = _intent(force=True, model_confirm=False)
+  v = 25.0 * CV.MPH_TO_MS
+  cs = _cs(v_ego=v, right=True, a_ego=-1.0)
+  sm = FakeSM(cs, _cc())
+  assert not intent.observe(sm, _model(), model_ns=1, now_ns=1)
+  assert not intent.signal_model.ready
+
+  intent = _intent(force=True, model_confirm=True)
+  ev = intent.signal_model
+  ev.observe(cs, _cc(), _model(), model_ns=1_000_000, now_ns=1_000_000, plan=_plan(False))
+  ev.observe(cs, _cc(), _model(), model_ns=1_000_000 + CONFIRM_NS, now_ns=1_000_000 + CONFIRM_NS, plan=_plan(False))
+  now = 1_000_000 + CONFIRM_NS
+  assert ev.ready
+  assert ev.current(cs, _cc(), _plan(False), now_ns=now)
+  assert not ev.current(cs, _cc(), _plan(False), now_ns=now + MAX_AGE_NS + 1)
+  # model shouldStop resets evidence
+  ev.observe(cs, _cc(), _model(should_stop=True), model_ns=now, now_ns=now, plan=_plan(False))
+  assert not ev.ready
