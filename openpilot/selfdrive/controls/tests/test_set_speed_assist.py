@@ -11,7 +11,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
-from openpilot.selfdrive.controls.lib.longitudinal_planner import ACCEL_BOOST, J_CRUISE_BP, J_CRUISE_VALS, LongitudinalPlanner, LongitudinalPlanSource
+from openpilot.selfdrive.controls.lib.longitudinal_planner import ACCEL_BOOST, LongitudinalPlanner, LongitudinalPlanSource
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib import set_speed_assist as ssa
 from openpilot.selfdrive.controls.lib.set_speed_assist import SetSpeedAssist
@@ -20,10 +20,9 @@ T_IDXS = np.asarray(ModelConstants.T_IDXS)
 V_EGO = 20.
 A_FLOOR = 0.5
 V_CRUISE_MS = V_EGO + 5.
-RISE = float(np.interp(V_EGO, J_CRUISE_BP, J_CRUISE_VALS))
-SETTLE = int(2. / (J_CRUISE_VALS[-1] * DT_MDL)) + 10
+SETTLE = round(2. / (ssa.RISE_JERK * DT_MDL)) + 10
 STANDARD = log.LongitudinalPersonality.standard
-FAR = 40.  # m/s under the target: the root is past every ceiling
+FAR = 80.  # m/s under the target: the root is past every ceiling
 
 
 def car_params(op_long=True):
@@ -94,12 +93,32 @@ class TestSetSpeedAssist(OpenpilotTestCase):
     assert run(ctl, SETTLE, build_sm(), a_model=0.1) == 0.1
     assert not ctl.enabled and ctl.lift == 0.
 
-  def test_rises_at_the_cruise_jerk_to_the_floor(self, assist):
+  @parameterized.expand([
+    (lambda t: 1.5,),
+    (lambda t: min(1.0 * t, 0.8),),
+  ], names=["floor"])
+  def test_lifted_candidate_rises_on_comfort_jerk(self, assist, floor):
     sm = build_sm()
-    lifts = [run(assist, 1, sm) for _ in range(SETTLE)]
-    assert np.isclose(lifts[0], RISE * DT_MDL)
-    assert max(np.diff([0.] + lifts)) <= RISE * DT_MDL + 1e-9
-    assert np.isclose(lifts[-1], A_FLOOR)
+    out = [run(assist, 1, sm, a_floor=floor(i * DT_MDL)) for i in range(SETTLE)]
+    assert out[0] == 0.
+    assert max(np.diff(out)) <= ssa.RISE_JERK * DT_MDL + 1e-9
+    second = round(1. / DT_MDL)
+    assert np.isclose(out[second], ssa.RISE_JERK * second * DT_MDL, atol=2 * ssa.RISE_JERK * DT_MDL)
+    assert np.isclose(out[-1], floor(SETTLE * DT_MDL))
+
+  def test_lift_takes_up_the_models_wander(self, assist):
+    sm = build_sm()
+    run(assist, SETTLE, sm)
+    assert np.isclose(run(assist, 1, sm, a_model=ssa.GAIN_BP[1]), A_FLOOR)
+    assert np.isclose(assist.lift, A_FLOOR - ssa.GAIN_BP[1])
+
+  def test_models_own_acceleration_is_never_held_back(self, assist):
+    sm = build_sm()
+    lifts = []
+    for a_model in np.arange(0., 1.5, 1.0 * DT_MDL):
+      assert run(assist, 1, sm, a_model=a_model, a_floor=1.5) >= a_model
+      lifts.append(assist.lift)
+    assert max(lifts) <= ssa.RISE_JERK * DT_MDL + 1e-9
 
   @parameterized.expand([(0.7, A_FLOOR, 0.7), (0.2, -0.3, 0.2), (-1.5, A_FLOOR, -1.5)], names=["a_model", "a_floor", "expected"])
   def test_never_lowers_the_model(self, assist, a_model, a_floor, expected):
@@ -194,19 +213,29 @@ class TestSetSpeedAssist(OpenpilotTestCase):
       assert np.isclose(ssa.approach_accel(v, v + FAR, STANDARD), ceiling)
     assert ssa.approach_accel(V_EGO, V_EGO + 1., STANDARD) < 0.42  # CX-5 5>4 kickdown at highway speed
 
-  def test_approach_asks_nothing_at_or_over_the_target(self):
+  def test_approach_pulls_back_over_the_target(self):
     for personality in (log.LongitudinalPersonality.relaxed, STANDARD, log.LongitudinalPersonality.aggressive):
       for v in ssa.APPROACH_BP:
         for over in (0., 0.5, 5.):
-          assert ssa.approach_accel(v + over, v, personality) == 0.
+          assert np.isclose(ssa.approach_accel(v + over, v, personality), -over)
+
+  def test_approach_settles_on_the_gap_near_the_target(self):
+    for gap in (0.01, 0.05):
+      for v in ssa.APPROACH_BP:
+        assert np.isclose(ssa.approach_accel(v - gap, v, STANDARD), gap)
+    assert np.isclose(ssa.approach_accel(V_EGO - 0.2, V_EGO, STANDARD), np.sqrt(2. * ssa.APPROACH_JERK_V[-1] * 0.2))
+
+  def test_approach_is_brisker_in_town(self):
+    town, highway = (ssa.approach_accel(v, v + 5., STANDARD) for v in (8., 20.))
+    assert highway < 0.6 < town < np.interp(8., ssa.APPROACH_BP, ssa.APPROACH_V)
 
   def test_approach_is_continuous_at_the_target(self):
     step = 1e-3
     gaps = np.linspace(-1., 10., 11001)
     paces = np.array([ssa.approach_accel(15. - g, 15., STANDARD) for g in gaps])
     assert all(np.diff(paces) >= 0.)
-    assert max(np.diff(paces)) <= np.sqrt(2 * ssa.APPROACH_JERK * step) + 1e-9
-    assert paces[gaps <= 0.].max() == 0.
+    assert max(np.diff(paces)) <= np.sqrt(2 * ssa.APPROACH_JERK_V[0] * step) + 1e-9
+    assert ssa.approach_accel(15., 15., STANDARD) == 0.
 
   def test_approach_follows_the_personality(self):
     relaxed_p, standard_p, aggressive_p = (personality_raw(n) for n in ('relaxed', 'standard', 'aggressive'))
