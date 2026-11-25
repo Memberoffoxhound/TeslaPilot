@@ -345,7 +345,7 @@ def main(demo=False):
   pub_socks = ["modelV2", "drivingModelData", "cameraOdometry"] + (["chestnutGpuState"] if CHESTNUT else [])
   pm = PubMaster(pub_socks)
   sm = SubMaster(["deviceState", "carState", "narrowRoadCameraState", "extrinsicsCalibration", "driverMonitoringState",
-                  "carControl", "controlsState", "lateralDelay", "radarState", "longitudinalPlan", "navInstruction"])
+                  "carControl", "controlsState", "lateralDelay", "longitudinalPlan", "navInstruction"])
 
   publish_state = PublishState()
   params = Params()
