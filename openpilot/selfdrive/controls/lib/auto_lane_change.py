@@ -17,6 +17,7 @@ class AutoLaneChangeController:
     self.param_read_counter = 0
     self.prev_brake_pressed = False
     self.auto_lane_change_allowed = False
+    self.lane_change_blocked = False
     self.prev_lane_change = False
     self.read_params()
 
@@ -33,6 +34,7 @@ class AutoLaneChangeController:
        self.DH.lane_change_direction == log.LaneChangeDirection.none:
       self.lane_change_wait_timer = 0.0
       self.prev_brake_pressed = False
+      self.lane_change_blocked = False
       self.prev_lane_change = False
 
   def update_lane_change(self, blindspot_detected: bool, brake_pressed: bool):
@@ -47,6 +49,8 @@ class AutoLaneChangeController:
       and not self.prev_lane_change
       and self.lane_change_wait_timer > START_DELAY
     )
+    # In auto mode one blinker is one lane: block wheel torque until blinker cycles.
+    self.lane_change_blocked = blindspot_detected or (self.enabled and self.prev_lane_change)
 
   def update_state(self):
     if self.DH.lane_change_state == log.LaneChangeState.laneChangeStarting:
