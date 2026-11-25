@@ -48,10 +48,6 @@ class StatusFade:
     return rl.Color(*np.round(rgba).astype(int).tolist())
 
 
-status_fade = StatusFade(0.1)
-# MADS steering alone counts as engaged: path, lane lines, confidence ball, compass
-steer_fade = StatusFade(0.1, "steer_status")
-
 
 def openpilot_available() -> bool:
   """Whether openpilot could drive right now. The path and lead bars only show while it could.

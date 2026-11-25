@@ -49,7 +49,7 @@ class ConfidenceBall(Widget):
   def _update_state(self):
     # rests at the bottom while disengaged
     predictions = ui_state.sm['modelV2'].meta.disengagePredictions
-    self._confidence_filter.update(ui_state.status != UIStatus.DISENGAGED and
+    self._confidence_filter.update(ui_state.steer_status != UIStatus.DISENGAGED and
                                    (1 - max(predictions.brakeDisengageProbs or [1])) * (1 - max(predictions.steerOverrideProbs or [1])))
 
   def _render(self, _):

@@ -1,8 +1,8 @@
 import math
+import numpy as np
 import raylib_nb as rl
 from dataclasses import dataclass
 from openpilot.common.constants import CV
-import numpy as np
 from openpilot.selfdrive.ui.mici.onroad import DIMMED_ICON_ALPHA, glow_highlight_texture
 from openpilot.selfdrive.ui.mici.onroad.status import StatusFade, lerp_color
 from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar
@@ -423,7 +423,7 @@ class HudRenderer(Widget):
     rotation = -ui_state.sm['carState'].steeringAngleDeg * self._wheel_angle_filter.update(ui_state.started and ui_state.received_since_started('carState'))
 
     hits_max = self._nav_shown and self._nav_wheel_hits_max(pos_x, pos_y)
-    hide_wheel = self._nav_shown and ((self._slot_want and not self._show_wheel_critical) or hits_max)
+    hide_wheel = self._nav_shown and ((self._slot_want and critical < 0.5) or hits_max)
     wheel_fade = self._wheel_alpha_filter.update(0.0 if hide_wheel else 1.0)
     disengaged_w = (self._steer_status if mads_active else self._status).weight(UIStatus.DISENGAGED)
     alpha = 255 * (1 - (1 - DIMMED_ICON_ALPHA) * disengaged_w) * wheel_fade
@@ -436,9 +436,9 @@ class HudRenderer(Widget):
                             rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(wheel_color.r, wheel_color.g, wheel_color.b, int(alpha)))
         rl.draw_texture_pro(self._txt_wheel_highlight, rl.Rectangle(0, 0, wheel_txt.width, wheel_txt.height),
                             rl.Rectangle(pos_x, pos_y, wheel_txt.width, wheel_txt.height),
-                            rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(255, 255, 255, int(alpha * engaged)))
+                            rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(255, 255, 255, int(alpha * max(engaged, critical))))
 
-    gpu_alpha = self._chestnut_alpha_filter.x if (self._nav_shown and not self._show_wheel_critical and not hits_max) else 0.0
+    gpu_alpha = self._chestnut_alpha_filter.x if (self._nav_shown and critical < 0.5 and not hits_max) else 0.0
     if gpu_alpha >= 1e-2 and self._chestnut_icon is not None:
       icon = self._chestnut_icon
       gx, gy = pos_x - icon.width / 2, pos_y - icon.height / 2
@@ -516,7 +516,6 @@ class HudRenderer(Widget):
       return
     ts = measure_text_cached(self._font_bold, letter, NAV_LETTER_SIZE)
     rl.draw_text_ex(self._font_bold, letter, rl.Vector2(cx - ts.x / 2, cy - ts.y / 2), NAV_LETTER_SIZE, 0, rl.Color(255, 255, 255, a))
-
 
   def _draw_set_speed(self, rect: rl.Rectangle) -> None:
     """Draw the MAX speed indicator box."""
