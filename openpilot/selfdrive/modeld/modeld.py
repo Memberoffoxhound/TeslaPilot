@@ -499,11 +499,8 @@ def main(demo=False):
       l_lane_change_prob = desire_state[log.Desire.laneChangeLeft]
       r_lane_change_prob = desire_state[log.Desire.laneChangeRight]
       lane_change_prob = l_lane_change_prob + r_lane_change_prob
-      turn_intent.signal_model.observe(
-        sm["carState"], sm["carControl"], modelv2_send.modelV2,
-        model_ns=now_ns, now_ns=now_ns,
-        plan=sm["longitudinalPlan"] if sm.seen["longitudinalPlan"] else None,
-        lane_change_state=DH.lane_change_state)
+      turn_intent.observe(sm, modelv2_send.modelV2, model_ns=now_ns, now_ns=now_ns,
+                          lane_change_state=DH.lane_change_state)
       DH.update(sm['carState'], sm['carControl'].latActive, lane_change_prob)
       modelv2_send.modelV2.meta.laneChangeState = DH.lane_change_state
       modelv2_send.modelV2.meta.laneChangeDirection = DH.lane_change_direction

@@ -115,6 +115,7 @@ class DrivingLayoutMici(NavScroller):
                              toggle_callback=self._on_alc)
     self._turn_desires_header = _SectionLabel("turn desires")
     self._turn_desires_toggle = BigParamControl("force turn desires", "TurnDesires",
+                                                toggle_callback=self._on_turn_desires,
                                                 description="With the turn signal on below 20 mph, ask the model to turn.\n" +
                                                             "Clears when the signal turns off.\n" +
                                                             "Blocked by a blind spot or a planned stop until you are stopped.\n" +
@@ -125,8 +126,9 @@ class DrivingLayoutMici(NavScroller):
     self._nav_turns_toggle = BigParamControl("navigation turns", "TurnDesiresNav",
                                              description="When navigation has an upcoming turn, the matching turn signal asks the model to turn, below 31 mph.\n" +
                                                          "Needs force turn desires on.")
-    self._model_turns_toggle.set_enabled(lambda: ui_state.params.get_bool("TurnDesires"))
-    self._nav_turns_toggle.set_enabled(lambda: ui_state.params.get_bool("TurnDesires"))
+    self._turn_desires_on = self._turn_desires_toggle._checked
+    self._model_turns_toggle.set_enabled(lambda: self._turn_desires_on)
+    self._nav_turns_toggle.set_enabled(lambda: self._turn_desires_on)
     # Set Speed Assist, from sunnypilot (zephleggett). Only with openpilot longitudinal.
     self._ssa_toggle = BigParamControl("set speed assist", "SetSpeedAssist",
                                        description="Accelerate up to the set speed, or the following distance behind a lead,\n" +
@@ -269,6 +271,9 @@ class DrivingLayoutMici(NavScroller):
     screen_button = mads.SCREEN_BUTTONS.index(self._mads_screen.value)
     self._mads_visible = mads.visible_options(brand, ui_state.cp_sp_flags, screen_button, car_flags, fingerprint)
 
+  def _on_turn_desires(self, state: bool):
+    self._turn_desires_on = bool(state)
+
   def _on_mads(self, state: bool):
     if state:
       self._mads_btn.set_checked(False)
@@ -300,6 +305,7 @@ class DrivingLayoutMici(NavScroller):
     # Refresh toggles from params to mirror external changes
     for key, item in self._refresh_toggles:
       item.set_checked(ui_state.params.get_bool(key))
+    self._turn_desires_on = self._turn_desires_toggle._checked
     self._step_aside_btn.set_checked(tesla_step_aside.enabled(ui_state.params))
     self._park_offroad_btn.set_checked(park_offroad.enabled(ui_state.params))
 
