@@ -1,10 +1,10 @@
 import math
-import numpy as np
 import raylib_nb as rl
 from dataclasses import dataclass
 from openpilot.common.constants import CV
-from openpilot.selfdrive.ui.mici.onroad import DIMMED_ICON_ALPHA
-from openpilot.selfdrive.ui.mici.onroad.status import STATUS_FADE_RC, lerp_color, status_fade, steer_fade
+import numpy as np
+from openpilot.selfdrive.ui.mici.onroad import DIMMED_ICON_ALPHA, glow_highlight_texture
+from openpilot.selfdrive.ui.mici.onroad.status import StatusFade, lerp_color
 from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus, ChestnutState
 from openpilot.selfdrive.ui.mici.widgets.fill_icon import draw_progress
@@ -62,34 +62,6 @@ def _texture(rgba: np.ndarray, px: float) -> rl.Texture:
   rl.set_texture_filter(texture, rl.TextureFilter.TEXTURE_FILTER_BILINEAR)
   texture.width, texture.height = round(rgba.shape[1] / px), round(rgba.shape[0] / px)
   return texture
-
-
-def _wheel_effect_textures(asset: str, size: int) -> tuple[rl.Texture, rl.Texture]:
-  """White glow and center highlight for the wheel, matching the design's render. Tint the glow when drawing."""
-  image = gui_app._load_image_from_path((ASSETS_DIR / asset).as_posix(), size, size)
-  w, h, px = image.width, image.height, image.width / size
-  alpha = np.frombuffer(image.to_bytes(w * h * 4), dtype=np.uint8).reshape(h, w, 4)[..., 3] / 255.0
-  rl.unload_image(image)
-
-  # glow: Figma's drop shadow (blur 24 at 128px) renders as a gaussian with sigma 10, its spread is ignored on vectors
-  sigma = 10 * size / 128 * px
-  pad = math.ceil(3 * sigma)
-  glow = np.pad(alpha, pad)
-  x = np.arange(-pad, pad + 1)
-  kernel = np.exp(-x ** 2 / (2 * sigma ** 2))
-  kernel /= kernel.sum()
-  for axis in (0, 1):
-    glow = np.apply_along_axis(np.convolve, axis, glow, kernel, mode='same')
-  glow_rgba = np.full((*glow.shape, 4), 255, dtype=np.uint8)
-  glow_rgba[..., 3] = np.clip(glow * 255, 0, 255)
-
-  # highlight: the fill is a radial gradient from 35% lighter at the center to the base color at the rim
-  yy, xx = np.mgrid[:h, :w]
-  r = np.hypot(xx + 0.5 - w / 2, yy + 0.5 - h / 2) / (w / 2)
-  highlight_rgba = np.full((h, w, 4), 255, dtype=np.uint8)
-  highlight_rgba[..., 3] = np.clip(alpha * 89 * (1 - r), 0, 255)
-
-  return _texture(glow_rgba, px), _texture(highlight_rgba, px)
 
 
 def _wheel_part_textures(asset: str, size: int) -> tuple[rl.Texture, rl.Texture]:
@@ -228,7 +200,7 @@ class HudRenderer(Widget):
     self._torque_bar = TorqueBar()
 
     self._txt_wheel: rl.Texture = gui_app.texture('icons_mici/wheel.png', WHEEL_SIZE, WHEEL_SIZE)
-    self._txt_wheel_glow, self._txt_wheel_highlight = _wheel_effect_textures('icons_mici/wheel.png', WHEEL_SIZE)
+    self._txt_wheel_highlight = glow_highlight_texture('icons_mici/wheel.png', WHEEL_SIZE)
     self._txt_wheel_rim, self._txt_wheel_hub = _wheel_part_textures('icons_mici/wheel.png', WHEEL_SIZE)
     self._txt_chestnut: rl.Texture = gui_app.texture('icons_mici/chestnut.png', 48, 36)
     self._txt_chestnut_green: rl.Texture = gui_app.texture('icons_mici/chestnut_green.png', 48, 36)
@@ -242,7 +214,10 @@ class HudRenderer(Widget):
     self._heading_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps, initialized=False)
     # small fades like the long indicator, large like MAX
     self._compass_fade = (FirstOrderFilter(0.0, 0.05, 1 / gui_app.target_fps), FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps))
-    self._wheel_critical_filter = FirstOrderFilter(0, STATUS_FADE_RC, 1 / gui_app.target_fps)
+    self._status = StatusFade(0.1)
+    self._steer_status = StatusFade(0.1, "steer_status")
+    self._wheel_critical_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps)
+    self._wheel_angle_filter = FirstOrderFilter(0, 0.1, 1 / gui_app.target_fps)
 
     self._set_speed_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
     self._set_speed_alpha = 0.0
@@ -365,7 +340,7 @@ class HudRenderer(Widget):
     elif state == ChestnutState.ACTIVE:
       icon = self._txt_chestnut_green
       # custom ui: dims disengaged like the wheel
-      opacity = 1 - (1 - DIMMED_ICON_ALPHA) * status_fade.weight(UIStatus.DISENGAGED) if custom else 1.0
+      opacity = 1 - (1 - DIMMED_ICON_ALPHA) * self._status.weight(UIStatus.DISENGAGED) if custom else 1.0
     else:
       self._slot_want, self._chestnut_alpha_filter.x = False, 0.0
       return
@@ -429,14 +404,13 @@ class HudRenderer(Widget):
     return r - 10 - icon.width, b - 10 - icon.height
 
   def _draw_steering_wheel(self, rect: rl.Rectangle) -> None:
-    # The wheel is the source of truth for engagement: green if and only if openpilot is engaged.
-    # When disengaged it's grayed out, except for steerRequired alerts which show it orange.
-    critical = self._wheel_critical_filter.update(self._show_wheel_critical)
-    idle_color = lerp_color(WHEEL_WHITE, WHEEL_ORANGE, critical)
+    mads = ui_state.sm['selfdriveStateSP'].mads
+    mads_active = ui_state.started and mads.enabled and mads.active and not ui_state.engaged
+    engaged = self._status.weight(UIStatus.ENGAGED)
+    critical = self._wheel_critical_filter.update(self._show_wheel_critical) * (1.0 if mads_active else engaged)
     green = rl.Color(*THEME_TESLA_RGB, 255) if tesla_theme() else WHEEL_GREEN
-    wheel_color = status_fade.color({UIStatus.ENGAGED: green, UIStatus.OVERRIDE: idle_color, UIStatus.DISENGAGED: idle_color})
-    engaged = status_fade.weight(UIStatus.ENGAGED)
-    glow = engaged + (1 - engaged) * critical
+    status_color = self._status.color({UIStatus.ENGAGED: green, UIStatus.OVERRIDE: WHEEL_WHITE, UIStatus.DISENGAGED: WHEEL_WHITE})
+    wheel_color = lerp_color(status_color, WHEEL_ORANGE, critical)
     wheel_txt = self._txt_wheel
 
     # pos: bottom of the left column; nav: rides the bar, 3px above it at the current filtered torque
@@ -445,27 +419,24 @@ class HudRenderer(Widget):
       pos_y = _nav_wheel_pos_y(self._torque_bar._torque_filter.x, rect.y, rect.height)
     else:
       pos_y = int(rect.y + rect.height - 10 - wheel_txt.height / 2)
-    rotation = -ui_state.sm['carState'].steeringAngleDeg if ui_state.started and ui_state.received_since_started('carState') else 0.0
+    # ease between the live angle and rest on ignition changes; carState keeps its last angle once stopped
+    rotation = -ui_state.sm['carState'].steeringAngleDeg * self._wheel_angle_filter.update(ui_state.started and ui_state.received_since_started('carState'))
 
     hits_max = self._nav_shown and self._nav_wheel_hits_max(pos_x, pos_y)
     hide_wheel = self._nav_shown and ((self._slot_want and not self._show_wheel_critical) or hits_max)
     wheel_fade = self._wheel_alpha_filter.update(0.0 if hide_wheel else 1.0)
-    alpha = 255 * (1 - (1 - DIMMED_ICON_ALPHA) * status_fade.weight(UIStatus.DISENGAGED) * (1 - critical)) * wheel_fade
-    mads = ui_state.sm['selfdriveStateSP'].mads
+    disengaged_w = (self._steer_status if mads_active else self._status).weight(UIStatus.DISENGAGED)
+    alpha = 255 * (1 - (1 - DIMMED_ICON_ALPHA) * disengaged_w) * wheel_fade
     if wheel_fade >= 1e-2:
       if ui_state.started and mads.enabled and not ui_state.engaged and critical < 0.5:
         self._draw_mads_wheel(pos_x, pos_y, rotation, mads.active, wheel_fade)
       else:
-        origin = rl.Vector2(self._txt_wheel_glow.width / 2, self._txt_wheel_glow.height / 2)
-        rl.draw_texture_pro(self._txt_wheel_glow, rl.Rectangle(0, 0, self._txt_wheel_glow.width, self._txt_wheel_glow.height),
-                            rl.Rectangle(pos_x, pos_y, self._txt_wheel_glow.width, self._txt_wheel_glow.height), origin, rotation,
-                            rl.Color(wheel_color.r, wheel_color.g, wheel_color.b, int(alpha * glow)))
         rl.draw_texture_pro(wheel_txt, rl.Rectangle(0, 0, wheel_txt.width, wheel_txt.height),
                             rl.Rectangle(pos_x, pos_y, wheel_txt.width, wheel_txt.height),
                             rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(wheel_color.r, wheel_color.g, wheel_color.b, int(alpha)))
         rl.draw_texture_pro(self._txt_wheel_highlight, rl.Rectangle(0, 0, wheel_txt.width, wheel_txt.height),
                             rl.Rectangle(pos_x, pos_y, wheel_txt.width, wheel_txt.height),
-                            rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(255, 255, 255, int(alpha * glow)))
+                            rl.Vector2(wheel_txt.width / 2, wheel_txt.height / 2), rotation, rl.Color(255, 255, 255, int(alpha * engaged)))
 
     gpu_alpha = self._chestnut_alpha_filter.x if (self._nav_shown and not self._show_wheel_critical and not hits_max) else 0.0
     if gpu_alpha >= 1e-2 and self._chestnut_icon is not None:
@@ -482,10 +453,6 @@ class HudRenderer(Widget):
     dst = rl.Rectangle(pos_x, pos_y, self._txt_wheel_rim.width, self._txt_wheel_rim.height)
     src = rl.Rectangle(0, 0, self._txt_wheel_rim.width, self._txt_wheel_rim.height)
     origin = rl.Vector2(self._txt_wheel_rim.width / 2, self._txt_wheel_rim.height / 2)
-    if active:
-      glow = self._txt_wheel_glow
-      rl.draw_texture_pro(glow, rl.Rectangle(0, 0, glow.width, glow.height), rl.Rectangle(pos_x, pos_y, glow.width, glow.height),
-                          rl.Vector2(glow.width / 2, glow.height / 2), rotation, rl.Color(r, g, b, int(255 * fade)))
     rl.draw_texture_pro(self._txt_wheel_rim, src, dst, origin, rotation, rl.Color(r, g, b, rim_alpha))
     rl.draw_texture_pro(self._txt_wheel_hub, src, dst, origin, rotation, rl.Color(255, 255, 255, hub_alpha))
 
@@ -511,7 +478,7 @@ class HudRenderer(Widget):
       shown, fade_i, dim_like_large = custom and not self.drawing_top_icons(), 0, False
     else:
       shown, fade_i, dim_like_large = custom and (self._can_draw_top_icons if large else bool(panel_visible)), int(large), large
-    disengaged = steer_fade.weight(UIStatus.DISENGAGED)
+    disengaged = self._steer_status.weight(UIStatus.DISENGAGED)
     dim = 1 - disengaged if dim_like_large else 1 - (1 - DIMMED_ICON_ALPHA / 0.9) * disengaged
     fade_x = self._compass_fade[fade_i].update(float(shown))
     a = int(255 * 0.9 * fade_x * dim)
@@ -550,10 +517,11 @@ class HudRenderer(Widget):
     ts = measure_text_cached(self._font_bold, letter, NAV_LETTER_SIZE)
     rl.draw_text_ex(self._font_bold, letter, rl.Vector2(cx - ts.x / 2, cy - ts.y / 2), NAV_LETTER_SIZE, 0, rl.Color(255, 255, 255, a))
 
+
   def _draw_set_speed(self, rect: rl.Rectangle) -> None:
     """Draw the MAX speed indicator box."""
     alpha = self._set_speed_alpha_filter.update(0 < rl.get_time() - self._set_speed_changed_time < SET_SPEED_PERSISTENCE and self._can_draw_top_icons)
-    alpha = self._set_speed_alpha = alpha * (1 - status_fade.weight(UIStatus.DISENGAGED))
+    alpha = self._set_speed_alpha = alpha * (1 - self._status.weight(UIStatus.DISENGAGED))
     if alpha < 1e-2:
       self._max_bbox = None
       return

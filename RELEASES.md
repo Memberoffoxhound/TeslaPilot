@@ -40,7 +40,7 @@ Tesla Model 3 Highland fork on top of openpilot 0.11.2. See CHANGELOG.md.
 * On-Air local Wi-Fi viewer (removed in 0.11.23)
 * White Tesla T boot mark; home wordmark DELAMAIN
 
-Version 0.11.4 (2026-XX-XX)
+Version 0.11.3 (2026-XX-XX)
 ========================
 * Autospeed
   * On supported cars, openpilot will intelligently decide what speed to drive based on the scene, including:
@@ -49,10 +49,9 @@ Version 0.11.4 (2026-XX-XX)
     * adjusting speed based on surrounding traffic
   * This behavior was previously available with openpilot's "Experimental mode", but is now out of beta and always enabled
   * With openpilot deciding which speed to drive, the car's cruise speed is treated as a maximum speed openpilot will not exceed
-
-Version 0.11.3 (2026-11-20)
-========================
 * New driver monitoring model
+  * Always-on sleep detection
+  * Improved sleep detection
 * comma four UI updates
 * Romanian translation thanks to adriantabirta!
 

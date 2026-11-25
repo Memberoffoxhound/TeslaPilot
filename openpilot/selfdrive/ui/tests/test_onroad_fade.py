@@ -51,7 +51,7 @@ HEAD = textwrap.dedent('''
            hud._txt_compass_bg90.id: "compass", hud._txt_compass_bg.id: "compass"}
   from openpilot.selfdrive.ui.mici.onroad.long_indicator import LongIndicator
   li = LongIndicator()
-  for t in [li._txt_lead_car[0], *(w for w, _ in li._txt_distance), *(g for _, g in li._txt_distance)]:
+  for t, _ in li._icons:
     names[t.id] = "pers"
   seen = {}
   def rec(f):
@@ -135,7 +135,7 @@ def probe(tmp_path_factory):
 
 def test_large_compass_fades_like_max(probe):
   assert probe["engaged"]["compass"] >= 225
-  assert 0.5 < probe["mid"]["compass"] / probe["engaged"]["compass"] < 0.8   # status_fade's pace, 0.1 s in
+  assert 0.3 < probe["mid"]["compass"] / probe["engaged"]["compass"] < 0.5   # status_fade rc=0.1, 0.1 s in
   assert "compass" not in probe["disengaged"] and "compass" not in probe["alert"]
 
 
@@ -153,4 +153,4 @@ def test_gpu_icon_dims_and_hides_under_alerts(probe):
 
 def test_max_alpha_follows_status_fade(probe):
   assert probe["max_engaged"] > 0.9 and probe["max_disengaged"] < 0.01
-  assert 0.5 < probe["max_mid"] < 0.8   # what the ball's left-side occlusion reads
+  assert 0.3 < probe["max_mid"] < 0.5   # what the ball's left-side occlusion reads

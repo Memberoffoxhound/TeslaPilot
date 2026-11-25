@@ -11,7 +11,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.selfdrive.controls.lib.longcontrol import LongCtrlState
 from openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc import T_IDXS as T_IDXS_MPC
-from openpilot.selfdrive.controls.lib.longitudinal_planner import J_CRUISE_BP, J_CRUISE_VALS, LongitudinalPlanner, LongitudinalPlanSource
+from openpilot.selfdrive.controls.lib.longitudinal_planner import ACCEL_BOOST, J_CRUISE_BP, J_CRUISE_VALS, LongitudinalPlanner, LongitudinalPlanSource
 from openpilot.selfdrive.modeld.constants import ModelConstants
 from openpilot.selfdrive.controls.lib import set_speed_assist as ssa
 from openpilot.selfdrive.controls.lib.set_speed_assist import SetSpeedAssist
@@ -264,12 +264,12 @@ class TestSetSpeedAssistPlanner(OpenpilotTestCase):
   def test_off_is_the_models_pace(self, mocker):
     p = planner(mocker, False)
     assert p.mpc.source == LongitudinalPlanSource.e2e
-    assert np.isclose(p.output_a_target, 0.)
+    assert np.isclose(p.output_a_target, ACCEL_BOOST[STANDARD])
 
   def test_on_without_openpilot_long_is_the_models_pace(self, mocker):
     p = planner(mocker, True, op_long=False)
     assert p.mpc.source == LongitudinalPlanSource.e2e
-    assert np.isclose(p.output_a_target, 0.)
+    assert np.isclose(p.output_a_target, ACCEL_BOOST[STANDARD])
     assert p.set_speed_assist.lift == 0.
 
   def test_on_drives_to_the_set_speed(self, mocker):
@@ -278,7 +278,7 @@ class TestSetSpeedAssistPlanner(OpenpilotTestCase):
     approach = ssa.approach_accel(V_EGO, V_CRUISE_MS, STANDARD)
     assert p.a_cruise > 1. > approach
     assert np.isclose(p.output_a_target, approach)
-    assert np.isclose(p.set_speed_assist.lift, approach)
+    assert np.isclose(p.set_speed_assist.lift, approach - ACCEL_BOOST[STANDARD])
 
     pm = mocker.MagicMock()
     p.publish(planner_sm(), pm)

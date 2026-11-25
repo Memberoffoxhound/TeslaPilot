@@ -108,7 +108,7 @@ class DrivingLayoutMici(NavScroller):
     self._personality_toggle = BigMultiParamToggle("driving personality", "LongitudinalPersonality", ["aggressive", "standard", "relaxed"],
                                                    description="Standard is recommended.\n" +
                                                                "Aggressive follows closer, with firmer gas and braking.\n" +
-                                                               "Relaxed leaves more space.\n" +
+                                                               "Relaxed follows at the same distance as Standard, with gentler acceleration.\n" +
                                                                "Use the steering wheel distance button on supported cars.")
     # Based on rav4kumar's implementation of Automatic Lane Change (sunnypilot).
     self._alc_btn = BigToggle("auto lane change", initial_state=ui_state.params.get_bool("AutoLaneChangeEnabled"),
