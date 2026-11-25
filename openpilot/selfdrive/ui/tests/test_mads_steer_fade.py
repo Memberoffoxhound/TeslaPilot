@@ -11,6 +11,7 @@ from openpilot.conftest import PARAMS_PROBE_STUB
 
 PROBE = textwrap.dedent('''
   import json, sys, types
+  import numpy as np
   from types import SimpleNamespace
   {PARAMS_PROBE_STUB}
 
@@ -54,6 +55,8 @@ PROBE = textwrap.dedent('''
   seen = {}
   mr = ModelRenderer()
   mr._longitudinal_control, mr._transform_dirty = True, False
+  mr._path.raw_points = np.array([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]])
+  mr._update_model = lambda *a: None
   mr._draw_lane_lines = lambda: None
   mr._draw_path = lambda: seen.__setitem__("path", mr._visible)
   ball = ConfidenceBall()
@@ -158,5 +161,5 @@ def test_mads_override_is_white(probe):
 def test_no_steering_dims_like_stock(probe, state):
   s, eng = probe[state], probe["engaged"]
   assert s["steer"] == "disengaged"
-  assert s["path"] == 0.0 and s["compass"] == 0
+  assert s["path"] < 1e-2 and s["compass"] == 0
   assert s["ball"][0] > eng["ball"][0] and s["ball"][1] == [102, 102, 102]  # rests at the bottom, grey

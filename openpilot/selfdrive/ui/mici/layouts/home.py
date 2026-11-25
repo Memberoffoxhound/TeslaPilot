@@ -392,10 +392,8 @@ class MiciHomeLayout(Widget):
         rl.check_collision_point_rec(rl.Vector2(mouse_pos.x, mouse_pos.y), self._trip_hit)):
       self._on_stats_click()
       return
-    relative_x = mouse_pos.x - self.rect.x
-    has_alerts = self._alert_count_callback and self._alert_count_callback() > 0
-    if has_alerts and relative_x > self.rect.width - ALERTS_ZONE_WIDTH:
-      if self._on_alerts_click:
+    if mouse_pos.x - self.rect.x > self.rect.width - ALERTS_ZONE_WIDTH:
+      if self._on_alerts_click and self._alert_count_callback and self._alert_count_callback() > 0:
         self._on_alerts_click()
     elif self._on_settings_click:
       self._on_settings_click()
