@@ -6,7 +6,6 @@ import math
 
 import numpy as np
 
-from opendbc.car import rate_limit
 from openpilot.cereal import log
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_MDL
@@ -21,12 +20,13 @@ MIN_SPEED = 5.  # m/s. No assist below this, so stop-and-go stays with the model
 FULL_SPEED = 8.  # m/s. Full assist from this speed up.
 GAIN_BP = [-0.3, -0.1]  # Model accel over which the assist fades out as the model slows down.
 FADE_LAT_ACC_BP = [0.6, 1.0]  # Lat acc of the sharpest bend ahead over which the assist fades out.
+RISE_JERK = 0.2  # m/s^3. Comfort jerk cap on the lifted candidate from engaging on.
 LIFT_FALL = 2.4  # m/s^3. Slowest the lift eases off, e.g. on a lane change or a bend.
-# CX-5 MRCC no-lead p99 accel by speed. Under that ceiling, a jerk-limited arrival
-# that reaches the target with none left: sqrt(2 * jerk * gap).
+# Stock ACC no-lead ceiling by speed; brisker approach jerk in town, MRCC jerk at highway speed.
 APPROACH_BP = [0., 4., 9., 14., 18., 25.]  # m/s
 APPROACH_V = [1.5, 1.75, 1.45, 1.05, 0.85, 0.65]  # m/s^2
-APPROACH_JERK = 0.065  # m/s^3
+APPROACH_JERK_BP = [8., 14.]  # m/s
+APPROACH_JERK_V = [0.1, 0.035]  # m/s^3
 # The table is Standard; Relaxed / Aggressive move the ceiling by AccelBoostSP's step.
 APPROACH_PERSONALITY_OFFSET = {
   Personality.relaxed: -0.15,
@@ -48,8 +48,10 @@ def _personality_offset(personality) -> float:
 
 
 def approach_accel(v_ego: float, v_target: float, personality) -> float:
+  gap = v_target - v_ego
+  jerk = float(np.interp(v_ego, APPROACH_JERK_BP, APPROACH_JERK_V))
   ceiling = np.interp(v_ego, APPROACH_BP, APPROACH_V) + _personality_offset(personality)
-  return min(math.sqrt(2. * APPROACH_JERK * max(v_target - v_ego, 0.)), float(ceiling))
+  return min(math.sqrt(2. * jerk * max(gap, 0.)), gap, float(ceiling))
 
 
 def planned_slowdown(v_ego: float, plan_v: np.ndarray, lead) -> float:
@@ -67,10 +69,6 @@ class SetSpeedAssist:
   # cruise planners would do, while the model isn't slowing down. It never takes any away.
   # Only with openpilot longitudinal control: the toggle does nothing otherwise.
   def __init__(self, CP):
-    # Local import avoids a cycle with longitudinal_planner.
-    from openpilot.selfdrive.controls.lib.longitudinal_planner import J_CRUISE_BP, J_CRUISE_VALS
-    self.rise_bp, self.rise_vals = J_CRUISE_BP, J_CRUISE_VALS
-
     self.allowed = bool(CP.openpilotLongitudinalControl)
     self.params = Params()
     self.frame = -1
@@ -80,6 +78,7 @@ class SetSpeedAssist:
     self.fade = 0.
     self.plan_fade = 0.
     self.lift = 0.
+    self.e2e = -math.inf
 
   def _read_enabled(self) -> bool:
     return self.allowed and self.params.get_bool(PARAM)
@@ -96,6 +95,7 @@ class SetSpeedAssist:
     # when switched off, the assist eases out at LIFT_FALL before stopping
     if not self.allowed or reset_state or (not self.enabled and self.lift == 0.):
       self.lift = 0.
+      self.e2e = -math.inf
       return a_model
 
     md = sm['modelV2']
@@ -106,6 +106,7 @@ class SetSpeedAssist:
     if not (len(vel) == len(yaw_rate) == ModelConstants.IDX_N and
             np.isfinite(np.concatenate([vel, yaw_rate, [v_ego, a_model, a_floor, curvature_now]])).all()):
       self.lift = 0.
+      self.e2e = -math.inf
       return a_model
 
     # sharpest bend now or along the model's path, at the current speed
@@ -119,9 +120,10 @@ class SetSpeedAssist:
     self.active = self.enabled and md.meta.laneChangeState == LaneChangeState.off
 
     target = self.gain * self.fade * max(0., a_floor - a_model) if self.active else 0.
-    rise = np.interp(v_ego, self.rise_bp, self.rise_vals)
+    rise = max(self.e2e + RISE_JERK * DT_MDL - a_model, 0.)
     # Normally eases off at LIFT_FALL. When the model (or its plan) starts to brake, the gain
     # drops and the lift may drop with it in one frame, so at gain 0 the model's braking is not delayed.
     fall = max(LIFT_FALL * DT_MDL, (1. - self.gain) * self.lift)
-    self.lift = rate_limit(target, self.lift, -fall, rise * DT_MDL)
-    return a_model + self.lift
+    self.lift = max(min(target, rise), self.lift - fall)
+    self.e2e = a_model + self.lift
+    return self.e2e
