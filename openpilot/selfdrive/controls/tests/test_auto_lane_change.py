@@ -66,6 +66,18 @@ def test_blindspot_holds_lane_change(dh_module):
   assert run_until_start(dh, alc, blind=True) is None
 
 
+def test_blindspot_blocks_nudge_in_pre_lane_change(dh_module):
+  from openpilot.cereal import log
+  dh, _ = dh_module
+  h = dh.DesireHelper()
+  h.update(cs(left=False), True, 0.0)
+  h.update(cs(left=True, blind=True, torque=30.0), True, 0.0)
+  assert h.lane_change_state == log.LaneChangeState.preLaneChange
+  for _ in range(int(2.0 / dh.DT_MDL)):
+    h.update(cs(left=True, blind=True, torque=30.0), True, 0.0)
+  assert h.lane_change_state == log.LaneChangeState.preLaneChange
+
+
 def test_brake_cancels_auto_lane_change(dh_module):
   dh, alc = dh_module
   assert run_until_start(dh, alc, brake=True) is None
