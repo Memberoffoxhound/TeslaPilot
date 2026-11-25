@@ -152,6 +152,30 @@ class TestSetSpeedAssist(OpenpilotTestCase):
     assert np.isclose(assist.fade, fade)
     assert np.isclose(assist.lift, fade * A_FLOOR)
 
+  def test_lift_recovers_from_a_bend_on_comfort_jerk(self, assist):
+    run(assist, SETTLE, build_sm())
+    assert np.isclose(assist.lift, A_FLOOR)
+    bend = np.where((T_IDXS >= 5.) & (T_IDXS <= 8.), 1.2 / V_EGO, 0.)
+    run(assist, SETTLE, build_sm(yaw_rate=bend))
+    assert assist.fade == 0. and assist.lift == 0.
+    outs = [run(assist, 1, build_sm()) for _ in range(SETTLE)]
+    assert max(np.diff(outs)) <= ssa.RISE_JERK * DT_MDL + 1e-9
+    assert np.isclose(outs[-1], A_FLOOR)
+
+  def test_lift_drops_when_cruise_falls_mid_lift(self, assist):
+    sm = build_sm()
+    run(assist, SETTLE, sm)
+    assert np.isclose(assist.lift, A_FLOOR)
+    cs = messaging.new_message('carState')
+    cs.carState.vEgo = V_EGO
+    cs.carState.vCruise = V_EGO * 3.6
+    sm['carState'] = cs.carState
+    a_floor = ssa.approach_accel(V_EGO, V_EGO, STANDARD)
+    assert a_floor == 0.
+    assert np.isclose(run(assist, 1, sm, a_floor=a_floor), A_FLOOR - ssa.LIFT_FALL * DT_MDL)
+    run(assist, SETTLE, sm, a_floor=a_floor)
+    assert assist.lift == 0.
+
   def test_lets_go_fast(self, assist):
     run(assist, SETTLE, build_sm())
     run(assist, 1, build_sm(lane_change=True))

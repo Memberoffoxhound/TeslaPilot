@@ -102,14 +102,15 @@ class TestShouldSilentLkasEnable(OpenpilotTestCase):
 # pause
 
 class TestPauseMode(OpenpilotTestCase):
-  def test_pauses_at_standstill_brake_already_held(self, mocker):
+  @parameterized.expand([(True, False), (False, True)], names=["brake", "regen"])
+  def test_pauses_at_standstill_brake_already_held(self, mocker, brake, regen):
     mads, sd = make_mads(mocker, MadsSteeringModeOnBrake.PAUSE)
     mads.state_machine.state = State.enabled
     mads.enabled = True
     mads.active = True
-    sd.CS_prev = make_car_state(brake_pressed=True, standstill=True)
+    sd.CS_prev = make_car_state(brake_pressed=brake, regen_braking=regen, standstill=True)
     sd.sm['pandaStates'] = [make_panda_state(mocker, False)]
-    cs = make_car_state(brake_pressed=True, standstill=True)
+    cs = make_car_state(brake_pressed=brake, regen_braking=regen, standstill=True)
 
     run_frames(mads, sd, cs, n=199)
     mads.update(cs)
