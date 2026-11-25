@@ -1,10 +1,14 @@
 from collections.abc import Callable
 
+import raylib_nb as rl
+
 from openpilot.cereal import log
 from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigMultiBoolParamToggle, BigToggle, BigButton
 from openpilot.selfdrive.ui.mici.widgets.dialog import SettingDescriptionDialog, wire_confirm
+from openpilot.system.ui.widgets import Widget
+from openpilot.system.ui.widgets.label import UnifiedLabel
 from openpilot.system.ui.widgets.scroller import NavScroller
-from openpilot.system.ui.lib.application import gui_app, MousePos
+from openpilot.system.ui.lib.application import gui_app, MousePos, FontWeight
 from openpilot.selfdrive.ui.layouts.settings.common import (
   lane_color_label, next_lane_color,
   onroad_ui_label, next_onroad_ui, restart_needed_callback,
@@ -86,6 +90,17 @@ class ThemeLayoutMici(NavScroller):
     ])
 
 
+class _SectionLabel(Widget):
+  def __init__(self, text: str):
+    super().__init__()
+    self.set_rect(rl.Rectangle(0, 0, 402, 56))
+    self._label = UnifiedLabel(text, 36, font_weight=FontWeight.DISPLAY)
+
+  def _render(self, _rect):
+    self._label.set_rect(rl.Rectangle(self._rect.x, self._rect.y + 12, self._rect.width, 40))
+    self._label.render()
+
+
 class DrivingLayoutMici(NavScroller):
   def __init__(self):
     super().__init__()
@@ -98,10 +113,20 @@ class DrivingLayoutMici(NavScroller):
     # Based on rav4kumar's implementation of Automatic Lane Change (sunnypilot).
     self._alc_btn = BigToggle("auto lane change", initial_state=ui_state.params.get_bool("AutoLaneChangeEnabled"),
                              toggle_callback=self._on_alc)
-    self._turn_desires_toggle = BigParamControl("turn desires", "TurnDesires",
-                                                description="Below 20 mph, a turn signal asks the model to turn.\n" +
-                                                            "Held at an inferred red light until stopped.\n" +
+    self._turn_desires_header = _SectionLabel("turn desires")
+    self._turn_desires_toggle = BigParamControl("force turn desires", "TurnDesires",
+                                                description="With the turn signal on below 20 mph, ask the model to turn.\n" +
+                                                            "Clears when the signal turns off.\n" +
+                                                            "Blocked by a blind spot or a planned stop until you are stopped.\n" +
                                                             "Lane changes still require 45 mph.")
+    self._model_turns_toggle = BigParamControl("model-confirmed turns", "TurnDesiresModelConfirm",
+                                               description="Between 20 and 31 mph, ask for a turn only if the model also forecasts one.\n" +
+                                                           "Needs force turn desires on, a turn signal, and slowing down.")
+    self._nav_turns_toggle = BigParamControl("navigation turns", "TurnDesiresNav",
+                                             description="When navigation has an upcoming turn, the matching turn signal asks the model to turn, below 31 mph.\n" +
+                                                         "Needs force turn desires on.")
+    self._model_turns_toggle.set_enabled(lambda: ui_state.params.get_bool("TurnDesires"))
+    self._nav_turns_toggle.set_enabled(lambda: ui_state.params.get_bool("TurnDesires"))
     # Set Speed Assist, from sunnypilot (zephleggett). Only with openpilot longitudinal.
     self._ssa_toggle = BigParamControl("set speed assist", "SetSpeedAssist",
                                        description="Accelerate up to the set speed, or the following distance behind a lead,\n" +
@@ -165,7 +190,10 @@ class DrivingLayoutMici(NavScroller):
 
     self._scroller.add_widgets([
       self._alc_btn,
+      self._turn_desires_header,
       self._turn_desires_toggle,
+      self._model_turns_toggle,
+      self._nav_turns_toggle,
       self._personality_toggle,
       self._ssa_toggle,
       self._braking_toggle,
@@ -186,6 +214,8 @@ class DrivingLayoutMici(NavScroller):
     self._refresh_toggles = (
       ("AutoLaneChangeEnabled", self._alc_btn),
       ("TurnDesires", self._turn_desires_toggle),
+      ("TurnDesiresModelConfirm", self._model_turns_toggle),
+      ("TurnDesiresNav", self._nav_turns_toggle),
       ("SetSpeedAssist", self._ssa_toggle),
       ("Mads", self._mads_btn),
       (mads.MAIN_CRUISE, self._mads_main_cruise),
