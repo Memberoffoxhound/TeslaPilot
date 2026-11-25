@@ -32,9 +32,9 @@ def dh_module(monkeypatch):
   return dh, alc
 
 
-def cs(left=True, blind=False, brake=False):
+def cs(left=True, blind=False, brake=False, torque=0.0):
   return SimpleNamespace(vEgo=30.0, leftBlinker=left, rightBlinker=False, standstill=False,
-                         steeringPressed=False, steeringTorque=0.0,
+                         steeringPressed=abs(torque) > 0, steeringTorque=torque,
                          leftBlindspot=blind, rightBlindspot=False, brakePressed=brake)
 
 
@@ -69,3 +69,59 @@ def test_blindspot_holds_lane_change(dh_module):
 def test_brake_cancels_auto_lane_change(dh_module):
   dh, alc = dh_module
   assert run_until_start(dh, alc, brake=True) is None
+
+
+def _finish_first_change(dh, h, torque=0.0):
+  from openpilot.cereal import log
+  h.update(cs(left=False), True, 0.0)
+  for _ in range(int(2.0 / dh.DT_MDL)):
+    h.update(cs(left=True, torque=torque), True, 1.0)
+    if h.lane_change_state == log.LaneChangeState.laneChangeStarting:
+      break
+  assert h.lane_change_state == log.LaneChangeState.laneChangeStarting
+  for _ in range(int(1.0 / dh.DT_MDL)):
+    h.update(cs(left=True), True, 1.0)
+  h.update(cs(left=True), True, 0.0)
+  assert h.lane_change_state == log.LaneChangeState.preLaneChange
+
+
+def test_auto_mode_one_lane_per_blinker(dh_module):
+  from openpilot.cereal import log
+  dh, _ = dh_module
+  h = dh.DesireHelper()
+  _finish_first_change(dh, h)
+
+  for _ in range(int(3.0 / dh.DT_MDL)):
+    h.update(cs(left=True, torque=30.0), True, 0.0)
+  assert h.lane_change_state == log.LaneChangeState.preLaneChange
+
+  h.update(cs(left=False), True, 0.0)
+  assert h.lane_change_state == log.LaneChangeState.off
+  for _ in range(int(2.0 / dh.DT_MDL)):
+    h.update(cs(left=True), True, 0.0)
+    if h.lane_change_state == log.LaneChangeState.laneChangeStarting:
+      break
+  assert h.lane_change_state == log.LaneChangeState.laneChangeStarting
+
+
+def test_nudge_mode_chains_on_torque(monkeypatch, dh_module):
+  from openpilot.cereal import log
+  dh, alc = dh_module
+  monkeypatch.setattr(alc, "Params", lambda *a, **k: FakeParams(AutoLaneChangeEnabled=False))
+  h = dh.DesireHelper()
+  _finish_first_change(dh, h, torque=30.0)
+
+  h.update(cs(left=True, torque=30.0), True, 0.0)
+  assert h.lane_change_state == log.LaneChangeState.laneChangeStarting
+
+
+def test_auto_mode_nudge_after_brake_still_works(dh_module):
+  from openpilot.cereal import log
+  dh, _ = dh_module
+  h = dh.DesireHelper()
+  h.update(cs(left=False), True, 0.0)
+  for _ in range(int(2.0 / dh.DT_MDL)):
+    h.update(cs(left=True, brake=True), True, 0.0)
+  assert h.lane_change_state == log.LaneChangeState.preLaneChange
+  h.update(cs(left=True, torque=30.0), True, 0.0)
+  assert h.lane_change_state == log.LaneChangeState.laneChangeStarting
