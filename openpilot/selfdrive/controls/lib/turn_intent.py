@@ -3,12 +3,26 @@ import math
 from openpilot.cereal import log
 from openpilot.common.constants import CV
 from openpilot.common.params import Params
-from openpilot.common.params_compat import get_bool
+from openpilot.common.params_compat import get_bool, is_set, put_bool, remove
 from openpilot.selfdrive.controls.lib.signal_turn import MAX_SPEED_MPS, SignalTurnEvidence
 
+ATI_PARAM = "AutomaticTurnInitiation"
+LEGACY_TURN_PARAMS = ("TurnDesires", "TurnDesiresModelConfirm", "TurnDesiresNav")
+REFRESH_NS = 1_000_000_000
 TURN_SPEED_FORCE = 20 * CV.MPH_TO_MS
 LEFT_MODS = frozenset(("left", "sharpleft"))
 RIGHT_MODS = frozenset(("right", "sharpright"))
+
+
+def migrate_turn_initiation_params(params) -> None:
+  if not is_set(params, ATI_PARAM) and get_bool(params, "TurnDesires", False):
+    put_bool(params, ATI_PARAM, True, block=True)
+  for key in LEGACY_TURN_PARAMS:
+    remove(params, key)
+
+
+def within_turn_window(speed, distance):
+  return math.isfinite(speed) and speed >= 0 and math.isfinite(distance) and 0 <= distance <= min(90., max(35., speed * 6.))
 
 
 def _modifier(text):
@@ -74,24 +88,31 @@ def _car_ok(sm):
 class TurnIntent:
   def __init__(self, params=None):
     self.params = params if params is not None else Params()
+    migrate_turn_initiation_params(self.params)
     self.signal_model = SignalTurnEvidence()
-    self.force = False
-    self.model_confirm = False
-    self.nav_turns = False
+    self.requested = get_bool(self.params, ATI_PARAM, False)
+    self.applied = self.requested
     self.signal_stop_hold = False
     self.signal_stop_completed = False
-    self._param_read_counter = 0
-    self._read_params()
+    self._last_read_ns = None
 
-  def _read_params(self):
-    self.force = get_bool(self.params, "TurnDesires", False)
-    self.model_confirm = get_bool(self.params, "TurnDesiresModelConfirm", False)
-    self.nav_turns = get_bool(self.params, "TurnDesiresNav", False)
+  @property
+  def enabled(self) -> bool:
+    return self.applied
 
-  def _update_params(self):
-    if self._param_read_counter % 50 == 0:
-      self._read_params()
-    self._param_read_counter += 1
+  def _sample_preference(self, now_ns: int, *, signaling: bool, maneuver_active: bool) -> bool:
+    if type(now_ns) is not int or now_ns <= 0 or (self._last_read_ns is not None and now_ns < self._last_read_ns):
+      self._last_read_ns = None
+      self.requested = self.applied = False
+      return False
+    if self._last_read_ns is None or now_ns - self._last_read_ns >= REFRESH_NS:
+      self.requested = get_bool(self.params, ATI_PARAM, False)
+      self._last_read_ns = now_ns
+    if not self.requested:
+      self.applied = False
+    elif not signaling and not maneuver_active:
+      self.applied = True
+    return self.applied
 
   def _update_stop_hold(self, cs, cc, model_stop, sm):
     one_blinker = cs.leftBlinker != cs.rightBlinker
@@ -105,15 +126,27 @@ class TurnIntent:
     elif self.signal_stop_completed:
       self.signal_stop_hold = self.signal_stop_completed = False
 
-  def select(self, sm, now_ns, current_desire, *, model_stop=False):
-    self._update_params()
-    if not self.force:
-      self.signal_stop_hold = self.signal_stop_completed = False
-      self.signal_model.reset()
-      return current_desire
+  def matching_nav_turn(self, sm) -> bool:
+    try:
+      cs = sm["carState"]
+      inst = _nav_instruction(sm)
+      if inst is None or not within_turn_window(cs.vEgo, inst.maneuverDistance):
+        return False
+      mod = _modifier(inst.maneuverModifier)
+      return bool((mod in LEFT_MODS and cs.leftBlinker and not cs.rightBlinker) or
+                  (mod in RIGHT_MODS and cs.rightBlinker and not cs.leftBlinker))
+    except (KeyError, AttributeError, TypeError, ValueError):
+      return False
+
+  def select(self, sm, now_ns, current_desire, *, model_stop=False, waiting_for_lane=False):
     try:
       cs, cc = sm["carState"], sm["carControl"]
+      signaling = bool(cs.leftBlinker or cs.rightBlinker)
     except (KeyError, TypeError, AttributeError):
+      return current_desire
+    if not self._sample_preference(now_ns, signaling=signaling, maneuver_active=current_desire != log.Desire.none):
+      self.signal_stop_hold = self.signal_stop_completed = False
+      self.signal_model.reset()
       return current_desire
     if _service_ok(sm, "carState") and _service_ok(sm, "carControl"):
       self._update_stop_hold(cs, cc, model_stop, sm)
@@ -123,10 +156,11 @@ class TurnIntent:
       return current_desire
     if self.signal_stop_hold or cs.standstill or cs.vEgo <= 0.1 or cs.leftBlinker == cs.rightBlinker:
       return current_desire
-    if self.nav_turns:
-      selected = self.nav_desire(sm, current_desire)
-      if selected != log.Desire.none:
-        return selected
+    if waiting_for_lane and self.matching_nav_turn(sm):
+      return current_desire
+    selected = self.nav_desire(sm, current_desire)
+    if selected != log.Desire.none:
+      return selected
     return self.signal_desire(sm, now_ns, current_desire)
 
   def nav_desire(self, sm, current_desire):
@@ -134,10 +168,7 @@ class TurnIntent:
       cs, cc = sm["carState"], sm["carControl"]
       inst = _nav_instruction(sm)
       if (inst is None or not cc.latActive or cs.standstill or not math.isfinite(cs.vEgo) or
-          not 0.1 < cs.vEgo < MAX_SPEED_MPS):
-        return current_desire
-      distance = inst.maneuverDistance
-      if not math.isfinite(distance) or not 0 <= distance <= min(90., max(35., cs.vEgo * 6.)):
+          not 0.1 < cs.vEgo < MAX_SPEED_MPS or not within_turn_window(cs.vEgo, inst.maneuverDistance)):
         return current_desire
       mod = _modifier(inst.maneuverModifier)
       if mod in LEFT_MODS and cs.leftBlinker and not cs.rightBlinker and not cs.leftBlindspot:
@@ -152,8 +183,7 @@ class TurnIntent:
     try:
       cs, cc = sm["carState"], sm["carControl"]
       if cs.vEgo >= TURN_SPEED_FORCE:
-        if (not self.model_confirm or cs.steeringPressed or
-            not self.signal_model.current(cs, cc, _plan(sm), now_ns=now_ns)):
+        if cs.steeringPressed or not self.signal_model.current(cs, cc, _plan(sm), now_ns=now_ns):
           return current_desire
       if cs.leftBlinker and not cs.leftBlindspot:
         return log.Desire.turnLeft
@@ -164,10 +194,7 @@ class TurnIntent:
     return current_desire
 
   def observe(self, sm, model, *, model_ns, now_ns, lane_change_state=None):
-    if not (self.force and self.model_confirm):
-      self.signal_model.reset()
-      return False
-    if not _car_ok(sm):
+    if not self.enabled or not _car_ok(sm):
       self.signal_model.reset()
       return False
     return self.signal_model.observe(sm["carState"], sm["carControl"], model, model_ns=model_ns,

@@ -39,6 +39,20 @@ class TestManager(OpenpilotTestCase):
     assert params.get("OpenpilotEnabledToggle")
     assert params.get("RouteCount") == 0
 
+  def test_manager_init_migrates_legacy_turn_desires(self):
+    from openpilot.common.params_compat import get_bool, is_set, put_bool
+    from openpilot.selfdrive.controls.lib.turn_intent import ATI_PARAM, LEGACY_TURN_PARAMS
+
+    params = Params()
+    params.clear_all()
+    put_bool(params, "TurnDesires", True, block=True)
+
+    manager.manager_init()
+
+    assert get_bool(params, ATI_PARAM, False) is True
+    for key in LEGACY_TURN_PARAMS:
+      assert not is_set(params, key)
+
 
 if __name__ == "__main__":
   unittest.main()

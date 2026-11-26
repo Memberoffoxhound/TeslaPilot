@@ -24,6 +24,12 @@ class DesireHelper:
   def get_lane_change_direction(CS):
     return LaneChangeDirection.left if CS.leftBlinker else LaneChangeDirection.right
 
+  def waiting_for_lane(self, carstate):
+    return (carstate.vEgo >= LANE_CHANGE_SPEED_MIN and
+            carstate.leftBlinker != carstate.rightBlinker and
+            (self.lane_change_state == LaneChangeState.preLaneChange or
+             (self.lane_change_state == LaneChangeState.off and not self.prev_one_blinker)))
+
   def update(self, carstate, lateral_active, lane_change_prob):
     self.alc.update_params()
     v_ego = carstate.vEgo

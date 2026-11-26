@@ -20,10 +20,18 @@ except (ImportError, OSError):
 
 from openpilot.cereal import log
 from openpilot.common.constants import CV
+from openpilot.common.params_compat import get_bool, put_bool
 from openpilot.selfdrive.controls.lib import auto_lane_change as alc
 from openpilot.selfdrive.controls.lib import desire_helper as dh
-from openpilot.selfdrive.controls.lib.turn_intent import TurnIntent
 from openpilot.selfdrive.controls.lib.signal_turn import CONFIRM_NS, MAX_AGE_NS, SignalTurnEvidence
+from openpilot.selfdrive.controls.lib.turn_intent import (
+  ATI_PARAM,
+  LEGACY_TURN_PARAMS,
+  REFRESH_NS,
+  TurnIntent,
+  migrate_turn_initiation_params,
+  within_turn_window,
+)
 
 
 def _cs(v_ego=5.0, left=False, right=False, standstill=False, a_ego=-1.0,
@@ -64,9 +72,9 @@ class FakeSM:
       "longitudinalPlan": plan if plan is not None else _plan(),
       "navInstruction": nav,
     }
-    self.valid = {k: valid for k in self._d}
-    self.alive = {k: valid for k in self._d}
-    self.seen = {k: True for k in self._d}
+    self.valid = dict.fromkeys(self._d, valid)
+    self.alive = dict.fromkeys(self._d, valid)
+    self.seen = dict.fromkeys(self._d, True)
 
   def __getitem__(self, key):
     return self._d[key]
@@ -75,9 +83,8 @@ class FakeSM:
     return key in self._d
 
 
-def _intent(force=True, model_confirm=False, nav=False):
-  p = FakeParams(TurnDesires=force, TurnDesiresModelConfirm=model_confirm, TurnDesiresNav=nav)
-  return TurnIntent(params=p)
+def _intent(enabled=True):
+  return TurnIntent(params=FakeParams({ATI_PARAM: enabled}))
 
 
 def _make_helper(monkeypatch, alc_on=False):
@@ -86,14 +93,15 @@ def _make_helper(monkeypatch, alc_on=False):
   return dh.DesireHelper()
 
 
-def test_force_default_off():
-  intent = _intent(force=False)
-  sm = FakeSM(_cs(v_ego=5.0, right=True), _cc())
+def test_ati_default_off():
+  intent = TurnIntent(params=FakeParams())
+  sm = FakeSM(_cs(v_ego=5.0, right=True), _cc(), nav=_nav(modifier="right", distance=40.0))
+  assert not intent.enabled
   assert intent.select(sm, 1_000_000, log.Desire.none) == log.Desire.none
 
 
 def test_force_fires_immediately_below_20_mph():
-  intent = _intent(force=True)
+  intent = _intent(True)
   sm = FakeSM(_cs(v_ego=19.9 * CV.MPH_TO_MS, right=True), _cc())
   assert intent.select(sm, 1_000_000, log.Desire.none) == log.Desire.turnRight
   sm = FakeSM(_cs(v_ego=5.0, left=True), _cc())
@@ -101,21 +109,21 @@ def test_force_fires_immediately_below_20_mph():
 
 
 def test_force_requires_blinker_and_clears():
-  intent = _intent(force=True)
+  intent = _intent(True)
   assert intent.select(FakeSM(_cs(v_ego=5.0), _cc()), 1, log.Desire.none) == log.Desire.none
   assert intent.select(FakeSM(_cs(v_ego=5.0, right=True), _cc()), 2, log.Desire.none) == log.Desire.turnRight
   assert intent.select(FakeSM(_cs(v_ego=5.0), _cc()), 3, log.Desire.none) == log.Desire.none
 
 
 def test_force_blocked_by_blindspot():
-  intent = _intent(force=True)
+  intent = _intent(True)
   assert intent.select(FakeSM(_cs(v_ego=5.0, right=True, right_blind=True), _cc()), 1, log.Desire.none) == log.Desire.none
   assert intent.select(FakeSM(_cs(v_ego=5.0, left=True, left_blind=True), _cc()), 2, log.Desire.none) == log.Desire.none
   assert intent.select(FakeSM(_cs(v_ego=5.0, right=True), _cc()), 3, log.Desire.none) == log.Desire.turnRight
 
 
-def test_force_not_at_20_to_45_without_model_confirm():
-  intent = _intent(force=True, model_confirm=False)
+def test_20_to_45_needs_model_confirm_or_nav():
+  intent = _intent(True)
   for mph in (20.0, 25.0, 31.0, 44.9):
     sm = FakeSM(_cs(v_ego=mph * CV.MPH_TO_MS, left=True, a_ego=-1.0), _cc())
     assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
@@ -135,7 +143,7 @@ def test_lane_change_still_starts_at_45(monkeypatch):
 
 
 def test_stop_hold_from_plan_clears_at_standstill():
-  intent = _intent(force=True)
+  intent = _intent(True)
   sm = FakeSM(_cs(v_ego=5.0, right=True), _cc(), plan=_plan(True))
   assert intent.select(sm, 1, log.Desire.none, model_stop=False) == log.Desire.none
   assert intent.signal_stop_hold
@@ -178,13 +186,12 @@ def _model(pred=None, should_stop=False, lane_state=None):
 
 
 def test_model_confirm_needs_forecast_and_decel():
-  intent = _intent(force=True, model_confirm=True)
+  intent = _intent(True)
   v = 25.0 * CV.MPH_TO_MS
   cs = _cs(v_ego=v, right=True, a_ego=-1.0)
   cc = _cc()
   plan = _plan(False)
   sm = FakeSM(cs, cc, plan=plan)
-  # no evidence yet
   assert intent.select(sm, 1_000_000, log.Desire.none) == log.Desire.none
   ev = intent.signal_model
   ev.observe(cs, cc, _model(), model_ns=1_000_000, now_ns=1_000_000, plan=plan)
@@ -193,7 +200,6 @@ def test_model_confirm_needs_forecast_and_decel():
   assert ev.ready
   now = 1_000_000 + CONFIRM_NS
   assert intent.select(sm, now, log.Desire.none) == log.Desire.turnRight
-  # accelerating: no evidence
   ev.reset()
   cs_accel = _cs(v_ego=v, right=True, a_ego=0.2)
   ev.observe(cs_accel, cc, _model(), model_ns=now, now_ns=now, plan=plan)
@@ -215,7 +221,6 @@ def test_model_confirm_rejects_weak_or_lane_change_forecast():
   ev.observe(cs, cc, lane, model_ns=10, now_ns=10, plan=plan)
   ev.observe(cs, cc, lane, model_ns=10 + CONFIRM_NS, now_ns=10 + CONFIRM_NS, plan=plan)
   assert not ev.ready
-  # above ~31 mph, even a strong forecast is ignored
   ev.reset()
   cs_fast = _cs(v_ego=32.0 * CV.MPH_TO_MS, right=True, a_ego=-1.0)
   ev.observe(cs_fast, cc, _model(), model_ns=20, now_ns=20, plan=plan)
@@ -224,7 +229,7 @@ def test_model_confirm_rejects_weak_or_lane_change_forecast():
 
 
 def test_model_confirm_ignores_steering_pressed():
-  intent = _intent(force=True, model_confirm=True)
+  intent = _intent(True)
   v = 25.0 * CV.MPH_TO_MS
   cs = _cs(v_ego=v, right=True, a_ego=-1.0)
   cc = _cc()
@@ -239,9 +244,8 @@ def test_model_confirm_ignores_steering_pressed():
 
 
 def test_nav_turn_needs_matching_blinker():
-  intent = _intent(force=True, nav=True)
+  intent = _intent(True)
   nav = _nav(modifier="right", distance=40.0)
-  # 25 mph: force path off, nav can still fire
   cs = _cs(v_ego=25.0 * CV.MPH_TO_MS, right=True)
   sm = FakeSM(cs, _cc(), nav=nav)
   assert intent.select(sm, 1, log.Desire.none) == log.Desire.turnRight
@@ -249,17 +253,15 @@ def test_nav_turn_needs_matching_blinker():
   assert intent.select(sm, 2, log.Desire.none) == log.Desire.none
   sm = FakeSM(_cs(v_ego=25.0 * CV.MPH_TO_MS, right=True), _cc(), nav=_nav(typ="depart", modifier="right"))
   assert intent.select(sm, 3, log.Desire.none) == log.Desire.none
-  # sharp left with a space, as Mapbox may send
   sm = FakeSM(_cs(v_ego=10.0, left=True), _cc(), nav=_nav(modifier="sharp left", distance=30.0))
   assert intent.select(sm, 4, log.Desire.none) == log.Desire.turnLeft
-  # off when nav toggle is off, 25 mph has no force path
-  intent_off = _intent(force=True, nav=False)
+  intent_off = _intent(False)
   sm = FakeSM(_cs(v_ego=25.0 * CV.MPH_TO_MS, right=True), _cc(), nav=nav)
   assert intent_off.select(sm, 5, log.Desire.none) == log.Desire.none
 
 
 def test_nav_respects_distance_and_blindspot():
-  intent = _intent(force=True, nav=True)
+  intent = _intent(True)
   sm = FakeSM(_cs(v_ego=10.0, right=True), _cc(), nav=_nav(distance=200.0))
   assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
   sm = FakeSM(_cs(v_ego=10.0, right=True, right_blind=True), _cc(), nav=_nav(distance=40.0))
@@ -267,13 +269,13 @@ def test_nav_respects_distance_and_blindspot():
 
 
 def test_select_does_not_override_lane_change():
-  intent = _intent(force=True)
+  intent = _intent(True)
   sm = FakeSM(_cs(v_ego=5.0, right=True), _cc())
   assert intent.select(sm, 1, log.Desire.laneChangeRight) == log.Desire.laneChangeRight
 
 
 def test_nav_should_stop_flicker_holds():
-  intent = _intent(force=True, nav=True)
+  intent = _intent(True)
   nav = _nav(modifier="right", distance=40.0)
   v = 25.0 * CV.MPH_TO_MS
   sm = FakeSM(_cs(v_ego=v, right=True), _cc(), plan=_plan(True), nav=nav)
@@ -290,7 +292,7 @@ def test_nav_should_stop_flicker_holds():
 
 
 def test_stop_hold_clears_on_disengage():
-  intent = _intent(force=True)
+  intent = _intent(True)
   sm = FakeSM(_cs(v_ego=5.0, right=True), _cc(), plan=_plan(True))
   assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
   assert intent.signal_stop_hold
@@ -302,7 +304,7 @@ def test_stop_hold_clears_on_disengage():
 
 
 def test_stop_hold_clears_above_20_mph_when_blinker_off():
-  intent = _intent(force=True, model_confirm=False)
+  intent = _intent(True)
   sm = FakeSM(_cs(v_ego=5.0, right=True), _cc(), plan=_plan(True))
   assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
   assert intent.signal_stop_hold
@@ -318,7 +320,7 @@ def test_stop_hold_clears_above_20_mph_when_blinker_off():
 
 
 def test_hazards_clear_hold_and_do_not_fire():
-  intent = _intent(force=True)
+  intent = _intent(True)
   sm = FakeSM(_cs(v_ego=5.0, right=True), _cc(), plan=_plan(True))
   assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
   assert intent.signal_stop_hold
@@ -329,18 +331,8 @@ def test_hazards_clear_hold_and_do_not_fire():
   assert intent.select(sm, 3, log.Desire.none) == log.Desire.turnRight
 
 
-def test_parent_off_blocks_child_toggles():
-  intent = _intent(force=False, model_confirm=True, nav=True)
-  nav = _nav(modifier="right", distance=40.0)
-  sm = FakeSM(_cs(v_ego=5.0, right=True), _cc(), nav=nav)
-  assert intent.select(sm, 1, log.Desire.none) == log.Desire.none
-  sm = FakeSM(_cs(v_ego=25.0 * CV.MPH_TO_MS, right=True, a_ego=-1.0), _cc(), nav=nav)
-  assert intent.select(sm, 2, log.Desire.none) == log.Desire.none
-  assert not intent.signal_stop_hold
-
-
 def test_v_ego_at_or_below_0_1_does_not_fire():
-  intent = _intent(force=True, nav=True)
+  intent = _intent(True)
   nav = _nav(modifier="right", distance=40.0)
   for v in (0.0, 0.05, 0.1):
     sm = FakeSM(_cs(v_ego=v, right=True), _cc(), nav=nav)
@@ -350,7 +342,7 @@ def test_v_ego_at_or_below_0_1_does_not_fire():
 
 
 def test_steer_fault_and_stale_carstate_block():
-  intent = _intent(force=True)
+  intent = _intent(True)
   cs = _cs(v_ego=5.0, right=True)
   cs.steerFaultTemporary = True
   assert intent.select(FakeSM(cs, _cc()), 1, log.Desire.none) == log.Desire.none
@@ -360,14 +352,14 @@ def test_steer_fault_and_stale_carstate_block():
 
 
 def test_observe_gated_and_evidence_expiry():
-  intent = _intent(force=True, model_confirm=False)
+  intent = _intent(False)
   v = 25.0 * CV.MPH_TO_MS
   cs = _cs(v_ego=v, right=True, a_ego=-1.0)
   sm = FakeSM(cs, _cc())
   assert not intent.observe(sm, _model(), model_ns=1, now_ns=1)
   assert not intent.signal_model.ready
 
-  intent = _intent(force=True, model_confirm=True)
+  intent = _intent(True)
   ev = intent.signal_model
   ev.observe(cs, _cc(), _model(), model_ns=1_000_000, now_ns=1_000_000, plan=_plan(False))
   ev.observe(cs, _cc(), _model(), model_ns=1_000_000 + CONFIRM_NS, now_ns=1_000_000 + CONFIRM_NS, plan=_plan(False))
@@ -375,6 +367,124 @@ def test_observe_gated_and_evidence_expiry():
   assert ev.ready
   assert ev.current(cs, _cc(), _plan(False), now_ns=now)
   assert not ev.current(cs, _cc(), _plan(False), now_ns=now + MAX_AGE_NS + 1)
-  # model shouldStop resets evidence
   ev.observe(cs, _cc(), _model(should_stop=True), model_ns=now, now_ns=now, plan=_plan(False))
   assert not ev.ready
+
+
+def test_all_three_paths_enabled_by_single_switch():
+  intent = _intent(True)
+  # 1. force < 20 mph
+  assert intent.select(FakeSM(_cs(v_ego=5.0, left=True), _cc()), 1_000_000, log.Desire.none) == log.Desire.turnLeft
+  # 2. nav < 31 mph
+  nav = _nav(modifier="right", distance=40.0)
+  assert intent.select(FakeSM(_cs(v_ego=25.0 * CV.MPH_TO_MS, right=True), _cc(), nav=nav), 2_000_000, log.Desire.none) == log.Desire.turnRight
+  # 3. model-confirmed 20-31 mph
+  cs = _cs(v_ego=25.0 * CV.MPH_TO_MS, right=True, a_ego=-1.0)
+  sm = FakeSM(cs, _cc(), plan=_plan(False))
+  assert intent.observe(sm, _model(), model_ns=3_000_000, now_ns=3_000_000) is False
+  assert intent.observe(sm, _model(), model_ns=3_000_000 + CONFIRM_NS, now_ns=3_000_000 + CONFIRM_NS) is True
+  assert intent.select(sm, 3_000_000 + CONFIRM_NS, log.Desire.none) == log.Desire.turnRight
+
+
+def test_migration_promotes_only_when_turn_desires_true(tmp_path):
+  # Legacy TurnDesires=True promotes ATI to True and cleans up old keys
+  p1 = FakeParams(root=tmp_path / "p1", TurnDesires=True, TurnDesiresModelConfirm=False, TurnDesiresNav=True)
+  migrate_turn_initiation_params(p1)
+  assert get_bool(p1, ATI_PARAM, False) is True
+  for key in LEGACY_TURN_PARAMS:
+    assert key not in p1.store
+
+  # Legacy TurnDesires=False with child keys True keeps ATI False (no surprise)
+  p2 = FakeParams(root=tmp_path / "p2", TurnDesires=False, TurnDesiresModelConfirm=True, TurnDesiresNav=True)
+  migrate_turn_initiation_params(p2)
+  assert get_bool(p2, ATI_PARAM, False) is False
+  for key in LEGACY_TURN_PARAMS:
+    assert key not in p2.store
+
+  # Already-set ATI=False is preserved even if TurnDesires was True
+  p3 = FakeParams(root=tmp_path / "p3", AutomaticTurnInitiation=False, TurnDesires=True)
+  migrate_turn_initiation_params(p3)
+  assert get_bool(p3, ATI_PARAM, True) is False
+  for key in LEGACY_TURN_PARAMS:
+    assert key not in p3.store
+
+
+def test_migration_is_idempotent(tmp_path):
+  cases = [
+    {"TurnDesires": True, "TurnDesiresModelConfirm": False, "TurnDesiresNav": True},
+    {"TurnDesires": False, "TurnDesiresModelConfirm": True, "TurnDesiresNav": True},
+    {"AutomaticTurnInitiation": False, "TurnDesires": True},
+    {"AutomaticTurnInitiation": True},
+  ]
+  for i, values in enumerate(cases):
+    p = FakeParams(root=tmp_path / str(i), **values)
+    migrate_turn_initiation_params(p)
+    first = dict(p.store)
+    migrate_turn_initiation_params(p)
+    assert dict(p.store) == first
+    for key in LEGACY_TURN_PARAMS:
+      assert key not in p.store
+
+
+def test_apply_timing_waits_for_signal_and_maneuver_and_drops_immediately():
+  params = FakeParams({ATI_PARAM: False})
+  intent = TurnIntent(params=params)
+  t = REFRESH_NS
+  idle = FakeSM(_cs(v_ego=5.0), _cc())
+  assert intent.select(idle, t, log.Desire.none) == log.Desire.none
+
+  # Enable while signaling: requested flips on after refresh, applied waits
+  put_bool(params, ATI_PARAM, True, block=True)
+  t += REFRESH_NS
+  signaling = FakeSM(_cs(v_ego=5.0, right=True), _cc())
+  assert intent.select(signaling, t, log.Desire.none) == log.Desire.none
+  assert intent.requested is True
+  assert intent.applied is False
+
+  # Signal drops, but active maneuver still holds off applying
+  t += 100_000_000
+  assert intent.select(idle, t, log.Desire.laneChangeLeft) == log.Desire.laneChangeLeft
+  assert intent.applied is False
+
+  # Idle (no signal, no active maneuver): applied becomes True
+  t += 100_000_000
+  assert intent.select(idle, t, log.Desire.none) == log.Desire.none
+  assert intent.applied is True
+  assert intent.select(signaling, t + 100_000_000, log.Desire.none) == log.Desire.turnRight
+
+  # Turning off drops applied immediately even while signaling
+  put_bool(params, ATI_PARAM, False, block=True)
+  t += REFRESH_NS + 100_000_000
+  assert intent.select(signaling, t, log.Desire.none) == log.Desire.none
+  assert intent.requested is False
+  assert intent.applied is False
+
+
+def test_within_turn_window_and_waiting_for_lane_fad5a9faa():
+  assert within_turn_window(0.0, 0.0)
+  assert within_turn_window(0.0, 35.0)
+  assert not within_turn_window(0.0, 35.1)
+  assert within_turn_window(10.0, 60.0)
+  assert not within_turn_window(10.0, 60.1)
+  assert within_turn_window(20.0, 90.0)
+  assert not within_turn_window(20.0, 90.1)
+  assert not within_turn_window(5.0, -0.1)
+
+  # Matching nav turn must not override an imminent lane change
+  intent = _intent(True)
+  nav = _nav(modifier="right", distance=40.0)
+  sm = FakeSM(_cs(v_ego=25.0 * CV.MPH_TO_MS, right=True), _cc(), nav=nav)
+  assert intent.select(sm, 1_000_000, log.Desire.none, waiting_for_lane=True) == log.Desire.none
+  # Without waiting_for_lane, matching nav turn fires
+  assert intent.select(sm, 2_000_000, log.Desire.none, waiting_for_lane=False) == log.Desire.turnRight
+
+
+def test_desire_helper_waiting_for_lane(monkeypatch):
+  helper = _make_helper(monkeypatch, alc_on=True)
+  cs_fast = _cs(v_ego=46.0 * CV.MPH_TO_MS, left=True)
+  assert helper.waiting_for_lane(cs_fast) is True
+  helper.update(cs_fast, True, 0.0)
+  assert helper.lane_change_state == log.LaneChangeState.preLaneChange
+  assert helper.waiting_for_lane(cs_fast) is True
+  cs_slow = _cs(v_ego=30.0 * CV.MPH_TO_MS, left=True)
+  assert helper.waiting_for_lane(cs_slow) is False

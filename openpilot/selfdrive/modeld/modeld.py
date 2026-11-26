@@ -413,7 +413,9 @@ def main(demo=False):
 
     sm.update(0)
     now_ns = time.monotonic_ns()
-    desire = turn_intent.select(sm, now_ns, DH.desire, model_stop=bool(prev_action.shouldStop))
+    desire = turn_intent.select(sm, now_ns, DH.desire,
+                                model_stop=bool(prev_action.shouldStop),
+                                waiting_for_lane=DH.waiting_for_lane(sm["carState"]))
     is_rhd = sm["driverMonitoringState"].isRHD
     frame_id = sm["narrowRoadCameraState"].frameId
     v_ego = max(sm["carState"].vEgo, 0.)

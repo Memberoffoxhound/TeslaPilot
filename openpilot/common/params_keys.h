@@ -154,9 +154,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"DriveSummary", {PERSISTENT, BOOL, "0"}},  // trip summary card
     {"DriveSummaryLast", {PERSISTENT, JSON}},  // ui tripstats store: 400 days of totals, lifetime, last drive; see selfdrive/ui/tripstats
     {"Timezone", {PERSISTENT, STRING}},  // IANA zone at LastGPSPosition, for trip stats days; see selfdrive/ui/tripstats/tz.py
-    {"TurnDesires", {PERSISTENT, BOOL, "0"}},
-    {"TurnDesiresModelConfirm", {PERSISTENT, BOOL, "0"}},
-    {"TurnDesiresNav", {PERSISTENT, BOOL, "0"}},
+    {"AutomaticTurnInitiation", {PERSISTENT, BOOL, "0"}},
     {"ChestnutActive", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION | CLEAR_ON_IGNITION_ON, BOOL}},
     {"ChestnutLoading", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION | CLEAR_ON_IGNITION_ON, BOOL}},
     // Jetlink (zoompilot/jetlink): an iPhone / Jetson / Mac runs the large model.

@@ -87,3 +87,18 @@ def put_bool(params, key: str, value: bool, block: bool = False) -> None:
 
 def put_json(params, key: str, value: dict, block: bool = False) -> None:
   put(params, key, value, json.dumps(value).encode(), block)
+
+
+def remove(params, key: str) -> None:
+  if _known(params, key):
+    try:
+      params.remove(key)
+      return
+    except Exception:
+      pass
+  path = _path(params, key)
+  if os.path.dirname(path):
+    try:
+      os.remove(path)
+    except Exception:
+      pass
