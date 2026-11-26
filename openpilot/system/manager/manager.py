@@ -27,6 +27,8 @@ def manager_init() -> None:
   build_metadata = get_build_metadata()
 
   params = Params()
+  from openpilot.selfdrive.controls.lib.turn_intent import migrate_turn_initiation_params
+  migrate_turn_initiation_params(params)
   params.clear_all(ParamKeyFlag.CLEAR_ON_MANAGER_START)
   params.clear_all(ParamKeyFlag.CLEAR_ON_ONROAD_TRANSITION)
   params.clear_all(ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION)

@@ -1,14 +1,11 @@
 from collections.abc import Callable
 
-import raylib_nb as rl
 
 from openpilot.cereal import log
 from openpilot.selfdrive.ui.mici.widgets.button import BigParamControl, BigMultiParamToggle, BigMultiBoolParamToggle, BigToggle, BigButton
 from openpilot.selfdrive.ui.mici.widgets.dialog import SettingDescriptionDialog, wire_confirm
-from openpilot.system.ui.widgets import Widget
-from openpilot.system.ui.widgets.label import UnifiedLabel
 from openpilot.system.ui.widgets.scroller import NavScroller
-from openpilot.system.ui.lib.application import gui_app, MousePos, FontWeight
+from openpilot.system.ui.lib.application import gui_app, MousePos
 from openpilot.selfdrive.ui.layouts.settings.common import (
   lane_color_label, next_lane_color,
   onroad_ui_label, next_onroad_ui, restart_needed_callback,
@@ -18,10 +15,11 @@ from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.selfdrive.car import tesla_step_aside, park_offroad
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.layouts.settings.initial_cruise_speed import InitialCruiseSpeedButton
+from openpilot.common.params_compat import get_bool, put_bool
+from openpilot.selfdrive.controls.lib.turn_intent import ATI_PARAM, migrate_turn_initiation_params
 from openpilot.selfdrive.ui import mads
 
 PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
-
 
 
 class AutoLaneChangeConfirmPage(NavScroller):
@@ -54,6 +52,30 @@ class MadsConfirmPage(NavScroller):
   def __init__(self, on_confirm: Callable[[], None], brand: str | None = None):
     super().__init__()
     wire_confirm(self, "enabling\nMADS", mads.welcome_cards(brand), on_confirm)
+
+
+ATI_DESCRIPTION = (
+  "Allows the model to anticipate a signaled intersection turn.\n" +
+  "Below 20 mph: turn signal starts the turn.\n" +
+  "20 to 31 mph: turns if slowing and the model forecasts a turn.\n" +
+  "Below 31 mph with Nav2Pilot: matching nav turn and signal.\n" +
+  "Blocked by blind spot or a stop until stopped. Lane changes stay 45 mph and up."
+)
+
+ATI_CONFIRM_CARDS = [
+  "Allows the model to anticipate a signaled intersection turn.",
+  "Changes apply after the current signal and maneuver end.",
+  "Below 20 mph, your turn signal steers into the turn.",
+  "From 20 to 31 mph, it turns when slowing and the model agrees.",
+  "With Nav2Pilot below 31 mph, a nav turn and matching signal turn.",
+  "Blocked by a blind spot or planned stop until stopped. Lane changes stay 45+ mph.",
+]
+
+
+class AutomaticTurnInitiationConfirmPage(NavScroller):
+  def __init__(self, on_confirm: Callable[[], None]):
+    super().__init__()
+    wire_confirm(self, "enabling auto\nturn initiation", ATI_CONFIRM_CARDS, on_confirm)
 
 
 class _ParamCycle(BigButton):
@@ -90,17 +112,6 @@ class ThemeLayoutMici(NavScroller):
     ])
 
 
-class _SectionLabel(Widget):
-  def __init__(self, text: str):
-    super().__init__()
-    self.set_rect(rl.Rectangle(0, 0, 402, 56))
-    self._label = UnifiedLabel(text, 36, font_weight=FontWeight.DISPLAY)
-
-  def _render(self, _rect):
-    self._label.set_rect(rl.Rectangle(self._rect.x, self._rect.y + 12, self._rect.width, 40))
-    self._label.render()
-
-
 class DrivingLayoutMici(NavScroller):
   def __init__(self):
     super().__init__()
@@ -113,23 +124,10 @@ class DrivingLayoutMici(NavScroller):
     # Based on rav4kumar's implementation of Automatic Lane Change (sunnypilot).
     self._alc_btn = BigToggle("auto lane change", initial_state=ui_state.params.get_bool("AutoLaneChangeEnabled"),
                              toggle_callback=self._on_alc)
-    self._turn_desires_header = _SectionLabel("turn desires")
-    self._turn_desires_toggle = BigParamControl("force turn desires", "TurnDesires",
-                                                toggle_callback=self._on_turn_desires,
-                                                description="With the turn signal on below 20 mph, ask the model to turn.\n" +
-                                                            "Clears when the signal turns off.\n" +
-                                                            "Blocked by a blind spot or a planned stop until you are stopped.\n" +
-                                                            "Lane changes still require 45 mph.")
-    self._model_turns_toggle = BigParamControl("model-confirmed turns", "TurnDesiresModelConfirm",
-                                               description="Between 20 and 31 mph, ask for a turn only if the model also forecasts one.\n" +
-                                                           "Needs force turn desires on, a turn signal, and slowing down.")
-    self._nav_turns_toggle = BigParamControl("navigation turns", "TurnDesiresNav",
-                                             description="When navigation has an upcoming turn, the matching turn signal "
-                                                         "asks the model to turn, below 31 mph.\n" +
-                                                         "Needs force turn desires on.")
-    self._turn_desires_on = self._turn_desires_toggle._checked
-    self._model_turns_toggle.set_enabled(lambda: self._turn_desires_on)
-    self._nav_turns_toggle.set_enabled(lambda: self._turn_desires_on)
+    migrate_turn_initiation_params(ui_state.params)
+    self._ati_btn = BigToggle("automatic turn initiation",
+                              initial_state=get_bool(ui_state.params, ATI_PARAM, False),
+                              toggle_callback=self._on_ati, description=ATI_DESCRIPTION)
     # Set Speed Assist, from sunnypilot (zephleggett). Only with openpilot longitudinal.
     self._ssa_toggle = BigParamControl("set speed assist", "SetSpeedAssist",
                                        description="Accelerate up to the set speed, or the following distance behind a lead,\n" +
@@ -193,10 +191,7 @@ class DrivingLayoutMici(NavScroller):
 
     self._scroller.add_widgets([
       self._alc_btn,
-      self._turn_desires_header,
-      self._turn_desires_toggle,
-      self._model_turns_toggle,
-      self._nav_turns_toggle,
+      self._ati_btn,
       self._personality_toggle,
       self._ssa_toggle,
       self._braking_toggle,
@@ -216,9 +211,6 @@ class DrivingLayoutMici(NavScroller):
     # Toggle lists
     self._refresh_toggles = (
       ("AutoLaneChangeEnabled", self._alc_btn),
-      ("TurnDesires", self._turn_desires_toggle),
-      ("TurnDesiresModelConfirm", self._model_turns_toggle),
-      ("TurnDesiresNav", self._nav_turns_toggle),
       ("SetSpeedAssist", self._ssa_toggle),
       ("Mads", self._mads_btn),
       (mads.MAIN_CRUISE, self._mads_main_cruise),
@@ -272,8 +264,17 @@ class DrivingLayoutMici(NavScroller):
     screen_button = mads.SCREEN_BUTTONS.index(self._mads_screen.value)
     self._mads_visible = mads.visible_options(brand, ui_state.cp_sp_flags, screen_button, car_flags, fingerprint)
 
-  def _on_turn_desires(self, state: bool):
-    self._turn_desires_on = bool(state)
+  def _on_ati(self, state: bool):
+    if state:
+      self._ati_btn.set_checked(False)
+
+      def on_confirm():
+        put_bool(ui_state.params, ATI_PARAM, True, block=True)
+        self._ati_btn.set_checked(True)
+
+      gui_app.push_widget(AutomaticTurnInitiationConfirmPage(on_confirm))
+    else:
+      put_bool(ui_state.params, ATI_PARAM, False, block=True)
 
   def _on_mads(self, state: bool):
     if state:
@@ -306,7 +307,7 @@ class DrivingLayoutMici(NavScroller):
     # Refresh toggles from params to mirror external changes
     for key, item in self._refresh_toggles:
       item.set_checked(ui_state.params.get_bool(key))
-    self._turn_desires_on = self._turn_desires_toggle._checked
+    self._ati_btn.set_checked(get_bool(ui_state.params, ATI_PARAM, False))
     self._step_aside_btn.set_checked(tesla_step_aside.enabled(ui_state.params))
     self._park_offroad_btn.set_checked(park_offroad.enabled(ui_state.params))
 
