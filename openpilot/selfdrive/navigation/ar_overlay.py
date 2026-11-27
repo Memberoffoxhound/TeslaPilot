@@ -9,6 +9,11 @@ MIN_X = 2.0  # m, nothing closer than this projects sanely
 MIN_SPEED_FOR_BEARING = 2.0  # m/s
 
 
+def flat_fill_xs(cx: float, half: float, torque: float) -> tuple[float, float]:
+  # fill from the center, positive torque to the right
+  return (cx, cx + half * torque) if torque > 0 else (cx + half * torque, cx)
+
+
 class NavAROverlay:
   # state and update for the AR route overlay; the mici widget adds render
   def __init__(self):
@@ -20,10 +25,12 @@ class NavAROverlay:
     self._anchor: np.ndarray | None = None
     self._man_dist, self._man_mod = 1e9, ''
     self._path = np.empty((0, 3))
+    self._z = np.empty(0)
+    self._z_height: float | None = None
     self._reason_t = 0.0
     self.reason: str | None = 'route'
 
-  def update(self, path_xyz: np.ndarray, calibrated: bool, sm=None):
+  def update(self, path_xyz: np.ndarray, calibrated: bool, sm=None, now: float | None = None, height: float | None = None):
     # sm is ui_state.sm on device; tests pass a stub so this stays headless
     if sm is None:
       from openpilot.selfdrive.ui.ui_state import ui_state
@@ -36,16 +43,20 @@ class NavAROverlay:
     gps_ok = gps is not None and math.isfinite(float(gps.latitude)) and math.isfinite(float(gps.longitude))
     raw = ar.fallback_reason(calibrated, gps.horizontalAccuracy if gps else None, sm['carState'].vEgo,
                              nav.maneuverDistance, nav.maneuverModifier, holding=self.reason)
-    if len(self._route_ll) < 2 or not gps_ok or len(path_xyz) < 2:
-      raw = raw or ('gps' if gps is not None and not gps_ok else 'route')
-    now = time.monotonic()
+    now = time.monotonic() if now is None else now
     prev = self.reason
     self.reason, self._reason_t = ar.hold_fallback(self.reason, raw, self._reason_t, now)
+    # missing route or GPS is applied after the hold, so a drop is not held as AR
+    if self.reason is None and (len(self._route_ll) < 2 or not gps_ok or len(path_xyz) < 2):
+      self.reason = 'gps' if gps is not None and not gps_ok else 'route'
     self._man_dist, self._man_mod = nav.maneuverDistance, nav.maneuverModifier
     if self.reason is not None:
       return
     need = sm.updated['modelV2'] or sm.updated['navRoute'] or (src is not None and sm.updated[src]) or prev is not None
     if not need:
+      return
+    if gps is None or len(self._route_ll) < 2 or len(path_xyz) < 2:
+      self.reason = 'route'
       return
     # gps bearing is noise when slow, so hold the last good one
     if gps.speed > MIN_SPEED_FOR_BEARING:
@@ -60,3 +71,8 @@ class NavAROverlay:
     keep = route[:, 0] > MIN_X
     self._route, self._weight = route[keep], weight[keep]
     self._path = path_xyz
+    if height is not None:
+      self._z = ar.ground_z(self._route, self._path, height)
+      self._z_height = height
+    else:
+      self._z_height = None

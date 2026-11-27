@@ -1,5 +1,6 @@
 import numpy as np
 import raylib_nb as rl
+from openpilot.selfdrive.navigation.ar_overlay import flat_fill_xs
 from openpilot.selfdrive.ui.mici.onroad import blend_colors
 from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar
 from openpilot.selfdrive.ui.ui_state import UIStatus
@@ -26,7 +27,7 @@ class FlatTorqueBar(TorqueBar):
     start_color, end_color = blend_colors(dimmed, start_color, engaged), blend_colors(dimmed, end_color, engaged)
     if abs(x) > 0.004:
       # fill from the center, positive to the right; the gradient runs center to 65% of the bar half width
-      x0, x1 = (cx, cx + half * x) if x > 0 else (cx + half * x, cx)
+      x0, x1 = flat_fill_xs(cx, half, x)
       pts = np.array([(x0, bar.y), (x1, bar.y), (x1, bar.y + bar.height), (x0, bar.y + bar.height)], dtype=np.float32)
       g0 = (cx - rect.x) / rect.width
       g1 = (cx + np.sign(x) * half * 0.65 - rect.x) / rect.width

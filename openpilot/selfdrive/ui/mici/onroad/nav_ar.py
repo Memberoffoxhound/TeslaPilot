@@ -17,11 +17,13 @@ ARROW_BLUE = (50, 150, 255)
 
 
 class NavAROverlay(_NavAROverlay):
-
   def render(self, rect: rl.Rectangle, transform: np.ndarray, height: float, color: tuple[int, int, int]):
-    if self.reason is not None or len(self._route) < 2:
+    if self.reason is not None or len(self._route) < 2 or len(self._path) < 1:
       return
-    z = ar.ground_z(self._route, self._path, height)
+    if self._z_height != height or len(self._z) != len(self._route):
+      self._z = ar.ground_z(self._route, self._path, height)
+      self._z_height = height
+    z = self._z
     offset = np.array([rect.x, rect.y], dtype=np.float32)
     self._strip(rect, transform, z, CARPET_HW, rl.Color(*color, 110), offset)
     self._strip(rect, transform, z, LINE_HW, rl.Color(min(255, color[0] + 60), min(255, color[1] + 60), min(255, color[2] + 60), 230), offset)
