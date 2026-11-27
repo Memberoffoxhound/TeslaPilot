@@ -21,6 +21,9 @@ from openpilot.common.params import Params
 from openpilot.common.timeout import Timeout
 from openpilot.system.athena import athenad
 from openpilot.system.athena.athenad import MAX_RETRY_COUNT, UPLOAD_SESS, dispatcher
+from openpilot.system.athena.rpc import dumps_call, handle
+from openpilot.selfdrive.navigation.nav2pilot.waypoints import waypoints_from_param
+from openpilot.selfdrive.ui.tripstats import progress as trip_progress
 from openpilot.system.athena.tests.helpers import HTTPRequestHandler, MockWebsocket, MockApi, EchoSocket
 from openpilot.selfdrive.test.helpers import http_server_context
 from openpilot.common.hardware.hw import Paths
@@ -141,11 +144,38 @@ class TestAthenadMethods(OpenpilotTestCase):
       assert set_destination(lat, lon, name) == {"success": 1}
       assert self.params.get("NavDestination") == {"latitude": lat, "longitude": lon, "place_name": name}
 
+    assert set_destination(lat, lon, "") == {"success": 1}
+    assert self.params.get("NavDestination") == {"latitude": lat, "longitude": lon}
+
     kept = self.params.get("NavDestination")
-    for bad in ("a" * 81, 123, "hello\nworld", ""):
+    for bad in ("a" * 81, 123, "hello\nworld"):
       with self.assertRaises(TypeError):
         set_destination(lat, lon, bad)
       assert self.params.get("NavDestination") == kept
+
+  def test_set_nav_destination_handle_and_readers(self):
+    # through the real dispatcher, then every NavDestination reader
+    lat, lon = 32.875134, -117.209777
+    raw = handle(dumps_call("setNavDestination", {"latitude": lat, "longitude": lon, "place_name": "Café Humbert"}, request_id=1))
+    resp = json.loads(raw)
+    assert resp["result"] == {"success": 1}
+    dest = self.params.get("NavDestination")
+    assert dest == {"latitude": lat, "longitude": lon, "place_name": "Café Humbert"}
+    # navd / nav2pilot: only longitude and latitude are used; extra fields are ignored
+    assert (dest["longitude"], dest["latitude"]) == (lon, lat)
+    assert waypoints_from_param(dest) == ()
+    # ui_state stores the dict; tripstats reads place_name
+    assert dest is not None
+    assert trip_progress.destination_name(dest) == "Café Humbert"
+
+    raw = handle(dumps_call("setNavDestination", {"latitude": lat, "longitude": lon}, request_id=2))
+    assert json.loads(raw)["result"] == {"success": 1}
+    dest = self.params.get("NavDestination")
+    assert dest == {"latitude": lat, "longitude": lon}
+    assert "place_name" not in dest
+    assert (dest["longitude"], dest["latitude"]) == (lon, lat)
+    assert waypoints_from_param(dest) == ()
+    assert trip_progress.destination_name(dest) == trip_progress.UNKNOWN_DESTINATION
 
   def test_get_message(self):
     with self.assertRaises(TimeoutError) as _:
