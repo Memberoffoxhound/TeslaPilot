@@ -1,6 +1,7 @@
 import time
 import raylib_nb as rl
 import openpilot.cereal.messaging as messaging
+from openpilot.cereal import log
 from openpilot.selfdrive.ui.mici.layouts.home import MiciHomeLayout
 from openpilot.selfdrive.ui.mici.layouts.settings.settings import SettingsLayout
 from openpilot.selfdrive.ui.mici.layouts.offroad_alerts import MiciOffroadAlerts
@@ -37,6 +38,7 @@ class MiciMainLayout(Scroller):
     self._last_trip_at: float | None = None
     self._setup = False
     self._prev_ignition = False
+    self._prev_alerting = False
     self._ignition_off_time = time.monotonic()  # home already greets on boot
     self._peek_t0: float | None = None
     self._peek_pending = False
@@ -178,6 +180,12 @@ class MiciMainLayout(Scroller):
     if not CS.standstill and self._prev_standstill:
       gui_app.pop_widgets_to(self, lambda: self._scroll_to(self._onroad_layout))
     self._prev_standstill = CS.standstill
+
+    # nav-ui hook: any onroad alert sends the trip page back to the camera
+    alerting = ui_state.started and ui_state.sm['selfdriveState'].alertSize != log.SelfdriveState.AlertSize.none
+    if alerting and not self._prev_alerting and abs(self._trip_page.rect.x) < 8:
+      self._scroll_to(self._onroad_layout)
+    self._prev_alerting = alerting
 
   def _on_interactive_timeout(self):
     if self._fingerprint.active:

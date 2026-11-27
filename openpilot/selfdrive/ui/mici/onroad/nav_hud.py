@@ -23,24 +23,6 @@ ETA_ROTATE = 4.0  # s per value
 COMMA_GREEN = (23, 127, 64)
 
 
-def _accent_rgb() -> tuple[int, int, int]:
-  # selected lane color from the theme manager, else comma green
-  try:
-    from openpilot.selfdrive.ui.layouts.settings.common import theme_rgb
-    return tuple(max(0, min(255, int(c))) for c in theme_rgb())
-  except Exception:
-    try:
-      from openpilot.selfdrive.ui.layouts.settings.common import THEME_OPENPILOT_RGB
-      return tuple(THEME_OPENPILOT_RGB)
-    except Exception:
-      return COMMA_GREEN
-
-
-def _accent(alpha: float = 1.0) -> rl.Color:
-  r, g, b = _accent_rgb()
-  return rl.Color(r, g, b, int(max(0.0, min(1.0, float(alpha))) * 255))
-
-
 def _eta_values(instruction) -> list[tuple[str, str]]:
   seconds = max(0, instruction.timeRemaining)
   arrive = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
@@ -54,11 +36,12 @@ class NavARHud:
     self._man_key = ''
     self._man_start = 1.0
 
-  def render(self, rect):
+  def render(self, rect, accent_rgb: tuple[int, int, int] | None = None):
     if not (ui_state.sm.valid['navInstruction'] and ui_state.sm.alive['navInstruction']):
       return
     instruction = ui_state.sm['navInstruction']
-    accent = _accent()
+    r, g, b = accent_rgb or COMMA_GREEN
+    accent = rl.Color(r, g, b, 255)
     rl.draw_rectangle_gradient_h(int(rect.x), int(rect.y), 300, int(rect.height), rl.Color(4, 6, 8, 215), rl.BLANK)
     tile = rl.Rectangle(rect.x + AR_TILE_X, rect.y + 8, 98, 98)
     rl.draw_rectangle_rounded(tile, 0.2, 10, accent)

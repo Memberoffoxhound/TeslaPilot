@@ -416,22 +416,27 @@ class HudRenderer(Widget):
     return r - 10 - icon.width, b - 10 - icon.height
 
   def _draw_steering_wheel(self, rect: rl.Rectangle) -> None:
-    if self._speed_right:  # nav-ui hook: steering shows as the flat bar on the top edge
-      return
     mads = ui_state.sm['selfdriveStateSP'].mads
     mads_active = ui_state.started and mads.enabled and mads.active and not ui_state.engaged
     engaged = self._status.weight(UIStatus.ENGAGED)
     critical = self._wheel_critical_filter.update(self._show_wheel_critical) * (1.0 if mads_active else engaged)
+    # nav-ui hook: AR view uses the flat bar; still draw the critical warning icon on that bar
+    if self._speed_right and critical < 1e-2:
+      return
     green = rl.Color(*THEME_TESLA_RGB, 255) if tesla_theme() else WHEEL_GREEN
     status_color = self._status.color({UIStatus.ENGAGED: green, UIStatus.OVERRIDE: WHEEL_WHITE, UIStatus.DISENGAGED: WHEEL_WHITE})
     wheel_color = lerp_color(status_color, WHEEL_ORANGE, critical)
     wheel_txt = self._txt_wheel
 
-    # pos: bottom of the left column; nav: rides the bar, 3px above it at the current filtered torque
-    pos_x = int(rect.x + rect.width / 2)
-    if self._nav_shown:
+    # pos: bottom of the left column; nav: rides the bar; AR critical: on the flat bar at the top
+    if self._speed_right:
+      pos_x = int(rect.x + 20 + (rect.width - 20 - 72) / 2)
+      pos_y = int(rect.y + 8 + wheel_txt.height / 2)
+    elif self._nav_shown:
+      pos_x = int(rect.x + rect.width / 2)
       pos_y = _nav_wheel_pos_y(self._torque_bar._torque_filter.x, rect.y, rect.height)
     else:
+      pos_x = int(rect.x + rect.width / 2)
       pos_y = int(rect.y + rect.height - 10 - wheel_txt.height / 2)
     # ease between the live angle and rest on ignition changes; carState keeps its last angle once stopped
     rotation = -ui_state.sm['carState'].steeringAngleDeg * self._wheel_angle_filter.update(ui_state.started and ui_state.received_since_started('carState'))

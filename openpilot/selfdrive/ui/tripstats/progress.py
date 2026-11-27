@@ -1,7 +1,5 @@
-"""Trip progress for the live trip page: what the drive so far looked like, by distance, and its numbers.
-
-Pure: no openpilot imports beyond the card helpers. Constant memory: runs of equal state merge when too many.
-"""
+# Trip progress for the live trip page: the drive so far, by distance, and its numbers.
+# Pure: no openpilot imports beyond the card helpers. Runs of equal state merge when too many.
 from __future__ import annotations
 
 import math
@@ -29,18 +27,15 @@ _OVERRIDE_STATES = ("preEnabled", "overriding")   # the recorder's override laye
 
 
 def classify(enabled: bool, state: str, lat_active: bool, mads: bool = False) -> int:
-  """selfdriveState and carControl to the bar's state. enabled counts as engaged, as in the trip recorder.
-
-  Lateral-only coloring is optional: pass mads=True on forks that expose it (selfdriveStateSP).
-  Without that flag, latActive and not enabled is just disengaged, so the bundle has no MADS dependency.
-  """
+  # enabled counts as engaged, as in the trip recorder.
+  # pass mads=True on forks that expose selfdriveStateSP to get lateral-only coloring
   if enabled:
     return OVERRIDE if state in _OVERRIDE_STATES else ENGAGED
   return LAT_ONLY if mads and lat_active else DISENGAGED
 
 
 class SegmentLog:
-  """[length m, state] runs along the trip."""
+  # [length m, state] runs along the trip
 
   def __init__(self) -> None:
     self.runs: list[list[float]] = []
@@ -69,7 +64,7 @@ class SegmentLog:
       del self.runs[i]
 
   def spans(self, total_m: float) -> list[tuple[float, float, int]]:
-    """(start, end, state) as fractions of the whole trip, total_m = traveled + remaining."""
+    # (start, end, state) as fractions of the whole trip, total_m = traveled + remaining
     out, x = [], 0.0
     for length, state in self.runs:
       out.append((x / total_m, (x + length) / total_m, int(state)))
@@ -83,7 +78,7 @@ def fmt_time(seconds: float) -> tuple[str, str]:
 
 
 def trip_numbers(traveled_m: float, engaged_m: float, dur_s: float, remaining_m: float | None, metric: bool) -> dict:
-  """The four big stats as (value, unit), and where the car is on the bar (0 to 1; None without a route)."""
+  # the four big stats as (value, unit), and where the car is on the bar (0 to 1; None without a route)
   rem = ("--", "") if remaining_m is None else fmt_dist(max(0.0, remaining_m), metric)
   total = None if remaining_m is None else traveled_m + max(0.0, remaining_m)
   return {
@@ -96,13 +91,13 @@ def trip_numbers(traveled_m: float, engaged_m: float, dur_s: float, remaining_m:
 
 
 def destination_name(destination: dict | None) -> str:
-  """The NavDestination param's place_name, else a plain fallback."""
+  # the NavDestination param's place_name, else a plain fallback
   name = str((destination or {}).get("place_name") or "").strip()
   return name or UNKNOWN_DESTINATION
 
 
 def fade_alphas(t: float) -> tuple[float, float]:
-  """(destination, stats) alphas. Each state holds HOLD_S seconds; the last FADE_S is a smooth crossfade."""
+  # (destination, stats) alphas. Each state holds HOLD_S seconds; the last FADE_S is a smooth crossfade
   span = 2 * HOLD_S
   x = t % span
   if x < HOLD_S - FADE_S:
@@ -119,7 +114,7 @@ def fade_alphas(t: float) -> tuple[float, float]:
 
 
 def peek_offset(t: float, px: float = PEEK_PX, dur: float = PEEK_S, t_out: float = PEEK_OUT_S) -> float:
-  """Pixels the camera shifts right, revealing the trip page on the left. Ease-out, then a spring back, done at dur."""
+  # pixels the camera shifts right, revealing the trip page on the left. ease-out, then a spring back, done at dur
   if t <= 0 or t >= dur:
     return 0.0
   if t < t_out:

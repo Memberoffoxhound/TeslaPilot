@@ -1,9 +1,4 @@
-"""Live trip page: the page left of the camera, one swipe right from the road view.
-
-The top half alternates, with a short crossfade, between a large 'driving to <destination>'
-and four big stats. The trip bar stays put. Numbers come from tripstats.live and
-navInstruction; the bar is a distance log kept here (tripstats.progress).
-"""
+# Live trip page, one swipe right of the camera: driving-to and stats, plus the trip bar.
 from __future__ import annotations
 
 import datetime
@@ -27,10 +22,7 @@ ARRIVE = rl.Color(225, 231, 238, 255)
 BAR_X, BAR_Y, BAR_H, BAR_PAD = 20, 148, 26, 20
 TRACK = rl.Color(255, 255, 255, int(255 * pr.TRACK_ALPHA))
 ASCENT = 0.80   # Inter baseline, as a fraction of the font px
-DEST_REFRESH_S = 2.0
-# the arrive time sits in the lower right; the legend must stop short of it
-ARRIVE_RESERVE = 130
-LEGEND_MAX = 390  # 536 - 16 - 130
+ARRIVE_RESERVE = 130  # the arrive time sits in the lower right; the legend must stop short of it
 
 
 def _color(rgb, a: float = 1.0) -> rl.Color:
@@ -48,14 +40,12 @@ class TripProgressPage(Widget):
     self._start = -1.0
     self._last_m = 0.0
     self._state = pr.DISENGAGED
-    self._dest = pr.UNKNOWN_DESTINATION
-    self._dest_t = 0.0
     self._phase_t0 = time.monotonic()
     self._was_on = False
     self._dm = DriverStateRenderer(background=False)
 
   def record(self) -> None:
-    """Every UI frame, also while this page is off screen: add the distance since last frame to the bar log."""
+    # every UI frame, also while this page is off screen: add the distance since last frame to the bar log
     live = ts.live
     if not live.active:
       return
@@ -64,24 +54,13 @@ class TripProgressPage(Widget):
     sm = ui_state.sm
     ss = sm['selfdriveState']
     # mads is optional: LAT_ONLY coloring only when the fork exposes selfdriveStateSP
-    mads = False
-    try:
-      mads = 'selfdriveStateSP' in sm
-    except Exception:
-      mads = False
+    mads = 'selfdriveStateSP' in sm.data
     self._state = pr.classify(bool(ss.enabled), str(ss.state), bool(sm['carControl'].latActive), mads=mads)
     self._log.add(live.m - self._last_m, self._state)
     self._last_m = live.m
 
   def _destination(self) -> str:
-    now = time.monotonic()
-    if now - self._dest_t > DEST_REFRESH_S:
-      self._dest_t = now
-      try:
-        self._dest = pr.destination_name(ui_state.params.get("NavDestination"))
-      except Exception:
-        self._dest = pr.UNKNOWN_DESTINATION
-    return self._dest.lower()
+    return pr.destination_name(getattr(ui_state, 'nav_destination', None)).lower()
 
   def _update_state(self):
     # start on 'driving to' each time the page is swiped into view
@@ -165,9 +144,6 @@ class TripProgressPage(Widget):
       self._text(lbl, x, y0 + 94, ls, med, _fade(MUTED, a))
       x += cw + gap
 
-  def _rgb(self, state: int):
-    return pr.BAR_RGB[state]
-
   def _draw_bar(self, rect: rl.Rectangle, frac: float | None, active: bool) -> None:
     x0 = rect.x + BAR_X
     x1 = rect.x + rect.width - BAR_PAD
@@ -180,19 +156,19 @@ class TripProgressPage(Widget):
     spans = self._log.spans(max(self._log.total, 1.0) / max(done, 1e-3)) if self._log.runs and frac else []
     if spans and xc - x0 > h:
       r = h / 2
-      rl.draw_circle_v(rl.Vector2(x0 + r, cy), r, _color(self._rgb(spans[0][2])))
-      rl.draw_circle_v(rl.Vector2(xc - r, cy), r, _color(self._rgb(spans[-1][2])))
+      rl.draw_circle_v(rl.Vector2(x0 + r, cy), r, _color(pr.BAR_RGB[spans[0][2]]))
+      rl.draw_circle_v(rl.Vector2(xc - r, cy), r, _color(pr.BAR_RGB[spans[-1][2]]))
       lo, hi = x0 + r, xc - r
       for a, b, st in spans:
         sx0, sx1 = max(lo, x0 + w * a), min(hi, x0 + w * b)
         if sx1 > sx0:
-          rl.draw_rectangle_rec(rl.Rectangle(round(sx0), y, max(1.0, round(sx1) - round(sx0)), h), _color(self._rgb(st)))
+          rl.draw_rectangle_rec(rl.Rectangle(round(sx0), y, max(1.0, round(sx1) - round(sx0)), h), _color(pr.BAR_RGB[st]))
     rl.draw_circle_v(rl.Vector2(x1, cy), 9, BG)
     rl.draw_ring(rl.Vector2(x1, cy), 6, 9, 0, 360, 24, WHITE)
     if frac is not None and active:
       rl.draw_circle_v(rl.Vector2(xc, cy + 3), 19, rl.Color(0, 0, 0, 110))
       rl.draw_circle_v(rl.Vector2(xc, cy), 17, WHITE)
-      rl.draw_circle_v(rl.Vector2(xc, cy), 11, _color(self._rgb(self._state)))
+      rl.draw_circle_v(rl.Vector2(xc, cy), 11, _color(pr.BAR_RGB[self._state]))
       # percent sits just above the bar, and shifts left if it would hit the destination ring
       label = f'{round(done * 100)}%'
       self._text(label, min(max(xc, rect.x + 36), x1 - 36) - self._width(label, 22, FontWeight.BOLD) / 2, y - 8, 22, FontWeight.BOLD, WHITE)
@@ -201,9 +177,9 @@ class TripProgressPage(Widget):
     present = {st for _, st in self._log.runs} | {self._state}
     items = [st for st in (pr.ENGAGED, pr.OVERRIDE, pr.LAT_ONLY, pr.DISENGAGED) if st in present]
     # drop items from the right until the row clears the arrive time
-    while items and sum(26 + self._width(pr.NAMES[st], 18, FontWeight.MEDIUM) + 14 for st in items) > LEGEND_MAX:
+    while items and sum(26 + self._width(pr.NAMES[st], 18, FontWeight.MEDIUM) + 14 for st in items) > width - 16 - ARRIVE_RESERVE:
       items.pop()
     x, y = x0 + 16, y0 + 214
     for st in items:
-      rl.draw_circle_v(rl.Vector2(x + 6, y + 1), 6, _color(self._rgb(st)))
+      rl.draw_circle_v(rl.Vector2(x + 6, y + 1), 6, _color(pr.BAR_RGB[st]))
       x += 18 + self._text(pr.NAMES[st], x + 18, y + 8, 18, FontWeight.MEDIUM, LIGHT) + 14

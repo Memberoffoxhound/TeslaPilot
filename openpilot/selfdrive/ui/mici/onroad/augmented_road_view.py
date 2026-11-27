@@ -252,13 +252,14 @@ class AugmentedRoadView(CameraView):
     self._update_calibration()
 
     alert_to_render, not_animating_out = self._alert_renderer.will_render()
-    show_navigation = ui_state.navigation_enabled and ui_state.nav_destination_set and alert_to_render is None
-    # AR overlay on the camera when chosen and trusted, else the map panel
+    nav_wanted = ui_state.navigation_enabled and ui_state.nav_destination_set
+    # map panel hides while an alert is up; the AR view stays so the critical wheel can replace the bar
+    show_navigation = nav_wanted and alert_to_render is None
     self._ar_shown = False
-    if show_navigation and ui_state.nav_view == NAV_VIEW_AR:
+    if nav_wanted and ui_state.nav_view == NAV_VIEW_AR:
       self._nav_ar.update(self._model_renderer.path_points, self._calibrated)
       self._ar_shown = self._nav_ar.reason is None and self._navigation.routing
-      show_navigation = not self._ar_shown
+      show_navigation = not self._ar_shown and alert_to_render is None
 
     # Create inner content area with border padding. Without navigation, the black side panel is on the left
     # the AR view is full bleed: no side panels, the DM icon and steering bar sit on the camera
@@ -320,7 +321,8 @@ class AugmentedRoadView(CameraView):
     elif show_navigation or self._ar_shown:
       self._long_indicator.set_should_draw(False)
     if self._ar_shown:
-      self._nav_hud.render(rl.Rectangle(self._content_rect.x + 6, self._content_rect.y, self._content_rect.width - 6, self._content_rect.height))  # nav-ui hook
+      self._nav_hud.render(rl.Rectangle(self._content_rect.x + 6, self._content_rect.y, self._content_rect.width - 6, self._content_rect.height),
+                             self._model_renderer.theme_rgb)  # nav-ui hook
     self._alert_renderer.render(self._content_rect)
 
     # Draw fake rounded border
@@ -345,13 +347,14 @@ class AugmentedRoadView(CameraView):
     # or in a column along the left edge of the camera when navigation takes the side panel
     left_rect = rl.Rectangle(self._rect.x, self._rect.y, SIDE_PANEL_WIDTH, self._rect.height)
     if self._ar_shown:
-      # AR: only the DM icon, in the top right corner; no wheel, compass or personality bars
+      # AR: DM in the top right; the critical wheel icon is drawn on the flat bar when an alert hides it
       self._driver_state_renderer.set_should_draw(True)
       self._driver_state_renderer.set_dimmed(1.0 if not ui_state.started else 0.0 if ui_state.always_on_dm else self._status.weight(UIStatus.DISENGAGED))
       self._driver_state_renderer.set_show_under_alerts(True)
       dm_size = self._driver_state_renderer.rect.width
       self._driver_state_renderer.set_position(self._content_rect.x + self._content_rect.width - 4 - dm_size, self._content_rect.y + 4)
       self._driver_state_renderer.render()
+      self._hud_renderer.render_steering_wheel(self._content_rect)
       return
     if show_navigation:
       left_rect = rl.Rectangle(self._content_rect.x, self._content_rect.y, LEFT_COLUMN_WIDTH, self._content_rect.height)
@@ -412,7 +415,10 @@ class AugmentedRoadView(CameraView):
       self.device_camera = DEVICE_CAMERAS[(str(sm['deviceState'].deviceType), str(sm['narrowRoadCameraState'].sensor))]
 
     # Check if camera calibration data is available and valid
-    if not (sm.updated["extrinsicsCalibration"] and sm.valid['extrinsicsCalibration']):
+    if not sm.valid['extrinsicsCalibration']:
+      self._calibrated = False
+      return
+    if not sm.updated["extrinsicsCalibration"]:
       return
 
     calib = sm['extrinsicsCalibration']

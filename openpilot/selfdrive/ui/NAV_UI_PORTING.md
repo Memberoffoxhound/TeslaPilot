@@ -1,12 +1,12 @@
 # Porting to another fork
 
-The nav AR view, the top torque bar, the live trip page, and tripstats ship as one bundle. Copy the modules below, then make the small hook edits (search the tree for `nav-ui hook`). This bundle does not depend on MADS. TeslaPilot keeps an optional lateral-only color on the trip bar when MADS is present; that path is off unless the fork exposes it.
+The nav AR view, the top torque bar, the live trip page, and tripstats ship as one bundle. Copy the modules below, then make the small hook edits (search the tree for `nav-ui hook`). This bundle does not depend on MADS. TeslaPilot turns on an optional lateral-only color on the trip bar when `selfdriveStateSP` is in `sm.data`; that path stays off on forks that do not expose it.
 
 ## New modules to copy
 
 Nav UI:
 
-- `selfdrive/navigation/ar_route.py` and `selfdrive/navigation/tests/test_ar_route.py`
+- `selfdrive/navigation/ar_route.py`, `ar_overlay.py`, and `selfdrive/navigation/tests/test_ar_route.py`, `test_nav_ar.py`
 - `selfdrive/ui/mici/onroad/nav_ar.py` (road ribbon and air chevrons)
 - `selfdrive/ui/mici/onroad/nav_hud.py` (turn card, distance, street, ETA)
 - `selfdrive/ui/mici/onroad/nav_torque.py` (`FlatTorqueBar`, a subclass of the stock mici `TorqueBar`)
@@ -26,15 +26,15 @@ Then apply the tripstats hook edits listed in `selfdrive/ui/tripstats/README.md`
 
 ## Hook edits (search for `nav-ui hook`)
 
-- `selfdrive/ui/mici/onroad/augmented_road_view.py`: choose AR vs map from `NavView`, run `NavAROverlay` and `NavARHud`, move the DM icon to the upper right in the AR view, shift the vanishing point, hide the side panels, and tell the HUD to put MAX on the right.
-- `selfdrive/ui/mici/onroad/hud_renderer.py`: `set_speed_on_right`, render `FlatTorqueBar` instead of the stock arc in the AR view, move MAX left of the DM icon, and skip the wheel and compass in that view. Keep the stock `TorqueBar` for the map and no-nav views. Do not add a `set_flat` flag to comma's `torque_bar.py`.
-- `selfdrive/ui/mici/onroad/model_renderer.py`: expose `car_space_transform`, `path_points`, `path_offset_z`, and `theme_rgb` so the overlay can share the model path's projection and color.
-- `selfdrive/ui/mici/layouts/main.py`: put `TripProgressPage` in the scroller between home and the camera; call `record()` every frame; run the once-per-drive peek bounce.
-- `system/ui/widgets/scroller.py`: `set_peek_px` (a visual offset after snap, so the bounce does not fight paging).
-- `selfdrive/ui/ui_state.py`: subscribe to `navRoute`; read the `NavView` param.
+- `selfdrive/ui/mici/onroad/augmented_road_view.py`: choose AR vs map from `NavView`, run `NavAROverlay` and `NavARHud`, move the DM icon to the upper right in the AR view, shift the vanishing point, hide the side panels, and tell the HUD to put MAX on the right. The AR view stays up during an onroad alert so the critical wheel icon can replace the hidden torque bar; the map panel still hides.
+- `selfdrive/ui/mici/onroad/hud_renderer.py`: `set_speed_on_right`, render `FlatTorqueBar` instead of the stock arc in the AR view, move MAX left of the DM icon, and skip the normal wheel and compass in that view. Still draw the critical warning icon on the flat bar when a critical alert hides the bar. Keep the stock `TorqueBar` for the map and no-nav views. Do not add a `set_flat` flag to comma's `torque_bar.py`.
+- `selfdrive/ui/mici/onroad/model_renderer.py`: expose `car_space_transform`, `path_points`, `path_offset_z`, and `theme_rgb` so the overlay can share the model path's projection and color. Pass `theme_rgb` into `NavARHud.render`.
+- `selfdrive/ui/mici/layouts/main.py`: put `TripProgressPage` in the scroller between home and the camera; call `record()` every frame; run the once-per-drive peek bounce; scroll back to the camera when an onroad alert is active and the trip page is on screen.
+- `system/ui/widgets/scroller.py`: `set_peek_px`. Peek is applied when placing items, not added to the snap offset, so the bounce does not fight paging.
+- `selfdrive/ui/ui_state.py`: subscribe to `navRoute`; read the `NavView` param and `NavDestination` (store the dict as `nav_destination`) on the params worker thread.
 - `common/params_keys.h`: `{"NavView", {PERSISTENT, INT, "0"}}` (0 AR overlay, 1 map).
 - `selfdrive/ui/mici/layouts/settings/developer.py`: a two-option "nav view" toggle. This tree uses `BigMultiParamToggle`. If a fork does not have that widget, add the same param with whatever two-option control it has.
-- `system/athena/athenad.py`: optional `place_name` on `setNavDestination`, stored in `NavDestination`.
+- `system/athena/athenad.py`: optional `place_name` on `setNavDestination`, stored in `NavDestination`. The new argument needs a validator (`either(one_of(None), regex(r"[^\x00-\x1f]{1,80}"))`); without it TeslaPilot's rpc dispatcher refuses to register the method and athenad will not start. Nav2Pilot `setNavRoute` does not carry `place_name`, so routes from the phone app always say "your destination".
 
 Leave comma's `torque_bar.py` and the map-panel parts of `navigation.py` alone. The AR HUD lives in `nav_hud.py` and does not add methods to the map panel.
 
@@ -46,15 +46,14 @@ Leave comma's `torque_bar.py` and the map-panel parts of `navigation.py` alone. 
 
 ## What degrades if a piece is missing
 
-- No `ar_route` / `nav_ar`: no road ribbon or air chevrons. The turn card and ETA still draw if `navInstruction` is alive.
-- No live calibration: the overlay hides (`nav_ar.reason`).
-- No `navRoute` / no mapsd path: the ribbon may be missing; the turn card still works from `navInstruction`.
+- No `ar_route` / `nav_ar`, or no `navRoute` with at least two points: the AR overlay is not shown (no ribbon, chevrons, turn card, or ETA). The map panel is used instead, as long as navigation is on and a destination is set.
+- No live calibration: the overlay hides (`nav_ar.reason`) and the map panel takes over, after the usual hold.
 - No `place_name`: the trip page says "your destination".
 - No `NavView` param or toggle: hardcode AR or map.
 - No `set_peek_px` hook: no drive-start bounce. Swipe to the trip page still works.
 - No tripstats: the trip page has no live distance, time, engaged %, or bar. This is required; copy the package, do not stub it out.
-- No MADS and no `selfdriveStateSP`: the trip bar uses engaged, override, and disengaged only. The lateral-only color is unused. TeslaPilot keeps that color by passing `mads=True` into `classify` when `selfdriveStateSP` is in the SubMaster.
-- No theme manager: the AR turn card uses comma green.
+- No MADS and no `selfdriveStateSP` in `sm.data`: the trip bar uses engaged, override, and disengaged only. The lateral-only color is unused. TeslaPilot turns that color on by passing `mads=True` into `classify` when `'selfdriveStateSP' in sm.data`.
+- No theme color passed into `NavARHud.render`: the AR turn card uses comma green.
 - No `always_on_dm`: the trip page dims the DM icon when disengaged, same as stock.
 
 The top torque bar uses the stock `TorqueBar` filters, colors, and visibility (including this fork's existing `steer_status` fade). It is not colored by tripstats engagement. Forks without a `steer_status` fade still inherit whatever `TorqueBar` already does on that fork.

@@ -122,7 +122,8 @@ class UIState:
     self.always_on_dm: bool = self.params.get_bool("AlwaysOnDM")
     self.navigation_enabled: bool = self.params.get_bool("NavigationEnabled")
     self.nav_view: int = self.params.get("NavView", return_default=True)  # nav-ui hook
-    self.nav_destination_set: bool = self.params.get("NavDestination") is not None
+    self.nav_destination = self.params.get("NavDestination")  # nav-ui hook
+    self.nav_destination_set: bool = self.nav_destination is not None
     self.chestnut_present: bool = False
     self.chestnut_compiled: bool = chestnut_model_ready()  # a big model to load: downloaded or bundled
     self.chestnut_download: float | None = None  # accel_progress.chestnut_download()
@@ -370,7 +371,8 @@ class UIState:
     self.personality_param = self.params.get("LongitudinalPersonality", return_default=True)
     self.navigation_enabled = self.params.get_bool("NavigationEnabled")
     self.nav_view = self.params.get("NavView", return_default=True)  # nav-ui hook
-    self.nav_destination_set = self.params.get("NavDestination") is not None
+    self.nav_destination = self.params.get("NavDestination")  # nav-ui hook
+    self.nav_destination_set = self.nav_destination is not None
     self.chestnut_active = self.params.get("ChestnutActive")
     self.chestnut_loading = self.params.get_bool("ChestnutLoading")
     self.chestnut_alert = any(self.params.get(k) is not None for k, a in OFFROAD_ALERTS.items()

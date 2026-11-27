@@ -194,7 +194,8 @@ class _Scroller(Widget):
     if self._snap_items and visible_items and self._scrolling_to[0] is None:
       # TODO: this doesn't handle two small buttons at the edges well
       center_pos = self._rect.x + self._rect.width / 2
-      closest_delta_pos = min((((item.rect.x + item.rect.width / 2) - center_pos) for item in visible_items), key=abs)
+      # nav-ui hook: item.rect already includes peek, so take it back out of the snap
+      closest_delta_pos = min((((item.rect.x + item.rect.width / 2) - center_pos - self._peek_px) for item in visible_items), key=abs)
       snap_target = self.scroll_panel.get_offset() - closest_delta_pos
 
     return self.scroll_panel.update(self._rect, content_size, snap_target=snap_target)
@@ -272,7 +273,7 @@ class _Scroller(Widget):
     self._content_size += self._spacing * (len(self._visible_items) - 1)
     self._content_size += self._pad * 2
 
-    self._scroll_offset = self._get_scroll(self._visible_items, self._content_size) + self._peek_px
+    self._scroll_offset = self._get_scroll(self._visible_items, self._content_size)
 
     self._item_pos_filter.update(self._scroll_offset)
 
@@ -289,9 +290,9 @@ class _Scroller(Widget):
         y = self._rect.y + cur_pos + spacing
         cur_pos += item.rect.height + spacing
 
-      # Consider scroll
+      # Consider scroll. nav-ui hook: peek is a visual shift only, not part of the snap offset
       if self._horizontal:
-        x += self._scroll_offset
+        x += self._scroll_offset + self._peek_px
       else:
         y += self._scroll_offset
 
