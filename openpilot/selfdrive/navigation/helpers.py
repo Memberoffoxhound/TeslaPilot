@@ -35,20 +35,43 @@ route_gate = RouteGate()
 
 
 class NavErrorGate:
-  # log a nav UI failure when the text changes, or again every interval_s
+  # log a nav UI failure when the type and site change, or again every interval_s
   def __init__(self, interval_s: float = 10.0):
     self.interval_s = interval_s
-    self.msg = None
+    self.key = None
     self.t = 0.0
 
   def record(self, err: BaseException, now: float | None = None) -> bool:
-    msg = f'{type(err).__name__}: {err}'
+    tb = err.__traceback__
+    site = 'none'
+    if tb is not None:
+      while tb.tb_next is not None:
+        tb = tb.tb_next
+      site = f'{tb.tb_frame.f_code.co_filename}:{tb.tb_lineno}'
+    key = f'{type(err).__name__}:{site}'
     now = time.monotonic() if now is None else now
-    if msg != self.msg or now - self.t > self.interval_s:
-      self.msg = msg
+    if key != self.key or now - self.t > self.interval_s:
+      self.key = key
       self.t = now
       return True
     return False
+
+
+class NavWidgetGuard:
+  # skip a nav widget after a failure until cooldown_s has passed
+  def __init__(self, gate: NavErrorGate, cooldown_s: float = 5.0):
+    self.gate = gate
+    self.cooldown_s = cooldown_s
+    self.off_until = 0.0
+
+  def ready(self, now: float | None = None) -> bool:
+    now = time.monotonic() if now is None else now
+    return now >= self.off_until
+
+  def trip(self, err: BaseException, now: float | None = None) -> bool:
+    now = time.monotonic() if now is None else now
+    self.off_until = now + self.cooldown_s
+    return self.gate.record(err, now=now)
 
 
 def nav_layout(route_on: bool, ar_view: bool = True, alerting: bool = False) -> dict:

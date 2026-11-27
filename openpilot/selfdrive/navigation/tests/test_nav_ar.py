@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from openpilot.selfdrive.navigation.ar_overlay import NavAROverlay, flat_fill_xs
-from openpilot.selfdrive.navigation.helpers import NavErrorGate, ROUTE_HOLD_S, RouteGate, nav_layout, route_active
+from openpilot.selfdrive.navigation.helpers import NavErrorGate, NavWidgetGuard, ROUTE_HOLD_S, RouteGate, nav_layout, route_active
 
 
 class _SM:
@@ -278,11 +278,56 @@ def test_bad_nav_route_does_not_raise():
   assert len(ov._route_ll) < 2
 
 
+def _raise_value(msg):
+  raise ValueError(msg)
+
+
+def _raise_value_elsewhere(msg):
+  raise ValueError(msg)
+
+
+def _caught(fn, *args):
+  try:
+    fn(*args)
+  except Exception as e:
+    return e
+  raise AssertionError('expected a raise')
+
+
 def test_nav_error_gate_logs_identical_failures_once():
   g = NavErrorGate()
-  err = ValueError('boom')
-  assert g.record(err, now=1.0)
-  assert not g.record(err, now=2.0)
-  assert not g.record(ValueError('boom'), now=10.9)
-  assert g.record(ValueError('boom'), now=11.1)
-  assert g.record(TypeError('boom'), now=11.2)
+  a = _caught(_raise_value, 'boom')
+  b = _caught(_raise_value, 'other')  # same type and site, different text
+  assert g.record(a, now=1.0)
+  assert not g.record(b, now=2.0)
+  assert not g.record(_caught(_raise_value, 'boom'), now=10.9)
+  assert g.record(_caught(_raise_value, 'boom'), now=11.1)
+  assert g.record(_caught(_raise_value_elsewhere, 'boom'), now=11.2)
+
+
+def test_nav_widget_guard_keeps_hud_errors_off_the_overlay():
+  gate = NavErrorGate()
+  overlay = NavWidgetGuard(gate)
+  hud = NavWidgetGuard(gate)
+  reason = type('W', (), {'reason': None})()
+
+  def boom():
+    raise RuntimeError('hud')
+
+  assert hud.ready(now=1.0)
+  err = _caught(boom)
+  assert hud.trip(err, now=1.0)
+  assert not hud.ready(now=5.9)
+  assert hud.ready(now=6.1)
+  assert reason.reason is None
+  assert overlay.ready(now=5.9)
+
+  def boom_ar():
+    raise RuntimeError('ar')
+
+  err = _caught(boom_ar)
+  if overlay.trip(err, now=10.0):
+    reason.reason = 'error'
+  assert reason.reason == 'error'
+  assert not overlay.ready(now=14.9)
+  assert hud.ready(now=14.9)
