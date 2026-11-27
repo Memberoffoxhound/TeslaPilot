@@ -10,7 +10,7 @@ from openpilot.selfdrive.ui.ui_state import device, ui_state
 from openpilot.selfdrive.ui.mici.layouts.onboarding import OnboardingWindow
 from openpilot.selfdrive.ui.body.layouts.onroad import BodyLayout
 from openpilot.system.ui.widgets import Widget
-from openpilot.selfdrive.navigation.helpers import route_active
+from openpilot.selfdrive.navigation.helpers import route_gate
 from openpilot.system.ui.lib.scroll_panel2 import ScrollState
 from openpilot.system.ui.widgets.scroller import Scroller
 from openpilot.selfdrive.ui import tripstats
@@ -40,10 +40,8 @@ class MiciMainLayout(Scroller):
     self._last_trip_at: float | None = None
     self._setup = False
     self._prev_ignition = False
-    self._prev_alerting = False
     self._ignition_off_time = time.monotonic()  # home already greets on boot
     self._peek_t0: float | None = None
-    self._peek_pending = False
     self._peek_allowed = False
 
     # Initialize widgets
@@ -166,7 +164,7 @@ class MiciMainLayout(Scroller):
           self._onroad_time_delay -= ONROAD_DELAY
       elif self._summary.drive is None and not self._summary.begin():
         self._scroll_to(self._home_layout)
-        self._peek_t0, self._peek_pending, self._peek_allowed = None, False, False
+        self._peek_t0, self._peek_allowed = None, False
         self._scroller.set_peek_px(0.0)
 
     if self._summary.update(abs(self._onroad_layout.rect.x - self._rect.x) < 1):
@@ -187,13 +185,14 @@ class MiciMainLayout(Scroller):
     # nav-ui hook: hide the trip page when there is no live route; stock scroller otherwise
     self._sync_trip_page()
 
-    # an active onroad alert pulls the trip page back to the camera, unless a touch is in progress
-    alerting = ui_state.started and ui_state.sm['selfdriveState'].alertSize != log.SelfdriveState.AlertSize.none
+    # warning or critical alerts pull the trip page back to the camera, unless a touch is in progress
+    ss = ui_state.sm['selfdriveState']
+    alerting = (ui_state.started and ss.alertSize != log.SelfdriveState.AlertSize.none
+                and ss.alertStatus != log.SelfdriveState.AlertStatus.normal)
     touching = self._scroller.scroll_panel.state in (ScrollState.PRESSED, ScrollState.MANUAL_SCROLL)
     if (alerting and not touching and self._trip_page.is_visible and abs(self._trip_page.rect.x) < 8
         and self._scroller._scrolling_to[0] is None):
       self._scroll_to(self._onroad_layout)
-    self._prev_alerting = alerting
 
   def _on_interactive_timeout(self):
     if self._fingerprint.active:
@@ -218,7 +217,7 @@ class MiciMainLayout(Scroller):
 
   def _tick_peek(self):
     # a 36 px ease-out spring, once per drive, only when a live route makes the trip page available
-    if not (route_active(ui_state.sm) and not ui_state.is_body):
+    if not (route_gate.active(ui_state.sm) and not ui_state.is_body):
       if self._peek_t0 is not None:
         self._scroller.set_peek_px(0.0)
         self._peek_t0 = None
@@ -226,7 +225,6 @@ class MiciMainLayout(Scroller):
     if self._peek_allowed and abs(self._onroad_layout.rect.x) < 8:
       self._peek_t0 = time.monotonic()
       self._peek_allowed = False
-      self._peek_pending = False
     if self._peek_t0 is None:
       return
     t = time.monotonic() - self._peek_t0
@@ -238,15 +236,16 @@ class MiciMainLayout(Scroller):
 
   def _sync_trip_page(self):
     # the trip page sits between home and the camera only while navd has a live route
-    want = route_active(ui_state.sm) and not ui_state.is_body
+    touching = self._scroller.scroll_panel.state in (ScrollState.PRESSED, ScrollState.MANUAL_SCROLL)
+    if self._scroller._scrolling_to[0] is not None or touching:
+      return
+    want = route_gate.active(ui_state.sm) and not ui_state.is_body
     page = self._trip_page
     if page.is_visible == want:
       return
     w = page.rect.width
     if not want:
-      touching = self._scroller.scroll_panel.state in (ScrollState.PRESSED, ScrollState.MANUAL_SCROLL)
-      if not touching and w > 0 and abs(page.rect.x) < w / 2:
-        self._scroller.scroll_to(int(self._onroad_layout.rect.x), smooth=False)
+      # hiding the page while it is on screen already puts the camera at x=0; do not scroll first
       to_the_left = page.rect.x + w < self._rect.x + 8
       page.set_visible(False)
       if to_the_left and w > 0:

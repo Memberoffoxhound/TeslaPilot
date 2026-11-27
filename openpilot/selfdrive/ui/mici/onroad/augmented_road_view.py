@@ -11,7 +11,7 @@ from openpilot.selfdrive.ui.mici.onroad.status import StatusFade
 from openpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.mici.onroad.long_indicator import LongIndicator
 from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
-from openpilot.selfdrive.navigation.helpers import route_active
+from openpilot.selfdrive.navigation.helpers import nav_layout, route_gate
 from openpilot.selfdrive.ui.mici.onroad.navigation import NavigationPanel, PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.nav_ar import NavAROverlay
 from openpilot.selfdrive.ui.mici.onroad.nav_hud import NavARHud  # nav-ui hook
@@ -254,17 +254,17 @@ class AugmentedRoadView(CameraView):
 
     alert_to_render, not_animating_out = self._alert_renderer.will_render()
     # no live route: stock onroad UI (side panel, confidence ball, arc, left DM). dest alone is not enough
-    running = route_active(ui_state.sm)
-    show_navigation = False
-    self._ar_shown = False
+    running = route_gate.active(ui_state.sm)
+    ar_ready = False
     if running and ui_state.nav_view == NAV_VIEW_AR:
       self._nav_ar.update(self._model_renderer.path_points, self._calibrated,
                           height=self._model_renderer.path_offset_z)
-      # map panel hides while an alert is up; the AR view stays so the critical wheel can replace the bar
-      self._ar_shown = self._nav_ar.reason is None
-      show_navigation = not self._ar_shown and alert_to_render is None
-    elif running:
-      show_navigation = alert_to_render is None
+      ar_ready = self._nav_ar.reason is None
+    flags = nav_layout(running, ar_view=ui_state.nav_view == NAV_VIEW_AR, ar_ready=ar_ready,
+                       alerting=alert_to_render is not None)
+    # map panel hides while an alert is up; the AR view stays so the critical wheel can replace the bar
+    self._ar_shown = flags['show_ar']
+    show_navigation = flags['show_map']
 
     # Create inner content area with border padding. Without navigation, the black side panel is on the left
     # the AR view is full bleed: no side panels, the DM icon and steering bar sit on the camera
@@ -307,12 +307,12 @@ class AugmentedRoadView(CameraView):
     self._hud_renderer.set_wheel_critical_icon(warning and event not in DM_ALERTS)
     self._driver_state_renderer.set_warning(warning and event in DM_ALERTS and (ui_state.steer_status != UIStatus.DISENGAGED or ui_state.always_on_dm))
     # ball under the hud and alerts
-    if not show_navigation and not self._ar_shown:
+    if flags['show_ball']:
       self._confidence_ball.set_hidden(alert_to_render is not None and not not_animating_out)
       self._confidence_ball.set_left(custom_onroad_ui(), self._hud_renderer.set_speed_alpha())
       self._confidence_ball.render(self._content_rect)
     self._hud_renderer.set_navigation_shown(show_navigation)
-    self._hud_renderer.set_speed_on_right(self._ar_shown)
+    self._hud_renderer.set_speed_on_right(flags['speed_right'])
     # with the small compass the personality moves to the video's bottom right, under alerts, and shares it with the gpu icon
     small_compass = custom_onroad_ui() and (show_navigation or compass_size() != COMPASS_LARGE)
     if small_compass and not show_navigation and not self._ar_shown:
