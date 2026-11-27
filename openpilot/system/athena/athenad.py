@@ -696,8 +696,11 @@ def cancelUpload(upload_id: str | list[str]) -> dict[str, int | str]:
   return {"success": 1}
 
 @dispatcher.add_method(latitude=number(-90, 90), longitude=number(-180, 180))
-def setNavDestination(latitude: float, longitude: float) -> dict[str, int | str]:
-  Params().put("NavDestination", {"latitude": latitude, "longitude": longitude}, block=True)
+def setNavDestination(latitude: float, longitude: float, place_name: str | None = None) -> dict[str, int | str]:
+  dest: dict = {"latitude": latitude, "longitude": longitude}
+  if place_name:
+    dest["place_name"] = str(place_name)[:80]  # the trip page's "Driving to"
+  Params().put("NavDestination", dest, block=True)
   return {"success": 1}
 
 
