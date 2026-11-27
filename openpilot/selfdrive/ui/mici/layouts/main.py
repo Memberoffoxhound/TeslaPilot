@@ -12,6 +12,7 @@ from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.scroller import Scroller
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.layouts.fingerprint_prompt import FingerprintPrompt
+from openpilot.selfdrive.ui.mici.layouts.trip_progress import TripProgressPage
 from openpilot.selfdrive.ui.mici.widgets.drive_summary_card import DriveSummaryCard
 from openpilot.system.ui.lib.application import gui_app
 
@@ -42,17 +43,19 @@ class MiciMainLayout(Scroller):
     self._alerts_layout = MiciOffroadAlerts()
     self._settings_layout = SettingsLayout()
     self._summary = DriveSummaryCard()
+    self._trip_page = TripProgressPage()
     self._car_onroad_layout = AugmentedRoadView(bookmark_callback=self._on_bookmark_clicked, summary=self._summary)
     self._body_onroad_layout = BodyLayout()
 
     # Initialize widget rects
-    for widget in (self._home_layout, self._alerts_layout, self._settings_layout,
+    for widget in (self._home_layout, self._alerts_layout, self._settings_layout, self._trip_page,
                    self._car_onroad_layout, self._body_onroad_layout):
       # TODO: set parent rect and use it if never passed rect from render (like in Scroller)
       widget.set_rect(rl.Rectangle(0, 0, gui_app.width, gui_app.height))
 
     self._scroller.add_widgets([
       self._home_layout,
+      self._trip_page,   # one swipe right of the road view; a swipe left there is the bookmark
       self._car_onroad_layout,
       self._body_onroad_layout,
     ])
@@ -105,6 +108,7 @@ class MiciMainLayout(Scroller):
   def _update_state(self):
     super()._update_state()
     tripstats.tick(ui_state)
+    self._trip_page.record()
 
   def _render(self, _):
     if not self._setup:
@@ -191,4 +195,5 @@ class MiciMainLayout(Scroller):
 
   def _on_body_changed(self):
     self._car_onroad_layout.set_visible(not ui_state.is_body)
+    self._trip_page.set_visible(not ui_state.is_body)
     self._body_onroad_layout.set_visible(bool(ui_state.is_body))
