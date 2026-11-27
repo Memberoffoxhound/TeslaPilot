@@ -26,15 +26,15 @@ Then apply the tripstats hook edits listed in `selfdrive/ui/tripstats/README.md`
 
 ## Hook edits (search for `nav-ui hook`)
 
-- `selfdrive/ui/mici/onroad/augmented_road_view.py`: choose AR vs map from `NavView`, run `NavAROverlay` and `NavARHud`, move the DM icon to the upper right in the AR view, shift the vanishing point, hide the side panels, and tell the HUD to put MAX on the right. The AR view stays up during an onroad alert so the critical wheel icon can replace the hidden torque bar; the map panel still hides.
+- `selfdrive/ui/mici/onroad/augmented_road_view.py`: only when navd has a live route (`route_active`: a valid `navInstruction` or a `navRoute` with at least two points) choose AR vs map from `NavView`, run `NavAROverlay` and `NavARHud`, move the DM icon to the upper right in the AR view, shift the vanishing point, hide the side panels, and tell the HUD to put MAX on the right. With no live route the onroad view is stock (confidence ball, left DM, steering arc, side panel), even if `NavDestination` is set. A destination alone must not open the map panel. The AR view stays up during an onroad alert so the critical wheel icon can replace the hidden torque bar; the map panel still hides.
 - `selfdrive/ui/mici/onroad/hud_renderer.py`: `set_speed_on_right`, render `FlatTorqueBar` instead of the stock arc in the AR view, move MAX left of the DM icon, and skip the normal wheel and compass in that view. Still draw the critical warning icon on the flat bar when a critical alert hides the bar. Keep the stock `TorqueBar` for the map and no-nav views. Do not add a `set_flat` flag to comma's `torque_bar.py`.
 - `selfdrive/ui/mici/onroad/model_renderer.py`: expose `car_space_transform`, `path_points`, `path_offset_z`, and `theme_rgb` so the overlay can share the model path's projection and color. Pass `theme_rgb` into `NavARHud.render`.
-- `selfdrive/ui/mici/layouts/main.py`: put `TripProgressPage` in the scroller between home and the camera; call `record()` every frame; run the once-per-drive peek bounce; scroll back to the camera when an onroad alert is active and the trip page is on screen.
+- `selfdrive/ui/mici/layouts/main.py`: put `TripProgressPage` in the scroller between home and the camera, visible only while a live route is active; call `record()` every frame; run the once-per-drive peek bounce only when that page is available; scroll back to the camera when an onroad alert is active (and no touch is in progress) or when the route ends while the trip page is on screen.
 - `system/ui/widgets/scroller.py`: `set_peek_px`. Peek is applied when placing items, not added to the snap offset, so the bounce does not fight paging.
 - `selfdrive/ui/ui_state.py`: subscribe to `navRoute`; read the `NavView` param and `NavDestination` (store the dict as `nav_destination`) on the params worker thread.
 - `common/params_keys.h`: `{"NavView", {PERSISTENT, INT, "0"}}` (0 AR overlay, 1 map).
 - `selfdrive/ui/mici/layouts/settings/developer.py`: a two-option "nav view" toggle. This tree uses `BigMultiParamToggle`. If a fork does not have that widget, add the same param with whatever two-option control it has.
-- `system/athena/athenad.py`: optional `place_name` on `setNavDestination`, stored in `NavDestination`. The new argument needs a validator (`either(one_of(None), regex(r"[^\x00-\x1f]{1,80}"))`); without it TeslaPilot's rpc dispatcher refuses to register the method and athenad will not start. Nav2Pilot `setNavRoute` does not carry `place_name`, so routes from the phone app always say "your destination".
+- `system/athena/athenad.py`: optional `place_name` on `setNavDestination`, stored in `NavDestination`. The new argument needs a validator (`either(one_of(None), regex(r"[^\x00-\x1f]{0,80}"))`); without it TeslaPilot's rpc dispatcher refuses to register the method and athenad will not start. An empty string is accepted and not stored. Nav2Pilot `setNavRoute` does not carry `place_name`, so routes from the phone app always say "your destination".
 
 Leave comma's `torque_bar.py` and the map-panel parts of `navigation.py` alone. The AR HUD lives in `nav_hud.py` and does not add methods to the map panel.
 
@@ -46,7 +46,7 @@ Leave comma's `torque_bar.py` and the map-panel parts of `navigation.py` alone. 
 
 ## What degrades if a piece is missing
 
-- No `ar_route` / `nav_ar`, or no `navRoute` with at least two points: the AR overlay is not shown (no ribbon, chevrons, turn card, or ETA). The map panel is used instead, as long as navigation is on and a destination is set.
+- No live route from navd: stock onroad UI. No AR overlay, chevrons, turn card, ETA, map panel, trip page, or peek bounce, even if a destination is set. The map panel and trip page appear only after navd is publishing a route.
 - No live calibration: the overlay hides (`nav_ar.reason`) and the map panel takes over, after the usual hold.
 - No `place_name`: the trip page says "your destination".
 - No `NavView` param or toggle: hardcode AR or map.

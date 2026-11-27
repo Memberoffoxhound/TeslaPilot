@@ -60,7 +60,7 @@ class TripProgressPage(Widget):
     self._last_m = live.m
 
   def _destination(self) -> str:
-    return pr.destination_name(getattr(ui_state, 'nav_destination', None)).lower()
+    return pr.destination_name(ui_state.nav_destination).lower()
 
   def _update_state(self):
     # start on 'driving to' each time the page is swiped into view

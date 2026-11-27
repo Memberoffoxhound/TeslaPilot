@@ -11,6 +11,7 @@ from openpilot.selfdrive.ui.mici.onroad.status import StatusFade
 from openpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.mici.onroad.long_indicator import LongIndicator
 from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
+from openpilot.selfdrive.navigation.helpers import route_active
 from openpilot.selfdrive.ui.mici.onroad.navigation import NavigationPanel, PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.nav_ar import NavAROverlay
 from openpilot.selfdrive.ui.mici.onroad.nav_hud import NavARHud  # nav-ui hook
@@ -252,14 +253,18 @@ class AugmentedRoadView(CameraView):
     self._update_calibration()
 
     alert_to_render, not_animating_out = self._alert_renderer.will_render()
-    nav_wanted = ui_state.navigation_enabled and ui_state.nav_destination_set
-    # map panel hides while an alert is up; the AR view stays so the critical wheel can replace the bar
-    show_navigation = nav_wanted and alert_to_render is None
+    # no live route: stock onroad UI (side panel, confidence ball, arc, left DM). dest alone is not enough
+    running = route_active(ui_state.sm)
+    show_navigation = False
     self._ar_shown = False
-    if nav_wanted and ui_state.nav_view == NAV_VIEW_AR:
-      self._nav_ar.update(self._model_renderer.path_points, self._calibrated)
-      self._ar_shown = self._nav_ar.reason is None and self._navigation.routing
+    if running and ui_state.nav_view == NAV_VIEW_AR:
+      self._nav_ar.update(self._model_renderer.path_points, self._calibrated,
+                          height=self._model_renderer.path_offset_z)
+      # map panel hides while an alert is up; the AR view stays so the critical wheel can replace the bar
+      self._ar_shown = self._nav_ar.reason is None
       show_navigation = not self._ar_shown and alert_to_render is None
+    elif running:
+      show_navigation = alert_to_render is None
 
     # Create inner content area with border padding. Without navigation, the black side panel is on the left
     # the AR view is full bleed: no side panels, the DM icon and steering bar sit on the camera
