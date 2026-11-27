@@ -12,6 +12,7 @@ from openpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.mici.onroad.long_indicator import LongIndicator
 from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.mici.onroad.navigation import NavigationPanel, PANEL_WIDTH
+from openpilot.selfdrive.ui.mici.onroad.nav_ar import NavAROverlay
 from openpilot.selfdrive.ui.mici.onroad.confidence_ball import ConfidenceBall
 from openpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
 from openpilot.selfdrive.ui.layouts.settings.common import custom_onroad_ui, compass_size, COMPASS_LARGE
@@ -42,6 +43,8 @@ WIDE_CAM_MAX_SPEED = 5.0  # m/s (11 mph)
 ROAD_CAM_MIN_SPEED = 10.0  # m/s (22 mph)
 
 CAM_Y_OFFSET = 20
+NAV_VIEW_AR = 0  # NavView: 0 AR overlay, 1 map
+AR_VP_SHIFT = 90  # px, the vanishing point moves right of the turn card
 LEFT_COLUMN_WIDTH = 92
 LONG_RECT_W, LONG_RECT_BOTTOM, LONG_MARGIN = 64, 168, 10  # personality bars end 10 px above the video bottom
 
@@ -179,6 +182,9 @@ class AugmentedRoadView(CameraView):
     self._bookmark_icon = BookmarkIcon(bookmark_callback)
 
     self._navigation = NavigationPanel()
+    self._nav_ar = NavAROverlay()
+    self._calibrated = False
+    self._ar_shown = False
     self._model_renderer = ModelRenderer()
     self._hud_renderer = HudRenderer()
     self._long_indicator = LongIndicator()
@@ -245,6 +251,12 @@ class AugmentedRoadView(CameraView):
 
     alert_to_render, not_animating_out = self._alert_renderer.will_render()
     show_navigation = ui_state.navigation_enabled and ui_state.nav_destination_set and alert_to_render is None
+    # AR overlay on the camera when chosen and trusted, else the map panel
+    self._ar_shown = False
+    if show_navigation and ui_state.nav_view == NAV_VIEW_AR:
+      self._nav_ar.update(self._model_renderer.path_points, self._calibrated)
+      self._ar_shown = self._nav_ar.reason is None and self._navigation.routing
+      show_navigation = not self._ar_shown
 
     # Create inner content area with border padding. Without navigation, the black side panel is on the left
     side_panel = 0 if show_navigation else SIDE_PANEL_WIDTH
@@ -269,6 +281,9 @@ class AugmentedRoadView(CameraView):
 
     # Draw all UI overlays
     self._model_renderer.render(self._content_rect)
+    if self._ar_shown:
+      self._nav_ar.render(self._content_rect, self._model_renderer.car_space_transform, self._model_renderer.path_offset_z,
+                          self._model_renderer.theme_rgb)
 
     # Fade out bottom of overlays for looks
     rl.draw_texture_ex(self._fade_texture, rl.Vector2(self._content_rect.x, self._content_rect.y), 0.0, 1.0, rl.WHITE)
@@ -288,6 +303,7 @@ class AugmentedRoadView(CameraView):
       self._confidence_ball.set_left(custom_onroad_ui(), self._hud_renderer.set_speed_alpha())
       self._confidence_ball.render(self._content_rect)
     self._hud_renderer.set_navigation_shown(show_navigation)
+    self._hud_renderer.set_speed_on_right(self._ar_shown)
     # with the small compass the personality moves to the video's bottom right, under alerts, and shares it with the gpu icon
     small_compass = custom_onroad_ui() and (show_navigation or compass_size() != COMPASS_LARGE)
     if small_compass and not show_navigation:
@@ -300,6 +316,9 @@ class AugmentedRoadView(CameraView):
       self._long_indicator.render(rl.Rectangle(c.x + c.width - LONG_MARGIN - LONG_RECT_W, c.y + c.height - LONG_RECT_BOTTOM, LONG_RECT_W, c.height))
     elif show_navigation:
       self._long_indicator.set_should_draw(False)
+    if self._ar_shown:
+      self._navigation.render_ar(rl.Rectangle(self._content_rect.x + 6, self._content_rect.y, self._content_rect.width - 6, self._content_rect.height),
+                                 self._hud_renderer.set_speed_alpha())
     self._alert_renderer.render(self._content_rect)
 
     # Draw fake rounded border
@@ -386,7 +405,8 @@ class AugmentedRoadView(CameraView):
       return
 
     calib = sm['extrinsicsCalibration']
-    if len(calib.rpyCalib) != 3 or calib.calStatus != CALIBRATED:
+    self._calibrated = len(calib.rpyCalib) == 3 and calib.calStatus == CALIBRATED
+    if not self._calibrated:
       return
 
     # Update view_from_calib matrix
@@ -405,6 +425,7 @@ class AugmentedRoadView(CameraView):
       int(self._content_rect.height),
       self.stream_type,
       round(ui_state.sm['carState'].vEgo, 1),
+      self._ar_shown,
     )
 
     if cache_key == self._matrix_cache_key and self._cached_matrix is not None:
@@ -440,7 +461,8 @@ class AugmentedRoadView(CameraView):
     # Calculate and clamp offsets to prevent out-of-bounds issues
     try:
       if abs(kep[2]) > 1e-6:
-        x_offset = np.clip((kep[0] / kep[2] - cx) * zoom, -max_x_offset, max_x_offset)
+        vp_shift = AR_VP_SHIFT if self._ar_shown else 0
+        x_offset = np.clip((kep[0] / kep[2] - cx) * zoom - vp_shift, -max_x_offset, max_x_offset)
         y_offset = np.clip((kep[1] / kep[2] - cy) * zoom + CAM_Y_OFFSET, -max_y_offset, max_y_offset)
       else:
         x_offset, y_offset = 0, 0

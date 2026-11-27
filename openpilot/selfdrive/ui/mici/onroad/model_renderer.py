@@ -137,6 +137,22 @@ class ModelRenderer(BaseModelRenderer):
     self._swap = FirstOrderFilter(0.0, SWAP_RC, 1 / gui_app.target_fps)
     self._available_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
 
+  @property
+  def car_space_transform(self) -> np.ndarray:
+    return self._car_space_transform
+
+  @property
+  def path_points(self) -> np.ndarray:
+    return self._path.raw_points
+
+  @property
+  def path_offset_z(self) -> float:
+    return self._path_offset_z
+
+  @property
+  def theme_rgb(self) -> tuple[int, int, int]:
+    return (self._ll_engaged.r, self._ll_engaged.g, self._ll_engaged.b)
+
   def _draw_offset(self) -> np.ndarray:
     # car space transform maps to rect-origin space
     return np.array([self._rect.x, self._rect.y], dtype=np.float32)
