@@ -34,6 +34,23 @@ class RouteGate:
 route_gate = RouteGate()
 
 
+class NavErrorGate:
+  # log a nav UI failure when the text changes, or again every interval_s
+  def __init__(self, interval_s: float = 10.0):
+    self.interval_s = interval_s
+    self.msg = None
+    self.t = 0.0
+
+  def record(self, err: BaseException, now: float | None = None) -> bool:
+    msg = f'{type(err).__name__}: {err}'
+    now = time.monotonic() if now is None else now
+    if msg != self.msg or now - self.t > self.interval_s:
+      self.msg = msg
+      self.t = now
+      return True
+    return False
+
+
 def nav_layout(route_on: bool, ar_view: bool = True, alerting: bool = False) -> dict:
   # flags for the onroad widgets. no route: stock comma mici (ball, left DM, steering arc)
   # show_ar is the HUD and chrome; the carpet draws only when the overlay has no reason

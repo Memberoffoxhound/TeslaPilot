@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from openpilot.selfdrive.navigation.ar_overlay import NavAROverlay, flat_fill_xs
-from openpilot.selfdrive.navigation.helpers import ROUTE_HOLD_S, RouteGate, nav_layout, route_active
+from openpilot.selfdrive.navigation.helpers import NavErrorGate, ROUTE_HOLD_S, RouteGate, nav_layout, route_active
 
 
 class _SM:
@@ -276,3 +276,13 @@ def test_bad_nav_route_does_not_raise():
   ov.update(_path(), True, sm, now=1000.0)
   assert ov.reason is not None
   assert len(ov._route_ll) < 2
+
+
+def test_nav_error_gate_logs_identical_failures_once():
+  g = NavErrorGate()
+  err = ValueError('boom')
+  assert g.record(err, now=1.0)
+  assert not g.record(err, now=2.0)
+  assert not g.record(ValueError('boom'), now=10.9)
+  assert g.record(ValueError('boom'), now=11.1)
+  assert g.record(TypeError('boom'), now=11.2)

@@ -11,7 +11,7 @@ from openpilot.selfdrive.ui.mici.onroad.status import StatusFade
 from openpilot.selfdrive.ui.mici.onroad.hud_renderer import HudRenderer
 from openpilot.selfdrive.ui.mici.onroad.long_indicator import LongIndicator
 from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
-from openpilot.selfdrive.navigation.helpers import nav_layout, route_gate
+from openpilot.selfdrive.navigation.helpers import NavErrorGate, nav_layout, route_gate
 from openpilot.selfdrive.ui.mici.onroad.navigation import NavigationPanel, PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.nav_ar import NavAROverlay
 from openpilot.selfdrive.ui.mici.onroad.nav_hud import NavARHud  # nav-ui hook
@@ -187,6 +187,7 @@ class AugmentedRoadView(CameraView):
     self._navigation = NavigationPanel()
     self._nav_ar = NavAROverlay()
     self._nav_hud = NavARHud()  # nav-ui hook
+    self._nav_err = NavErrorGate()
     self._calibrated = False
     self._ar_shown = False
     self._model_renderer = ModelRenderer()
@@ -205,6 +206,15 @@ class AugmentedRoadView(CameraView):
                                           alignment=TextAlignment.LEFT)
 
     self._fade_texture = gui_app.texture("icons_mici/onroad/onroad_fade.png")
+
+  def _nav_call(self, fn, *args, **kwargs):
+    try:
+      return fn(*args, **kwargs)
+    except Exception as e:
+      self._nav_ar.reason = 'error'
+      if self._nav_err.record(e):
+        cloudlog.exception('nav_ui')
+      return None
 
   def is_swiping_left(self) -> bool:
     """Check if currently swiping left (for scroller to disable)."""
@@ -262,11 +272,8 @@ class AugmentedRoadView(CameraView):
     self._ar_shown = flags['show_ar']
     show_navigation = flags['show_map']
     if running and ar_view:
-      try:
-        self._nav_ar.update(self._model_renderer.path_points, self._calibrated,
-                            height=self._model_renderer.path_offset_z)
-      except Exception:
-        cloudlog.exception('nav_ar.update')
+      self._nav_call(self._nav_ar.update, self._model_renderer.path_points, self._calibrated,
+                     height=self._model_renderer.path_offset_z)
 
     # Create inner content area with border padding. Without navigation, the black side panel is on the left
     # the AR view is full bleed: no side panels, the DM icon and steering bar sit on the camera
@@ -292,9 +299,9 @@ class AugmentedRoadView(CameraView):
 
     # Draw all UI overlays
     self._model_renderer.render(self._content_rect)
-    if self._ar_shown and self._nav_ar.reason is None:
-      self._nav_ar.render(self._content_rect, self._model_renderer.car_space_transform, self._model_renderer.path_offset_z,
-                          self._model_renderer.theme_rgb)
+    if self._ar_shown:
+      self._nav_call(self._nav_ar.render, self._content_rect, self._model_renderer.car_space_transform, self._model_renderer.path_offset_z,
+                     self._model_renderer.theme_rgb)
 
     # Fade out bottom of overlays for looks
     rl.draw_texture_ex(self._fade_texture, rl.Vector2(self._content_rect.x, self._content_rect.y), 0.0, 1.0, rl.WHITE)
@@ -328,8 +335,8 @@ class AugmentedRoadView(CameraView):
     elif show_navigation or self._ar_shown:
       self._long_indicator.set_should_draw(False)
     if self._ar_shown:
-      self._nav_hud.render(rl.Rectangle(self._content_rect.x + 6, self._content_rect.y, self._content_rect.width - 6, self._content_rect.height),
-                             self._model_renderer.theme_rgb)  # nav-ui hook
+      self._nav_call(self._nav_hud.render, rl.Rectangle(self._content_rect.x + 6, self._content_rect.y, self._content_rect.width - 6, self._content_rect.height),
+                     self._model_renderer.theme_rgb)  # nav-ui hook
     self._alert_renderer.render(self._content_rect)
 
     # Draw fake rounded border

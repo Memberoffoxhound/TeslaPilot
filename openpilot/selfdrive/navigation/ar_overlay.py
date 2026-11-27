@@ -42,6 +42,7 @@ class NavAROverlay:
       try:
         self._route_ll = np.array([(c.latitude, c.longitude) for c in sm['navRoute'].coordinates], dtype=np.float64).reshape((-1, 2))
       except (TypeError, ValueError, AttributeError):
+        # empty route sets reason to 'route', which is visible, so this stays silent
         self._route_ll = np.empty((0, 2), dtype=np.float64)
     src = latest_gps_source(sm)
     gps = sm[src] if src else None
