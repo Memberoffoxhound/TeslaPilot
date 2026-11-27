@@ -40,3 +40,28 @@ def test_destination_name():
   assert p.destination_name({"latitude": 1, "longitude": 2, "place_name": " Home "}) == "Home"
   assert p.destination_name({"latitude": 1, "longitude": 2}) == p.UNKNOWN_DESTINATION
   assert p.destination_name(None) == p.UNKNOWN_DESTINATION
+
+
+def test_fade_alphas():
+  assert p.fade_alphas(0) == (1.0, 0.0)
+  assert p.fade_alphas(p.HOLD_S - p.FADE_S - 0.01)[0] == 1.0
+  mid = p.fade_alphas(p.HOLD_S - p.FADE_S / 2)
+  assert abs(mid[0] - 0.5) < 0.02 and abs(sum(mid) - 1) < 1e-9
+  assert p.fade_alphas(p.HOLD_S + 0.01) == (0.0, 1.0)
+  assert p.fade_alphas(2 * p.HOLD_S + 0.01)[0] == 1.0
+
+
+def test_peek_offset():
+  assert p.peek_offset(-0.1) == 0.0 and p.peek_offset(p.PEEK_S) == 0.0
+  mid = p.peek_offset(p.PEEK_OUT_S)
+  assert abs(mid - p.PEEK_PX) < 1e-6
+  assert 0 < p.peek_offset(p.PEEK_OUT_S / 2) < p.PEEK_PX
+  # springs back through a small overshoot, then settles
+  assert p.peek_offset(p.PEEK_S - 0.01) < 2
+
+
+def test_bar_colors_match_tripstats():
+  from openpilot.selfdrive.ui.tripstats.recorder import COLORS, MANUAL, ENGAGED, OVERRIDE
+  assert p.BAR_RGB[p.ENGAGED] == COLORS[ENGAGED]
+  assert p.BAR_RGB[p.OVERRIDE] == COLORS[OVERRIDE]
+  assert p.BAR_RGB[p.DISENGAGED] == COLORS[MANUAL]

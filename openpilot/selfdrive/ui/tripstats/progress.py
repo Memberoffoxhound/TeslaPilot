@@ -4,13 +4,27 @@ Pure: no openpilot imports beyond the card helpers. Constant memory: runs of equ
 """
 from __future__ import annotations
 
+import math
+
 from openpilot.selfdrive.ui.tripstats.card import fmt_dist
+from openpilot.selfdrive.ui.tripstats.recorder import COLORS, MANUAL, ENGAGED as REC_ENGAGED, OVERRIDE as REC_OVERRIDE
 from openpilot.selfdrive.ui.tripstats.store import engaged_pct
 
 DISENGAGED, ENGAGED, OVERRIDE, LAT_ONLY = range(4)
 NAMES = ("disengaged", "engaged", "override", "lateral only")
 MAX_RUNS = 240
 UNKNOWN_DESTINATION = "your destination"
+HOLD_S, FADE_S = 4.5, 0.4  # each top-half state holds this long, then a short crossfade
+PEEK_PX, PEEK_S, PEEK_OUT_S = 36.0, 0.6, 0.18  # drive-start bounce: camera shifts this many px, then springs back
+TRACK_ALPHA = 0.15  # torque bar track at rest, used for unrealized trip progress
+# engagement metric colors: connect / tripstats timeline. lateral-only is not a connect state.
+LAT_ONLY_RGB = (0x2A, 0x7A, 0xB8)
+BAR_RGB = {
+  DISENGAGED: COLORS[MANUAL],     # drivingBlue
+  ENGAGED: COLORS[REC_ENGAGED],   # engagedGreen
+  OVERRIDE: COLORS[REC_OVERRIDE], # engagedGrey
+  LAT_ONLY: LAT_ONLY_RGB,
+}
 _OVERRIDE_STATES = ("preEnabled", "overriding")   # the recorder's override layer (connect's engagedGrey)
 
 
@@ -81,3 +95,31 @@ def destination_name(destination: dict | None) -> str:
   """The NavDestination param's place_name, else a plain fallback."""
   name = str((destination or {}).get("place_name") or "").strip()
   return name or UNKNOWN_DESTINATION
+
+
+def fade_alphas(t: float) -> tuple[float, float]:
+  """(destination, stats) alphas. Each state holds HOLD_S seconds; the last FADE_S is a smooth crossfade."""
+  span = 2 * HOLD_S
+  x = t % span
+  if x < HOLD_S - FADE_S:
+    return 1.0, 0.0
+  if x < HOLD_S:
+    a = (x - (HOLD_S - FADE_S)) / FADE_S
+    a = a * a * (3 - 2 * a)
+    return 1.0 - a, a
+  if x < span - FADE_S:
+    return 0.0, 1.0
+  a = (x - (span - FADE_S)) / FADE_S
+  a = a * a * (3 - 2 * a)
+  return a, 1.0 - a
+
+
+def peek_offset(t: float, px: float = PEEK_PX, dur: float = PEEK_S, t_out: float = PEEK_OUT_S) -> float:
+  """Pixels the camera shifts right, revealing the trip page on the left. Ease-out, then a spring back, done at dur."""
+  if t <= 0 or t >= dur:
+    return 0.0
+  if t < t_out:
+    u = t / t_out
+    return px * (1.0 - (1.0 - u) ** 3)
+  u = (t - t_out) / (dur - t_out)
+  return px * math.exp(-5.0 * u) * math.cos(3.2 * math.pi * u)

@@ -90,6 +90,7 @@ class _Scroller(Widget):
     self._visible_items: list[Widget] = []
     self._content_size: float = 0.0
     self._scroll_offset: float = 0.0
+    self._peek_px: float = 0.0
 
     self._item_pos_filter = BounceFilter(0.0, 0.05, 1 / gui_app.target_fps)
 
@@ -154,6 +155,10 @@ class _Scroller(Widget):
   def set_scrolling_enabled(self, enabled: bool | Callable[[], bool]) -> None:
     """Set whether scrolling is enabled (does not affect widget enabled state)."""
     self._scroll_enabled = enabled
+
+  def set_peek_px(self, px: float) -> None:
+    # a temporary visual shift of the pages, used for the drive-start bounce
+    self._peek_px = px
 
   def _update_state(self):
     if DO_ZOOM:
@@ -267,7 +272,7 @@ class _Scroller(Widget):
     self._content_size += self._spacing * (len(self._visible_items) - 1)
     self._content_size += self._pad * 2
 
-    self._scroll_offset = self._get_scroll(self._visible_items, self._content_size)
+    self._scroll_offset = self._get_scroll(self._visible_items, self._content_size) + self._peek_px
 
     self._item_pos_filter.update(self._scroll_offset)
 

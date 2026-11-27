@@ -11,6 +11,7 @@ from openpilot.selfdrive.ui.body.layouts.onroad import BodyLayout
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.scroller import Scroller
 from openpilot.selfdrive.ui import tripstats
+from openpilot.selfdrive.ui.tripstats import progress as pr
 from openpilot.selfdrive.ui.mici.layouts.fingerprint_prompt import FingerprintPrompt
 from openpilot.selfdrive.ui.mici.layouts.trip_progress import TripProgressPage
 from openpilot.selfdrive.ui.mici.widgets.drive_summary_card import DriveSummaryCard
@@ -37,6 +38,8 @@ class MiciMainLayout(Scroller):
     self._setup = False
     self._prev_ignition = False
     self._ignition_off_time = time.monotonic()  # home already greets on boot
+    self._peek_t0: float | None = None
+    self._peek_pending = False
 
     # Initialize widgets
     self._home_layout = MiciHomeLayout()
@@ -109,6 +112,7 @@ class MiciMainLayout(Scroller):
     super()._update_state()
     tripstats.tick(ui_state)
     self._trip_page.record()
+    self._tick_peek()
 
   def _render(self, _):
     if not self._setup:
@@ -157,6 +161,8 @@ class MiciMainLayout(Scroller):
           self._onroad_time_delay -= ONROAD_DELAY
       elif self._summary.drive is None and not self._summary.begin():
         self._scroll_to(self._home_layout)
+        self._peek_t0, self._peek_pending = None, False
+        self._scroller.set_peek_px(0.0)
 
     if self._summary.update(abs(self._onroad_layout.rect.x - self._rect.x) < 1):
       self._scroll_to(self._home_layout)
@@ -165,6 +171,7 @@ class MiciMainLayout(Scroller):
     if self._onroad_time_delay is not None and rl.get_time() - self._onroad_time_delay >= ONROAD_DELAY:
       gui_app.pop_widgets_to(self, lambda: self._scroll_to(self._onroad_layout))
       self._onroad_time_delay = None
+      self._peek_pending = True   # once per drive, after the camera is in place
 
     # When car leaves standstill, pop nav stack and scroll to onroad
     CS = ui_state.sm["carState"]
@@ -192,6 +199,20 @@ class MiciMainLayout(Scroller):
     for service in ('bookmarkButton', 'userBookmark'):
       msg = messaging.new_message(service, valid=True)
       self._pm.send(service, msg)
+
+  def _tick_peek(self):
+    # a 36 px ease-out spring, once per drive, to show there's a page to the right (swipe right)
+    if self._peek_pending and abs(self._onroad_layout.rect.x) < 8:
+      self._peek_t0 = time.monotonic()
+      self._peek_pending = False
+    if self._peek_t0 is None:
+      return
+    t = time.monotonic() - self._peek_t0
+    if t >= pr.PEEK_S:
+      self._scroller.set_peek_px(0.0)
+      self._peek_t0 = None
+      return
+    self._scroller.set_peek_px(pr.peek_offset(t))
 
   def _on_body_changed(self):
     self._car_onroad_layout.set_visible(not ui_state.is_body)
