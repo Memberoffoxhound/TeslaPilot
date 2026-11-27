@@ -1,3 +1,5 @@
+import datetime
+import time
 import numpy as np
 import raylib_nb as rl
 
@@ -8,7 +10,8 @@ from openpilot.selfdrive.navigation.helpers import latest_gps_source
 from openpilot.selfdrive.navigation.renderer import EGO, ROUTE_INTENSITY, SIZE
 from openpilot.selfdrive.ui.onroad.cameraview import CONNECTION_RETRY_INTERVAL
 from openpilot.selfdrive.ui.ui_state import ui_state
-from openpilot.system.ui.lib.application import FontWeight, TextAlignmentVertical
+from openpilot.system.ui.lib.application import FONT_SCALE, FontWeight, TextAlignment, TextAlignmentVertical, gui_app
+from openpilot.system.ui.lib.text_measure import measure_text_cached
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import UnifiedLabel, gui_label
 
@@ -21,6 +24,15 @@ MARKER_MARGIN = 18  # pixels kept below the ego so its marker stays visible
 NAV_ROW_CY = 42
 NAV_HEADER_SHIFT = 12  # 42 - 30
 NAV_MAP_TOP = 68  # 3px below the shifted header ink (was 61)
+
+# AR overlay HUD, sized to read from 3 to 4 ft: 72 px digits are 6.1 mm at 300 PPI
+AR_DIST_PX = 96 / FONT_SCALE
+AR_UNIT_PX = 34 / FONT_SCALE
+AR_STREET_PX = 30 / FONT_SCALE
+AR_ETA_PX = (58 / FONT_SCALE, 46 / FONT_SCALE)  # alone, beside the set speed
+AR_ETA_LABEL_PX = 18 / FONT_SCALE
+AR_ETA_HIDE = 60.0  # m, the ETA steps aside for the turn
+ETA_ROTATE = 4.0  # s per value
 
 # Dim the white roads; the route intensity is tinted separately with the selected theme.
 MAP_GREY = np.repeat(np.round(np.arange(256) * 0.45).astype(np.uint8)[:, None], 3, axis=1)
@@ -137,6 +149,58 @@ class NavigationPanel(Widget):
       remaining = max(0, instruction.distanceRemaining)
       self._eta_label.set_text(f'{max(1, round(seconds / 60))} min / {format_distance(remaining)}')
       self._eta_label.render(rl.Rectangle(x+9, y+rect.height-45, rect.width-18, 40))
+
+  def _eta_values(self, instruction) -> list[tuple[str, str]]:
+    seconds = max(0, instruction.timeRemaining)
+    arrive = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+    return [('arrive', f'{(arrive.hour - 1) % 12 + 1}:{arrive.minute:02d}'), ('time left', f'{max(1, round(seconds / 60))} min'),
+            ('distance', format_distance(max(0, instruction.distanceRemaining)))]
+
+  def render_ar(self, rect, speed_alpha: float):
+    # big turn card on the camera for the AR view; only distance, arrow and one street name are large
+    if not self.routing:
+      return
+    instruction = ui_state.sm['navInstruction']
+    accent = _nav_accent()
+    tile = rl.Rectangle(rect.x + 2, rect.y + 8, 98, 98)
+    rl.draw_rectangle_rounded(tile, 0.2, 10, accent)
+    direction = instruction.maneuverModifier
+    flip = -1 if 'left' in direction else 1
+    if direction in ('straight', ''):
+      shape = [(0, 14), (0, -12), (-6, -5), (0, -12), (6, -5)]
+    else:
+      shape = [(-flip*9, 14), (-flip*9, -4), (-flip*2, -9), (flip*9, -9), (flip*3, -15), (flip*9, -9), (flip*3, -3)]
+    cx, cy = tile.x + tile.width / 2, tile.y + tile.height / 2 + 2
+    points = [rl.Vector2(cx + 3.0 * px, cy + 3.0 * py) for px, py in shape]
+    dark = rl.Color(6, 10, 8, 255)
+    for a, b in zip(points[:-1], points[1:], strict=True):
+      rl.draw_line_ex(a, b, 14, dark)
+    for point in points:
+      rl.draw_circle_v(point, 7, dark)
+    dist = format_distance(max(0, instruction.maneuverDistance)) if instruction.maneuverDistance >= 15 else 'Now'
+    value, _, unit = dist.partition(' ')
+    gui_label(rl.Rectangle(rect.x, rect.y + 96, 260, 100), value, AR_DIST_PX, rl.WHITE, FontWeight.BOLD,
+              alignment_vertical=TextAlignmentVertical.TOP)
+    if unit:
+      vw = measure_text_cached(gui_app.font(FontWeight.BOLD), value, AR_DIST_PX).x
+      gui_label(rl.Rectangle(rect.x + vw + 5, rect.y + 150, 80, 40), unit, AR_UNIT_PX, rl.Color(220, 226, 232, 255), FontWeight.BOLD,
+                alignment_vertical=TextAlignmentVertical.TOP)
+    street = instruction.maneuverPrimaryText
+    gui_label(rl.Rectangle(rect.x + 2, rect.y + rect.height - 40, 300, 36), street, AR_STREET_PX, rl.Color(235, 240, 245, 255), FontWeight.BOLD,
+              alignment_vertical=TextAlignmentVertical.TOP)
+    if instruction.maneuverDistance < AR_ETA_HIDE:
+      return
+    label, val = self._eta_values(instruction)[int(time.monotonic() / ETA_ROTATE) % 3]
+    size = AR_ETA_PX[1] if speed_alpha > 0.5 else AR_ETA_PX[0]
+    font = gui_app.font(FontWeight.BOLD)
+    w = max(measure_text_cached(font, val, size).x, measure_text_cached(font, label, AR_ETA_LABEL_PX).x) + 26
+    h = size * FONT_SCALE + 34
+    box = rl.Rectangle(rect.x + rect.width - 8 - w, rect.y + rect.height - 6 - h, w, h)
+    rl.draw_rectangle_rounded(box, 0.3, 10, rl.Color(10, 14, 18, 220))
+    gui_label(rl.Rectangle(box.x + 13, box.y + 4, w, 24), label, AR_ETA_LABEL_PX, self._muted, FontWeight.BOLD,
+              alignment_vertical=TextAlignmentVertical.TOP)
+    gui_label(rl.Rectangle(box.x + 12, box.y + 24, w, h - 24), val, size, rl.WHITE, FontWeight.BOLD,
+              alignment=TextAlignment.LEFT, alignment_vertical=TextAlignmentVertical.TOP)
 
   def _unload_texture(self):
     if self._texture:

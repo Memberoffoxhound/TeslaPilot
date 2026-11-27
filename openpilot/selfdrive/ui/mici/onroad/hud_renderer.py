@@ -224,6 +224,7 @@ class HudRenderer(Widget):
     self._chestnut_alpha_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
     self._wheel_alpha_filter = FirstOrderFilter(1.0, 0.1, 1 / gui_app.target_fps)
     self._nav_shown = False
+    self._speed_right = False
     self._max_bbox = None
     self._wheel_gpu_opacity = 1.0
     # shared slot with the small compass: personality alpha and highlight, show timer
@@ -246,6 +247,10 @@ class HudRenderer(Widget):
 
   def set_navigation_shown(self, shown: bool) -> None:
     self._nav_shown = shown
+
+  def set_speed_on_right(self, right: bool) -> None:
+    # the AR view keeps its turn card on the left, so MAX moves right
+    self._speed_right = right
 
   def set_slot_partner(self, alpha: float, highlight: bool) -> None:
     self._slot_partner = (alpha, highlight)
@@ -525,10 +530,9 @@ class HudRenderer(Widget):
       self._max_bbox = None
       return
     # tight 3-digit MAX chrome on mici (shadow + numerals); 1-2 digit is narrower but still overlaps the left-end wheel
-    self._max_bbox = [int(rect.x + 22), int(rect.y + 20), int(rect.x + 207), int(rect.y + 143)]
-
-    x = rect.x
+    x = rect.x + rect.width - 207 if self._speed_right else rect.x
     y = rect.y
+    self._max_bbox = [int(x + 22), int(y + 20), int(x + 207), int(y + 143)]
 
     # draw drop shadow
     circle_radius = 162 // 2
