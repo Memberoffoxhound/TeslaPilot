@@ -1,3 +1,5 @@
+import math
+import time
 import numpy as np
 import raylib_nb as rl
 
@@ -12,6 +14,8 @@ CHEVRON_SPACING = 8.0  # m
 CHEVRON_RANGE = (4.0, 200.0)  # m
 MIN_X = 2.0  # m, nothing closer than this projects sanely
 MIN_SPEED_FOR_BEARING = 2.0  # m/s
+CHEV_BASE, CHEV_PEAK = 0.30, 0.95  # translucent at rest, flash at peak
+CHEV_CYCLE, CHEV_STEP, CHEV_DECAY = 1.6, 0.055, 0.28  # s, the flash travels away from the car
 
 
 class NavAROverlay:
@@ -78,17 +82,27 @@ class NavAROverlay:
       return
     draw_polygon(rect, np.vstack((pl[ok], pr[ok][::-1])) + offset, color)
 
+  def _flash(self, k: int, now: float) -> float:
+    dt = (now - k * CHEV_STEP) % CHEV_CYCLE
+    return dt / 0.06 if dt < 0.06 else math.exp(-(dt - 0.06) / CHEV_DECAY)
+
   def _chevrons(self, rect, transform, height, offset):
     r = self._route
+    now = time.monotonic()
     cd = np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(r, axis=0).T))))
-    for s0 in np.arange(CHEVRON_RANGE[0], min(CHEVRON_RANGE[1], cd[-1] - 3), CHEVRON_SPACING):
+    for k, s0 in enumerate(np.arange(CHEVRON_RANGE[0], min(CHEVRON_RANGE[1], cd[-1] - 3), CHEVRON_SPACING)):
       i, j = np.searchsorted(cd, s0), min(len(r) - 1, np.searchsorted(cd, s0 + 3.2))
       p, q = r[i], r[j]
       t = (q - p) / max(np.linalg.norm(q - p), 1e-6)
-      n = np.array([-t[1], t[0]]) * 0.8
-      poly = np.array([p + n, q, p - n, p - n + t * 1.1, q + t * 1.1, p + n + t * 1.1])
-      pts, ok = self._project(transform, np.column_stack((poly, ar.ground_z(poly, self._path, height))))
-      if not ok.all():
-        continue
-      fade = float(np.clip(1 - (s0 - CHEVRON_RANGE[0]) / (CHEVRON_RANGE[1] - CHEVRON_RANGE[0]), 0.25, 1))
-      draw_polygon(rect, pts + offset, rl.Color(255, 255, 255, int(200 * fade)))
+      n = np.array([-t[1], t[0]])
+      fade = float(np.clip(1 - (s0 - CHEVRON_RANGE[0]) / (CHEVRON_RANGE[1] - CHEVRON_RANGE[0]), 0.4, 1))
+      f = self._flash(k, now)
+      # the glow is a wider copy of the chevron under it
+      for hw, grow, a in ((1.0 + 0.9 * f, 0.5 * f, 0.35 * f * fade), (1.0, 0.0, (CHEV_BASE + (CHEV_PEAK - CHEV_BASE) * f) * fade)):
+        if a < 0.02:
+          continue
+        m = n * hw
+        poly = np.array([p + m, q + t * grow, p - m, p - m + t * (1.1 + grow), q + t * (1.1 + 2 * grow), p + m + t * (1.1 + grow)])
+        pts, ok = self._project(transform, np.column_stack((poly, ar.ground_z(poly, self._path, height))))
+        if ok.all():
+          draw_polygon(rect, pts + offset, rl.Color(255, 255, 255, int(255 * a)))

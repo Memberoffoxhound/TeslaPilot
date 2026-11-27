@@ -29,8 +29,9 @@ NAV_MAP_TOP = 68  # 3px below the shifted header ink (was 61)
 AR_DIST_PX = 96 / FONT_SCALE
 AR_UNIT_PX = 34 / FONT_SCALE
 AR_STREET_PX = 30 / FONT_SCALE
-AR_ETA_PX = (58 / FONT_SCALE, 46 / FONT_SCALE)  # alone, beside the set speed
-AR_ETA_LABEL_PX = 18 / FONT_SCALE
+AR_ETA_PX = 64 / FONT_SCALE
+AR_ETA_VIGNETTE = 230  # px radius of the corner gradient
+AR_ETA_LABEL_PX = 20 / FONT_SCALE
 AR_ETA_HIDE = 60.0  # m, the ETA steps aside for the turn
 ETA_ROTATE = 4.0  # s per value
 
@@ -156,7 +157,7 @@ class NavigationPanel(Widget):
     return [('arrive', f'{(arrive.hour - 1) % 12 + 1}:{arrive.minute:02d}'), ('time left', f'{max(1, round(seconds / 60))} min'),
             ('distance', format_distance(max(0, instruction.distanceRemaining)))]
 
-  def render_ar(self, rect, speed_alpha: float):
+  def render_ar(self, rect):
     # big turn card on the camera for the AR view; only distance, arrow and one street name are large
     if not self.routing:
       return
@@ -191,16 +192,13 @@ class NavigationPanel(Widget):
     if instruction.maneuverDistance < AR_ETA_HIDE:
       return
     label, val = self._eta_values(instruction)[int(time.monotonic() / ETA_ROTATE) % 3]
-    size = AR_ETA_PX[1] if speed_alpha > 0.5 else AR_ETA_PX[0]
-    font = gui_app.font(FontWeight.BOLD)
-    w = max(measure_text_cached(font, val, size).x, measure_text_cached(font, label, AR_ETA_LABEL_PX).x) + 26
-    h = size * FONT_SCALE + 34
-    box = rl.Rectangle(rect.x + rect.width - 8 - w, rect.y + rect.height - 6 - h, w, h)
-    rl.draw_rectangle_rounded(box, 0.3, 10, rl.Color(10, 14, 18, 220))
-    gui_label(rl.Rectangle(box.x + 13, box.y + 4, w, 24), label, AR_ETA_LABEL_PX, self._muted, FontWeight.BOLD,
-              alignment_vertical=TextAlignmentVertical.TOP)
-    gui_label(rl.Rectangle(box.x + 12, box.y + 24, w, h - 24), val, size, rl.WHITE, FontWeight.BOLD,
-              alignment=TextAlignment.LEFT, alignment_vertical=TextAlignmentVertical.TOP)
+    # a corner vignette like the left side, no card
+    cx, cy = rect.x + rect.width, rect.y + rect.height
+    rl.draw_circle_gradient(rl.Vector2(cx, cy), AR_ETA_VIGNETTE, rl.Color(4, 6, 8, 225), rl.BLANK)
+    gui_label(rl.Rectangle(cx - 300, cy - AR_ETA_PX * FONT_SCALE - 4, 284, AR_ETA_PX * FONT_SCALE), val, AR_ETA_PX, rl.WHITE, FontWeight.BOLD,
+              alignment=TextAlignment.RIGHT, alignment_vertical=TextAlignmentVertical.BOTTOM)
+    gui_label(rl.Rectangle(cx - 300, cy - AR_ETA_PX * FONT_SCALE - 28, 284, 24), label, AR_ETA_LABEL_PX, rl.Color(215, 222, 230, 255), FontWeight.BOLD,
+              alignment=TextAlignment.RIGHT, alignment_vertical=TextAlignmentVertical.BOTTOM)
 
   def _unload_texture(self):
     if self._texture:

@@ -317,8 +317,7 @@ class AugmentedRoadView(CameraView):
     elif show_navigation:
       self._long_indicator.set_should_draw(False)
     if self._ar_shown:
-      self._navigation.render_ar(rl.Rectangle(self._content_rect.x + 6, self._content_rect.y, self._content_rect.width - 6, self._content_rect.height),
-                                 self._hud_renderer.set_speed_alpha())
+      self._navigation.render_ar(rl.Rectangle(self._content_rect.x + 6, self._content_rect.y, self._content_rect.width - 6, self._content_rect.height))
     self._alert_renderer.render(self._content_rect)
 
     # Draw fake rounded border
