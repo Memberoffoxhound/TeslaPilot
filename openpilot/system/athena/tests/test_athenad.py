@@ -128,6 +128,25 @@ class TestAthenadMethods(OpenpilotTestCase):
     assert dispatcher["clearNavDestination"]() == {"success": 1}
     assert self.params.get("NavDestination") is None
 
+  def test_nav_destination_place_name(self):
+    set_destination = dispatcher["setNavDestination"]
+    lat, lon = 32.875134, -117.209777
+    # a 2-argument call still works; None is accepted and not stored
+    assert set_destination(lat, lon) == {"success": 1}
+    assert self.params.get("NavDestination") == {"latitude": lat, "longitude": lon}
+    assert set_destination(lat, lon, None) == {"success": 1}
+    assert self.params.get("NavDestination") == {"latitude": lat, "longitude": lon}
+
+    for name in ("Café Humbert", "a" * 80):
+      assert set_destination(lat, lon, name) == {"success": 1}
+      assert self.params.get("NavDestination") == {"latitude": lat, "longitude": lon, "place_name": name}
+
+    kept = self.params.get("NavDestination")
+    for bad in ("a" * 81, 123, "hello\nworld", ""):
+      with self.assertRaises(TypeError):
+        set_destination(lat, lon, bad)
+      assert self.params.get("NavDestination") == kept
+
   def test_get_message(self):
     with self.assertRaises(TimeoutError) as _:
       dispatcher["getMessage"]("controlsState", timeout=100)

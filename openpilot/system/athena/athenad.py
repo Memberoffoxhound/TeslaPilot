@@ -695,11 +695,13 @@ def cancelUpload(upload_id: str | list[str]) -> dict[str, int | str]:
   cancelled_uploads.update(cancelled_ids)
   return {"success": 1}
 
-@dispatcher.add_method(latitude=number(-90, 90), longitude=number(-180, 180))
+@dispatcher.add_method(latitude=number(-90, 90), longitude=number(-180, 180),
+                       place_name=either(one_of(None), regex(r"[^\x00-\x1f]{1,80}")))
 def setNavDestination(latitude: float, longitude: float, place_name: str | None = None) -> dict[str, int | str]:
+  # nav-ui hook: optional display name for the trip page's "driving to"
   dest: dict = {"latitude": latitude, "longitude": longitude}
   if place_name:
-    dest["place_name"] = str(place_name)[:80]  # nav-ui hook: the trip page's "driving to"
+    dest["place_name"] = place_name
   Params().put("NavDestination", dest, block=True)
   return {"success": 1}
 
