@@ -159,7 +159,7 @@ def test_route_active_and_stock_layout():
   sm = _sm(route=[], inst_ok=False, route_ok=False)
   assert not route_active(sm)
   stock = nav_layout(False)
-  assert stock == nav_layout(False, ar_view=True, ar_ready=True, alerting=True)
+  assert stock == nav_layout(False, ar_view=True, alerting=True)
   assert not stock['show_ar'] and not stock['show_map'] and not stock['flat_bar']
   assert not stock['speed_right'] and not stock['dm_on_camera']
   assert not stock['show_trip'] and not stock['peek']
@@ -172,7 +172,7 @@ def test_route_active_and_stock_layout():
   # route starts: trip page and nav widgets may come up
   sm = _sm(route=[(38.9, -90.2), (38.91, -90.2)], inst_ok=True, route_ok=True)
   assert route_active(sm)
-  on = nav_layout(True, ar_view=True, ar_ready=True)
+  on = nav_layout(True, ar_view=True)
   assert on['show_ar'] and on['flat_bar'] and on['speed_right'] and on['dm_on_camera']
   assert on['show_trip'] and not on['show_map'] and not on['show_ball']
 
@@ -221,12 +221,58 @@ def test_overlay_reads_nav_route_without_updated_flag():
 
 
 def test_ar_view_does_not_open_stock_map_when_overlay_not_ready():
-  # a live route in AR mode keeps our HUD; comma's map panel is only for NavView=map
-  pending = nav_layout(True, ar_view=True, ar_ready=False)
+  # a live route in AR mode keeps the turn card and ETA; the carpet is separate
+  pending = nav_layout(True, ar_view=True)
   assert pending['show_ar'] and not pending['show_map']
   assert pending['flat_bar'] and pending['speed_right'] and pending['dm_on_camera']
   assert pending['show_trip'] and not pending['show_ball']
-  mapped = nav_layout(True, ar_view=False, ar_ready=False)
+  mapped = nav_layout(True, ar_view=False)
   assert not mapped['show_ar'] and mapped['show_map']
-  hidden = nav_layout(True, ar_view=False, ar_ready=False, alerting=True)
+  hidden = nav_layout(True, ar_view=False, alerting=True)
   assert not hidden['show_map'] and not hidden['show_ar']
+
+
+class _CountCoords:
+  def __init__(self, inner):
+    self.inner = inner
+    self.reads = 0
+
+  def __iter__(self):
+    self.reads += 1
+    return iter(self.inner)
+
+
+def test_overlay_parses_nav_route_only_when_message_changes():
+  # on-demand navRoute stays valid, so a validity check would reparse every frame
+  route = [(38.9, -90.2), (38.91, -90.2)]
+  coords = _CountCoords([SimpleNamespace(latitude=a, longitude=b) for a, b in route])
+  ov = NavAROverlay()
+  sm = _sm(route=route)
+  sm._msgs['navRoute'] = SimpleNamespace(coordinates=coords)
+  sm.valid['navRoute'] = True
+  sm.updated['navRoute'] = False
+  sm.logMonoTime['navRoute'] = 100
+  for i in range(5):
+    ov.update(_path(), True, sm, now=1000.0 + i)
+  assert coords.reads == 1
+  assert ov.reason is None
+  sm.logMonoTime['navRoute'] = 200
+  ov.update(_path(), True, sm, now=1006.0)
+  assert coords.reads == 2
+
+
+def test_bad_nav_route_does_not_raise():
+  # a live route must still get HUD flags if the overlay cannot parse coordinates
+  class Boom:
+    def __iter__(self):
+      raise TypeError('bad route')
+
+  flags = nav_layout(True, ar_view=True)
+  assert flags['show_ar'] and not flags['show_map']
+  ov = NavAROverlay()
+  sm = _sm(route=[(38.9, -90.2), (38.91, -90.2)])
+  sm._msgs['navRoute'] = SimpleNamespace(coordinates=Boom())
+  sm.logMonoTime['navRoute'] = 5
+  ov.update(_path(), True, sm, now=1000.0)
+  assert ov.reason is not None
+  assert len(ov._route_ll) < 2

@@ -34,8 +34,9 @@ class RouteGate:
 route_gate = RouteGate()
 
 
-def nav_layout(route_on: bool, ar_view: bool = True, ar_ready: bool = False, alerting: bool = False) -> dict:
+def nav_layout(route_on: bool, ar_view: bool = True, alerting: bool = False) -> dict:
   # flags for the onroad widgets. no route: stock comma mici (ball, left DM, steering arc)
+  # show_ar is the HUD and chrome; the carpet draws only when the overlay has no reason
   if not route_on:
     return {
       'show_ar': False,

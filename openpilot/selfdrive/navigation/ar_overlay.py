@@ -28,6 +28,7 @@ class NavAROverlay:
     self._z = np.empty(0)
     self._z_height: float | None = None
     self._reason_t = 0.0
+    self._route_t = -1
     self.reason: str | None = 'route'
 
   def update(self, path_xyz: np.ndarray, calibrated: bool, sm=None, now: float | None = None, height: float | None = None):
@@ -35,9 +36,13 @@ class NavAROverlay:
     if sm is None:
       from openpilot.selfdrive.ui.ui_state import ui_state
       sm = ui_state.sm
-    # last published route, even if sm.updated already cleared it
-    if sm.valid['navRoute']:
-      self._route_ll = np.array([(c.latitude, c.longitude) for c in sm['navRoute'].coordinates], dtype=np.float64).reshape((-1, 2))
+    # parse only when the message itself changes, not on the one-frame updated flag
+    if sm.logMonoTime['navRoute'] != self._route_t:
+      self._route_t = sm.logMonoTime['navRoute']
+      try:
+        self._route_ll = np.array([(c.latitude, c.longitude) for c in sm['navRoute'].coordinates], dtype=np.float64).reshape((-1, 2))
+      except (TypeError, ValueError, AttributeError):
+        self._route_ll = np.empty((0, 2), dtype=np.float64)
     src = latest_gps_source(sm)
     gps = sm[src] if src else None
     nav = sm['navInstruction']

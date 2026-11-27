@@ -22,6 +22,7 @@ from openpilot.system.ui.lib.application import FontWeight, gui_app, MousePos, M
 from openpilot.system.ui.widgets.label import UnifiedLabel
 from openpilot.system.ui.widgets import Widget
 from openpilot.common.filter_simple import BounceFilter, FirstOrderFilter
+from openpilot.common.swaglog import cloudlog
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, DeviceCameraConfig, view_frame_from_device_frame
 from openpilot.common.transformations.orientation import rot_from_euler
 from enum import IntEnum
@@ -254,17 +255,18 @@ class AugmentedRoadView(CameraView):
 
     alert_to_render, not_animating_out = self._alert_renderer.will_render()
     # no live route: stock onroad UI (side panel, confidence ball, arc, left DM). dest alone is not enough
+    # plan the HUD first so a failed overlay update cannot leave a stock frame
     running = route_gate.active(ui_state.sm)
-    ar_ready = False
-    if running and ui_state.nav_view == NAV_VIEW_AR:
-      self._nav_ar.update(self._model_renderer.path_points, self._calibrated,
-                          height=self._model_renderer.path_offset_z)
-      ar_ready = self._nav_ar.reason is None
-    flags = nav_layout(running, ar_view=ui_state.nav_view == NAV_VIEW_AR, ar_ready=ar_ready,
-                       alerting=alert_to_render is not None)
-    # map panel hides while an alert is up; the AR view stays so the critical wheel can replace the bar
+    ar_view = ui_state.nav_view == NAV_VIEW_AR
+    flags = nav_layout(running, ar_view=ar_view, alerting=alert_to_render is not None)
     self._ar_shown = flags['show_ar']
     show_navigation = flags['show_map']
+    if running and ar_view:
+      try:
+        self._nav_ar.update(self._model_renderer.path_points, self._calibrated,
+                            height=self._model_renderer.path_offset_z)
+      except Exception:
+        cloudlog.exception('nav_ar.update')
 
     # Create inner content area with border padding. Without navigation, the black side panel is on the left
     # the AR view is full bleed: no side panels, the DM icon and steering bar sit on the camera
@@ -290,7 +292,7 @@ class AugmentedRoadView(CameraView):
 
     # Draw all UI overlays
     self._model_renderer.render(self._content_rect)
-    if self._ar_shown:
+    if self._ar_shown and self._nav_ar.reason is None:
       self._nav_ar.render(self._content_rect, self._model_renderer.car_space_transform, self._model_renderer.path_offset_z,
                           self._model_renderer.theme_rgb)
 
