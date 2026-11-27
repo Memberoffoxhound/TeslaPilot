@@ -47,8 +47,9 @@ def nav_layout(route_on: bool, ar_view: bool = True, ar_ready: bool = False, ale
       'show_trip': False,
       'peek': False,
     }
-  show_ar = ar_view and ar_ready
-  show_map = (not show_ar) and (not alerting)
+  # AR mode keeps our HUD when the overlay is not ready; the stock map is NavView=map only
+  show_ar = ar_view
+  show_map = (not ar_view) and (not alerting)
   return {
     'show_ar': show_ar,
     'show_map': show_map,

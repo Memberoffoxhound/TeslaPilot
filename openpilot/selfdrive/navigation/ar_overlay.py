@@ -35,7 +35,8 @@ class NavAROverlay:
     if sm is None:
       from openpilot.selfdrive.ui.ui_state import ui_state
       sm = ui_state.sm
-    if sm.updated['navRoute']:
+    # last published route, even if sm.updated already cleared it
+    if sm.valid['navRoute']:
       self._route_ll = np.array([(c.latitude, c.longitude) for c in sm['navRoute'].coordinates], dtype=np.float64).reshape((-1, 2))
     src = latest_gps_source(sm)
     gps = sm[src] if src else None

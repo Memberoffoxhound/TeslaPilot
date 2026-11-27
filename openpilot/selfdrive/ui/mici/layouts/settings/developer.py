@@ -88,8 +88,7 @@ class DeveloperLayoutMici(NavScroller):
     self._navigation_toggle = BigParamControl("navigation (alpha)", "NavigationEnabled",
                                               description="Turn-by-turn navigation with a route map. Set a destination from comma connect.")
     self._nav_view_toggle = BigMultiParamToggle("nav view", "NavView", ["ar overlay", "map"],  # nav-ui hook
-                                                description="AR overlay draws the route on the road camera and switches to the map " +
-                                                            "while calibrating, stopped, with poor GPS, or in a tight turn.")
+                                                description="AR overlay draws the route on the road camera. The stock map is only used when map is selected.")
     self._debug_mode_toggle = BigParamControl("ui debug mode", "ShowDebugInfo",
                                               toggle_callback=lambda checked: (gui_app.set_show_touches(checked), gui_app.set_show_fps(checked)),
                                               description="Show touch locations and the UI frame rate.")

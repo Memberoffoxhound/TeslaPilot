@@ -206,3 +206,27 @@ def test_route_gate_holds_after_drop():
   assert g.active(off, now=1000.0 + ROUTE_HOLD_S - 0.1)
   assert not g.active(off, now=1000.0 + ROUTE_HOLD_S + 0.1)
   assert g.active(on, now=1010.0)
+
+
+def test_overlay_reads_nav_route_without_updated_flag():
+  # update() is skipped while the route gate is down, so the first on-route
+  # frame often has sm.updated['navRoute'] already cleared; the last message must still load
+  route = [(38.9, -90.2), (38.91, -90.2)]
+  ov = NavAROverlay()
+  sm = _sm(route=route)
+  sm.updated['navRoute'] = False
+  ov.update(_path(), True, sm, now=1000.0)
+  assert ov.reason is None
+  assert len(ov._route_ll) >= 2
+
+
+def test_ar_view_does_not_open_stock_map_when_overlay_not_ready():
+  # a live route in AR mode keeps our HUD; comma's map panel is only for NavView=map
+  pending = nav_layout(True, ar_view=True, ar_ready=False)
+  assert pending['show_ar'] and not pending['show_map']
+  assert pending['flat_bar'] and pending['speed_right'] and pending['dm_on_camera']
+  assert pending['show_trip'] and not pending['show_ball']
+  mapped = nav_layout(True, ar_view=False, ar_ready=False)
+  assert not mapped['show_ar'] and mapped['show_map']
+  hidden = nav_layout(True, ar_view=False, ar_ready=False, alerting=True)
+  assert not hidden['show_map'] and not hidden['show_ar']
