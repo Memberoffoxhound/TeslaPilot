@@ -59,3 +59,22 @@ def test_fallback():
   assert ar.fallback_reason(True, 2.0, 8, 5, 'right') == 'turn'
   assert ar.fallback_reason(True, 2.0, 8, 5, 'slight right') is None
   assert ar.fallback_reason(True, 2.0, 20, 300, 'right') is None
+
+
+def test_fallback_hysteresis():
+  assert ar.fallback_reason(True, 9.0, 20, 300, 'right') is None
+  assert ar.fallback_reason(True, 11.0, 20, 300, 'right') == 'gps'
+  assert ar.fallback_reason(True, 8.0, 20, 300, 'right', holding='gps') == 'gps'
+  assert ar.fallback_reason(True, 6.0, 20, 300, 'right', holding='gps') is None
+  assert ar.fallback_reason(True, 2.0, 0.5, 300, 'right') == 'stopped'
+  assert ar.fallback_reason(True, 2.0, 2.0, 300, 'right', holding='stopped') == 'stopped'
+  assert ar.fallback_reason(True, 2.0, 3.5, 300, 'right', holding='stopped') is None
+  t0 = 100.0
+  reason, ts = ar.hold_fallback(None, 'stopped', 0.0, t0)
+  assert reason == 'stopped' and ts == t0
+  reason, ts = ar.hold_fallback('stopped', None, t0, t0 + 0.5)
+  assert reason == 'stopped' and ts == t0
+  reason, ts = ar.hold_fallback('stopped', None, t0, t0 + 2.1)
+  assert reason is None and ts == t0 + 2.1
+  reason, ts = ar.hold_fallback(None, 'calibrating', t0, t0 + 0.1)
+  assert reason == 'calibrating'

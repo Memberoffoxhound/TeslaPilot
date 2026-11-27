@@ -6,8 +6,11 @@ FIT_MAX_SHIFT = 16.0  # m, a bigger slide means the fit locked onto the wrong ro
 FIT_ITERS = 6
 BLEND = (35.0, 65.0)  # m, the route rides the model path until here, then hands over to the map
 AGREE = (1.5, 3.5)  # m, map and path are the same road inside this gap
-GPS_POOR = 10.0  # m horizontal accuracy
-STOPPED = 1.0  # m/s
+GPS_POOR = 10.0  # m horizontal accuracy, enter the map
+GPS_GOOD = 7.0  # m, return to AR only when this accurate
+STOPPED = 1.0  # m/s, enter the map
+MOVING = 3.0  # m/s, return to AR only above this
+HOLD_S = 2.0  # s, keep the current view at least this long after a change
 TIGHT_TURN = (-35.0, 18.0)  # m around a sharp maneuver: the camera cannot see the new road, then gps bearing lags
 HEADING_FIX_MIN = 80.0  # m of straight model path needed to trust its heading
 HEADING_FIX_MAX = 6.0  # deg
@@ -64,7 +67,12 @@ def fit_to_path(route_c: np.ndarray, path_xy: np.ndarray, max_x: float) -> tuple
   if m.sum() < 3 or len(route_c) < 2:
     return route_c, shift
   P = path_xy[m]
-  A, B = route_c[:-1], route_c[1:]
+  # only segments that can match a path point are used (x < max_x + 20)
+  cutoff = max_x + 20.0
+  near = (route_c[:-1, 0] < cutoff) | (route_c[1:, 0] < cutoff)
+  if not np.any(near):
+    return route_c, shift
+  A, B = route_c[:-1][near], route_c[1:][near]
   AB = B - A
   ab2 = np.maximum((AB * AB).sum(-1), 1e-9)
   for _ in range(FIT_ITERS):
@@ -100,14 +108,27 @@ def ground_z(pts: np.ndarray, path_xyz: np.ndarray, height: float) -> np.ndarray
   return height + path_xyz[d.argmin(1), 2]
 
 
-def fallback_reason(calibrated: bool, gps_acc: float | None, v_ego: float, maneuver_distance: float, modifier: str) -> str | None:
+def fallback_reason(calibrated: bool, gps_acc: float | None, v_ego: float, maneuver_distance: float, modifier: str,
+                    holding: str | None = None) -> str | None:
   # why the overlay can't be trusted right now; the map view takes over
+  # holding is the current reason, used for the wider exit thresholds
   if not calibrated:
     return 'calibrating'
-  if gps_acc is None or gps_acc > GPS_POOR:
+  gps_lim = GPS_GOOD if holding == 'gps' else GPS_POOR
+  if gps_acc is None or gps_acc > gps_lim:
     return 'gps'
-  if v_ego < STOPPED:
+  stop_lim = MOVING if holding == 'stopped' else STOPPED
+  if v_ego < stop_lim:
     return 'stopped'
   if modifier in TIGHT and TIGHT_TURN[0] < maneuver_distance < TIGHT_TURN[1]:
     return 'turn'
   return None
+
+
+def hold_fallback(prev: str | None, raw: str | None, t_change: float, now: float) -> tuple[str | None, float]:
+  # keep the current view for HOLD_S after a change; calibrating applies at once
+  if raw == prev:
+    return prev, t_change
+  if t_change == 0.0 or raw == 'calibrating' or now - t_change >= HOLD_S:
+    return raw, now
+  return prev, t_change

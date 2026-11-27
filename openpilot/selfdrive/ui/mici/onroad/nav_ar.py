@@ -4,14 +4,11 @@ import numpy as np
 import raylib_nb as rl
 
 from openpilot.selfdrive.navigation import ar_route as ar
-from openpilot.selfdrive.navigation.helpers import latest_gps_source
-from openpilot.selfdrive.ui.ui_state import ui_state
+from openpilot.selfdrive.navigation.ar_overlay import NavAROverlay as _NavAROverlay
 from openpilot.system.ui.lib.polygon import draw_polygon
 
 CARPET_HW = 1.1  # m
 LINE_HW = 0.25  # m
-MIN_X = 2.0  # m, nothing closer than this projects sanely
-MIN_SPEED_FOR_BEARING = 2.0  # m/s
 CHEV_BASE, CHEV_PEAK = 0.30, 0.95  # translucent at rest, flash at peak
 ARROW_STEP, ARROW_CYCLE, ARROW_DECAY = 0.13, 1.3, 0.3  # s, the flash travels in the turn direction
 ARROW_ROWS, ARROW_W, ARROW_H, ARROW_C, ARROW_STEP_M, ARROW_LIFT = 5, 3.0, 3.2, 1.15, 1.6, 2.6  # m
@@ -19,43 +16,7 @@ ARROW_FADE_IN = 150.0  # m before the turn
 ARROW_BLUE = (50, 150, 255)
 
 
-class NavAROverlay:
-  def __init__(self):
-    self._route_ll = np.empty((0, 2))
-    self._bearing = 0.0
-    self._route = np.empty((0, 2))
-    self._weight = np.empty(0)
-    self._full = np.empty((0, 2))
-    self._anchor: np.ndarray | None = None
-    self._man_dist, self._man_mod = 1e9, ''
-    self.reason: str | None = 'route'
-
-  def update(self, path_xyz: np.ndarray, calibrated: bool):
-    sm = ui_state.sm
-    if sm.updated['navRoute']:
-      self._route_ll = np.array([(c.latitude, c.longitude) for c in sm['navRoute'].coordinates], dtype=np.float64).reshape((-1, 2))
-    src = latest_gps_source(sm)
-    gps = sm[src] if src else None
-    nav = sm['navInstruction']
-    self.reason = ar.fallback_reason(calibrated, gps.horizontalAccuracy if gps else None, sm['carState'].vEgo,
-                                     nav.maneuverDistance, nav.maneuverModifier)
-    if len(self._route_ll) < 2 or gps is None or len(path_xyz) < 2:
-      self.reason = self.reason or 'route'
-      return
-    # gps bearing is noise when slow, so hold the last good one
-    if gps.speed > MIN_SPEED_FOR_BEARING:
-      self._bearing = gps.bearingDeg
-    route = ar.resample(ar.ahead(ar.to_car(gps.latitude, gps.longitude, self._bearing, self._route_ll)), 1.0)
-    path_xy = path_xyz[:, :2]
-    max_x = min(120.0, max(25.0, nav.maneuverDistance - 15.0))
-    self._man_dist, self._man_mod = nav.maneuverDistance, nav.maneuverModifier
-    route, _ = ar.heading_fix(route, path_xy, nav.maneuverDistance)
-    route, _ = ar.fit_to_path(route, path_xy, max_x)
-    route, weight = ar.blend_with_path(route, path_xy)
-    self._full = route
-    keep = route[:, 0] > MIN_X
-    self._route, self._weight = route[keep], weight[keep]
-    self._path = path_xyz
+class NavAROverlay(_NavAROverlay):
 
   def render(self, rect: rl.Rectangle, transform: np.ndarray, height: float, color: tuple[int, int, int]):
     if self.reason is not None or len(self._route) < 2:
