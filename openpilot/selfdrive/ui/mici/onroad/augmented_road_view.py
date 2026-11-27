@@ -259,11 +259,12 @@ class AugmentedRoadView(CameraView):
       show_navigation = not self._ar_shown
 
     # Create inner content area with border padding. Without navigation, the black side panel is on the left
-    side_panel = 0 if show_navigation else SIDE_PANEL_WIDTH
+    # the AR view is full bleed: no side panels, the DM icon and steering bar sit on the camera
+    side_panel = 0 if show_navigation or self._ar_shown else SIDE_PANEL_WIDTH
     self._content_rect = rl.Rectangle(
       self.rect.x + side_panel,
       self.rect.y,
-      self.rect.width - (PANEL_WIDTH if show_navigation else SIDE_PANEL_WIDTH),
+      self.rect.width - (PANEL_WIDTH if show_navigation else 0 if self._ar_shown else SIDE_PANEL_WIDTH),
       self.rect.height,
     )
 
@@ -298,7 +299,7 @@ class AugmentedRoadView(CameraView):
     self._hud_renderer.set_wheel_critical_icon(warning and event not in DM_ALERTS)
     self._driver_state_renderer.set_warning(warning and event in DM_ALERTS and (ui_state.steer_status != UIStatus.DISENGAGED or ui_state.always_on_dm))
     # ball under the hud and alerts
-    if not show_navigation:
+    if not show_navigation and not self._ar_shown:
       self._confidence_ball.set_hidden(alert_to_render is not None and not not_animating_out)
       self._confidence_ball.set_left(custom_onroad_ui(), self._hud_renderer.set_speed_alpha())
       self._confidence_ball.render(self._content_rect)
@@ -306,15 +307,15 @@ class AugmentedRoadView(CameraView):
     self._hud_renderer.set_speed_on_right(self._ar_shown)
     # with the small compass the personality moves to the video's bottom right, under alerts, and shares it with the gpu icon
     small_compass = custom_onroad_ui() and (show_navigation or compass_size() != COMPASS_LARGE)
-    if small_compass and not show_navigation:
+    if small_compass and not show_navigation and not self._ar_shown:
       self._hud_renderer.set_slot_partner(self._long_indicator.shown, self._long_indicator.highlighting)
     self._long_indicator.set_has_lead(ui_state.started and self._model_renderer.has_lead)
     self._hud_renderer.render(self._content_rect)
-    if small_compass and not show_navigation:
+    if small_compass and not show_navigation and not self._ar_shown:
       c = self._content_rect
       self._long_indicator.set_should_draw(alert_to_render is None and not self._hud_renderer.slot_busy())
       self._long_indicator.render(rl.Rectangle(c.x + c.width - LONG_MARGIN - LONG_RECT_W, c.y + c.height - LONG_RECT_BOTTOM, LONG_RECT_W, c.height))
-    elif show_navigation:
+    elif show_navigation or self._ar_shown:
       self._long_indicator.set_should_draw(False)
     if self._ar_shown:
       self._navigation.render_ar(rl.Rectangle(self._content_rect.x + 6, self._content_rect.y, self._content_rect.width - 6, self._content_rect.height))
@@ -341,6 +342,14 @@ class AugmentedRoadView(CameraView):
     # DMoji, longitudinal indicator, and steering wheel are centered in the black side panel on the left,
     # or in a column along the left edge of the camera when navigation takes the side panel
     left_rect = rl.Rectangle(self._rect.x, self._rect.y, SIDE_PANEL_WIDTH, self._rect.height)
+    if self._ar_shown:
+      # AR: only the DM icon, in the top left corner; no wheel, compass or personality bars
+      self._driver_state_renderer.set_should_draw(True)
+      self._driver_state_renderer.set_dimmed(1.0 if not ui_state.started else 0.0 if ui_state.always_on_dm else self._status.weight(UIStatus.DISENGAGED))
+      self._driver_state_renderer.set_show_under_alerts(True)
+      self._driver_state_renderer.set_position(self._content_rect.x + 4, self._content_rect.y + 4)
+      self._driver_state_renderer.render()
+      return
     if show_navigation:
       left_rect = rl.Rectangle(self._content_rect.x, self._content_rect.y, LEFT_COLUMN_WIDTH, self._content_rect.height)
 

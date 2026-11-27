@@ -146,6 +146,7 @@ def arc_bar_pts(r_mid: float, thickness: float,
 
 
 DEFAULT_MAX_LAT_ACCEL = 3.0  # m/s^2
+FLAT_MARGIN, FLAT_TOP, FLAT_HEIGHT = 60, 2, 6  # px: the AR bar spans the camera minus the corners, as thin as the nav progress bar
 
 
 class TorqueBar(Widget):
@@ -156,6 +157,11 @@ class TorqueBar(Widget):
     self._status = StatusFade(0.1)
     self._steer_status = StatusFade(0.1, "steer_status")
     self._hidden = False
+    self._flat = False
+
+  def set_flat(self, flat: bool):
+    # AR view: the same torque, fills, colors and fades, as a thin bar along the top edge
+    self._flat = flat
 
   def set_hidden(self, hidden: bool):
     self._hidden = hidden
@@ -184,7 +190,33 @@ class TorqueBar(Widget):
       torque = -ui_state.sm['carOutput'].actuatorsOutput.torque
     self._torque_filter.update(float(np.clip(np.nan_to_num(torque), -1, 1)))
 
+  def _render_flat(self, rect: rl.Rectangle) -> None:
+    x = float(self._torque_filter.x)
+    line_alpha = self._torque_line_alpha_filter.update(not self._hidden) * (1 - self._steer_status.weight(UIStatus.DISENGAGED))
+    engaged = self._status.weight(UIStatus.ENGAGED)
+    bar = rl.Rectangle(rect.x + FLAT_MARGIN, rect.y + FLAT_TOP, rect.width - 2 * FLAT_MARGIN, FLAT_HEIGHT)
+    cx, half = bar.x + bar.width / 2, bar.width / 2
+    bg_alpha = 0.15 + (np.interp(abs(x), [0.5, 1.0], [0.25, 0.5]) - 0.15) * engaged
+    rl.draw_rectangle_rounded(bar, 1.0, 6, rl.Color(255, 255, 255, int(255 * bg_alpha * line_alpha)))
+    mix = max(0, abs(x) - 0.75) * 4
+    start_color = blend_colors(rl.Color(255, 255, 255, int(255 * 0.9 * line_alpha)), rl.Color(255, 200, 0, int(255 * line_alpha)), mix)
+    end_color = blend_colors(rl.Color(255, 255, 255, int(255 * 0.9 * line_alpha)), rl.Color(255, 115, 0, int(255 * line_alpha)), mix)
+    dimmed = rl.Color(255, 255, 255, int(255 * 0.35 * line_alpha))
+    start_color, end_color = blend_colors(dimmed, start_color, engaged), blend_colors(dimmed, end_color, engaged)
+    if abs(x) > 0.004:
+      # fill from the center, positive to the right; the gradient runs center to 65% of the bar half width
+      x0, x1 = (cx, cx + half * x) if x > 0 else (cx + half * x, cx)
+      pts = np.array([(x0, bar.y), (x1, bar.y), (x1, bar.y + bar.height), (x0, bar.y + bar.height)], dtype=np.float32)
+      g0 = (cx - rect.x) / rect.width
+      g1 = (cx + np.sign(x) * half * 0.65 - rect.x) / rect.width
+      draw_polygon(rect, pts, gradient=Gradient(start=(g0, 0), end=(g1, 0), colors=[start_color, end_color], stops=[0.0, 1.0]))
+    if abs(x) < 0.5:
+      rl.draw_circle(int(cx), int(bar.y + bar.height / 2), 5, rl.Color(182, 182, 182, int(255 * 0.9 * line_alpha)))
+
   def _render(self, rect: rl.Rectangle) -> None:
+    if self._flat:
+      self._render_flat(rect)
+      return
     # adjust y pos with torque
     torque_line_offset = np.interp(abs(self._torque_filter.x), [0.5, 1], [22, 26])
     torque_line_height = np.interp(abs(self._torque_filter.x), [0.5, 1], [14, 56])

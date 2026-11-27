@@ -10,12 +10,13 @@ from openpilot.system.ui.lib.polygon import draw_polygon
 
 CARPET_HW = 1.1  # m
 LINE_HW = 0.25  # m
-CHEVRON_SPACING = 8.0  # m
-CHEVRON_RANGE = (4.0, 200.0)  # m
 MIN_X = 2.0  # m, nothing closer than this projects sanely
 MIN_SPEED_FOR_BEARING = 2.0  # m/s
 CHEV_BASE, CHEV_PEAK = 0.30, 0.95  # translucent at rest, flash at peak
-CHEV_CYCLE, CHEV_STEP, CHEV_DECAY = 1.6, 0.055, 0.28  # s, the flash travels away from the car
+ARROW_STEP, ARROW_CYCLE, ARROW_DECAY = 0.13, 1.3, 0.3  # s, the flash travels in the turn direction
+ARROW_ROWS, ARROW_W, ARROW_H, ARROW_C, ARROW_STEP_M, ARROW_LIFT = 5, 3.0, 3.2, 1.15, 1.6, 2.6  # m
+ARROW_FADE_IN = 150.0  # m before the turn
+ARROW_BLUE = (50, 150, 255)
 
 
 class NavAROverlay:
@@ -24,6 +25,9 @@ class NavAROverlay:
     self._bearing = 0.0
     self._route = np.empty((0, 2))
     self._weight = np.empty(0)
+    self._full = np.empty((0, 2))
+    self._anchor: np.ndarray | None = None
+    self._man_dist, self._man_mod = 1e9, ''
     self.reason: str | None = 'route'
 
   def update(self, path_xyz: np.ndarray, calibrated: bool):
@@ -44,9 +48,11 @@ class NavAROverlay:
     route = ar.resample(ar.ahead(ar.to_car(gps.latitude, gps.longitude, self._bearing, self._route_ll)), 1.0)
     path_xy = path_xyz[:, :2]
     max_x = min(120.0, max(25.0, nav.maneuverDistance - 15.0))
+    self._man_dist, self._man_mod = nav.maneuverDistance, nav.maneuverModifier
     route, _ = ar.heading_fix(route, path_xy, nav.maneuverDistance)
     route, _ = ar.fit_to_path(route, path_xy, max_x)
     route, weight = ar.blend_with_path(route, path_xy)
+    self._full = route
     keep = route[:, 0] > MIN_X
     self._route, self._weight = route[keep], weight[keep]
     self._path = path_xyz
@@ -58,7 +64,7 @@ class NavAROverlay:
     offset = np.array([rect.x, rect.y], dtype=np.float32)
     self._strip(rect, transform, z, CARPET_HW, rl.Color(*color, 110), offset)
     self._strip(rect, transform, z, LINE_HW, rl.Color(min(255, color[0] + 60), min(255, color[1] + 60), min(255, color[2] + 60), 230), offset)
-    self._chevrons(rect, transform, height, offset)
+    self._arrow_row(rect, transform, height, offset)
 
   def _project(self, transform, pts3):
     p = transform @ pts3.T
@@ -83,26 +89,52 @@ class NavAROverlay:
     draw_polygon(rect, np.vstack((pl[ok], pr[ok][::-1])) + offset, color)
 
   def _flash(self, k: int, now: float) -> float:
-    dt = (now - k * CHEV_STEP) % CHEV_CYCLE
-    return dt / 0.06 if dt < 0.06 else math.exp(-(dt - 0.06) / CHEV_DECAY)
+    dt = (now - k * ARROW_STEP) % ARROW_CYCLE
+    return dt / 0.06 if dt < 0.06 else math.exp(-(dt - 0.06) / ARROW_DECAY)
 
-  def _chevrons(self, rect, transform, height, offset):
-    r = self._route
-    now = time.monotonic()
+  def _arrow_anchor(self) -> np.ndarray | None:
+    # just past the corner, on the outside of the turn, smoothed
+    r = self._full
+    if len(r) < 3 or self._man_dist < 25:
+      return None
     cd = np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(r, axis=0).T))))
-    for k, s0 in enumerate(np.arange(CHEVRON_RANGE[0], min(CHEVRON_RANGE[1], cd[-1] - 3), CHEVRON_SPACING)):
-      i, j = np.searchsorted(cd, s0), min(len(r) - 1, np.searchsorted(cd, s0 + 3.2))
-      p, q = r[i], r[j]
-      t = (q - p) / max(np.linalg.norm(q - p), 1e-6)
-      n = np.array([-t[1], t[0]])
-      fade = float(np.clip(1 - (s0 - CHEVRON_RANGE[0]) / (CHEVRON_RANGE[1] - CHEVRON_RANGE[0]), 0.4, 1))
+    if self._man_dist > cd[-1]:
+      return None
+    mp = np.array([np.interp(self._man_dist, cd, r[:, 0]), np.interp(self._man_dist, cd, r[:, 1])])
+    inc = np.array([np.interp(max(self._man_dist - 12, 0), cd, r[:, 0]), np.interp(max(self._man_dist - 12, 0), cd, r[:, 1])])
+    tv = (mp - inc) / max(np.linalg.norm(mp - inc), 1e-6)
+    rv = np.array([-tv[1], tv[0]])
+    turn = -1.0 if 'left' in self._man_mod else 1.0
+    anchor = mp + tv * 6.0 - turn * rv * 3.0
+    self._anchor = anchor if self._anchor is None else 0.7 * self._anchor + 0.3 * anchor
+    return self._anchor
+
+  def _arrow_row(self, rect, transform, height, offset):
+    # one upright row of overlapping chevrons facing the camera, hovering over the turn
+    if self._man_mod in ('straight', '') or not (self._man_dist < ARROW_FADE_IN):
+      self._anchor = None
+      return
+    anchor = self._arrow_anchor()
+    if anchor is None or anchor[0] < 8:
+      return
+    fade = float(np.clip((ARROW_FADE_IN - self._man_dist) / 30, 0, 1) * np.clip((self._man_dist - 25) / 20, 0, 1))
+    if fade < 0.02:
+      return
+    turn = -1.0 if 'left' in self._man_mod else 1.0
+    los = anchor / max(np.linalg.norm(anchor), 1e-6)
+    u = np.array([-los[1], los[0]])
+    zg = float(ar.ground_z(anchor[None], self._path, height)[0])
+    now = time.monotonic()
+    total = ARROW_STEP_M * (ARROW_ROWS - 1) + ARROW_W
+    shape = ((0, ARROW_H / 2), (ARROW_C, ARROW_H / 2), (ARROW_W, 0), (ARROW_C, -ARROW_H / 2), (0, -ARROW_H / 2), (ARROW_W - ARROW_C, 0))
+    for k in range(ARROW_ROWS):
       f = self._flash(k, now)
-      # the glow is a wider copy of the chevron under it
-      for hw, grow, a in ((1.0 + 0.9 * f, 0.5 * f, 0.35 * f * fade), (1.0, 0.0, (CHEV_BASE + (CHEV_PEAK - CHEV_BASE) * f) * fade)):
+      x0 = (-total / 2 + k * ARROW_STEP_M) * turn
+      for grow, color, a in ((1.0 + 0.5 * f, ARROW_BLUE, 0.30 * f * fade), (1.0, (255, 255, 255), (CHEV_BASE + (CHEV_PEAK - CHEV_BASE) * f) * fade)):
         if a < 0.02:
           continue
-        m = n * hw
-        poly = np.array([p + m, q + t * grow, p - m, p - m + t * (1.1 + grow), q + t * (1.1 + 2 * grow), p + m + t * (1.1 + grow)])
-        pts, ok = self._project(transform, np.column_stack((poly, ar.ground_z(poly, self._path, height))))
+        cx, cy = ARROW_W / 2, 0.0
+        pts3 = np.array([[*(anchor + u * (x0 + turn * (cx + (px - cx) * grow))), zg - ARROW_LIFT - cy - (py - cy) * grow] for px, py in shape])
+        pts, ok = self._project(transform, pts3)
         if ok.all():
-          draw_polygon(rect, pts + offset, rl.Color(255, 255, 255, int(255 * a)))
+          draw_polygon(rect, pts + offset, rl.Color(*color, int(255 * a)))

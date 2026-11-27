@@ -249,7 +249,7 @@ class HudRenderer(Widget):
     self._nav_shown = shown
 
   def set_speed_on_right(self, right: bool) -> None:
-    # the AR view keeps its turn card on the left, so MAX moves right
+    # the AR view keeps its turn card on the left, so MAX moves right; no wheel or compass, a flat steering bar on top
     self._speed_right = right
 
   def set_slot_partner(self, alpha: float, highlight: bool) -> None:
@@ -303,6 +303,7 @@ class HudRenderer(Widget):
   def _render(self, rect: rl.Rectangle) -> None:
     """Render HUD elements to the screen."""
 
+    self._torque_bar.set_flat(self._speed_right)
     tb_rect = rl.Rectangle(rect.x + NAV_TORQUE_CX - NAV_TORQUE_WIDTH / 2, rect.y, NAV_TORQUE_WIDTH, rect.height) if self._nav_shown else rect
     self._torque_bar.render(tb_rect)
 
@@ -320,6 +321,8 @@ class HudRenderer(Widget):
     self._draw_steering_wheel(rect)
 
   def _draw_model_source(self, rect: rl.Rectangle) -> None:
+    if self._speed_right:  # AR view: no icons along the bottom
+      return
     custom = custom_onroad_ui()
     shared = self._nav_shown or (custom and compass_size() != COMPASS_LARGE)
     # custom ui: under alerts like MAX; nav GPU-over-wheel yields to MAX only while it overlaps
@@ -409,6 +412,8 @@ class HudRenderer(Widget):
     return r - 10 - icon.width, b - 10 - icon.height
 
   def _draw_steering_wheel(self, rect: rl.Rectangle) -> None:
+    if self._speed_right:  # AR view: the steering shows as the flat bar on the top edge
+      return
     mads = ui_state.sm['selfdriveStateSP'].mads
     mads_active = ui_state.started and mads.enabled and mads.active and not ui_state.engaged
     engaged = self._status.weight(UIStatus.ENGAGED)
@@ -462,6 +467,8 @@ class HudRenderer(Widget):
     rl.draw_texture_pro(self._txt_wheel_hub, src, dst, origin, rotation, rl.Color(255, 255, 255, hub_alpha))
 
   def _draw_compass(self, rect: rl.Rectangle, panel_visible: bool | None = None) -> None:
+    if self._speed_right:
+      return
     # large draws from render(), small from the side panel; nav draws a pill from render()
     if self._nav_shown and panel_visible is not None:
       return
