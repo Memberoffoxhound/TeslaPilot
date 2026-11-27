@@ -699,7 +699,7 @@ def cancelUpload(upload_id: str | list[str]) -> dict[str, int | str]:
 def setNavDestination(latitude: float, longitude: float, place_name: str | None = None) -> dict[str, int | str]:
   dest: dict = {"latitude": latitude, "longitude": longitude}
   if place_name:
-    dest["place_name"] = str(place_name)[:80]  # the trip page's "Driving to"
+    dest["place_name"] = str(place_name)[:80]  # nav-ui hook: the trip page's "driving to"
   Params().put("NavDestination", dest, block=True)
   return {"success": 1}
 

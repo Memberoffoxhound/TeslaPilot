@@ -137,7 +137,7 @@ class ModelRenderer(BaseModelRenderer):
     self._swap = FirstOrderFilter(0.0, SWAP_RC, 1 / gui_app.target_fps)
     self._available_filter = FirstOrderFilter(0.0, 0.1, 1 / gui_app.target_fps)
 
-  @property
+  @property  # nav-ui hook: path and transform for the AR overlay
   def car_space_transform(self) -> np.ndarray:
     return self._car_space_transform
 

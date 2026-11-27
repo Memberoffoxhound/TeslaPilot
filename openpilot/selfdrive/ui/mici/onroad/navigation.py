@@ -1,5 +1,3 @@
-import datetime
-import time
 import numpy as np
 import raylib_nb as rl
 
@@ -10,8 +8,7 @@ from openpilot.selfdrive.navigation.helpers import latest_gps_source
 from openpilot.selfdrive.navigation.renderer import EGO, ROUTE_INTENSITY, SIZE
 from openpilot.selfdrive.ui.onroad.cameraview import CONNECTION_RETRY_INTERVAL
 from openpilot.selfdrive.ui.ui_state import ui_state
-from openpilot.system.ui.lib.application import FONT_SCALE, FontWeight, TextAlignment, TextAlignmentVertical, gui_app
-from openpilot.system.ui.lib.text_measure import measure_text_cached
+from openpilot.system.ui.lib.application import FontWeight, TextAlignmentVertical
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.label import UnifiedLabel, gui_label
 
@@ -24,18 +21,6 @@ MARKER_MARGIN = 18  # pixels kept below the ego so its marker stays visible
 NAV_ROW_CY = 42
 NAV_HEADER_SHIFT = 12  # 42 - 30
 NAV_MAP_TOP = 68  # 3px below the shifted header ink (was 61)
-
-# AR overlay HUD, sized to read from 3 to 4 ft: 72 px digits are 6.1 mm at 300 PPI
-AR_DIST_PX = 96 / FONT_SCALE
-AR_UNIT_PX = 34 / FONT_SCALE
-AR_STREET_PX = 36 / FONT_SCALE
-AR_ETA_PX = 64 / FONT_SCALE
-AR_ETA_VIGNETTE = 230  # px radius of the corner gradient
-AR_ETA_LABEL_PX = 26 / FONT_SCALE
-AR_TILE_X = 60  # px, the turn card sits right of the DM icon in the top left
-AR_BAR_X = 166  # px, the maneuver progress bar beside the card
-AR_ETA_HIDE = 60.0  # m, the ETA steps aside for the turn
-ETA_ROTATE = 4.0  # s per value
 
 # Dim the white roads; the route intensity is tinted separately with the selected theme.
 MAP_GREY = np.repeat(np.round(np.arange(256) * 0.45).astype(np.uint8)[:, None], 3, axis=1)
@@ -78,8 +63,6 @@ class NavigationPanel(Widget):
     self._texture = None
     self._eta_label = UnifiedLabel('', 34, FontWeight.BOLD, rl.WHITE, scroll=True)
     self._muted = rl.Color(162, 175, 185, 255)
-    self._man_key = ''
-    self._man_start = 1.0
 
   def _update_state(self):
     if not self._client.is_connected():
@@ -154,65 +137,6 @@ class NavigationPanel(Widget):
       remaining = max(0, instruction.distanceRemaining)
       self._eta_label.set_text(f'{max(1, round(seconds / 60))} min / {format_distance(remaining)}')
       self._eta_label.render(rl.Rectangle(x+9, y+rect.height-45, rect.width-18, 40))
-
-  def _eta_values(self, instruction) -> list[tuple[str, str]]:
-    seconds = max(0, instruction.timeRemaining)
-    arrive = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
-    return [('arrive', f'{(arrive.hour - 1) % 12 + 1}:{arrive.minute:02d}'), ('time left', f'{max(1, round(seconds / 60))} min'),
-            ('distance', format_distance(max(0, instruction.distanceRemaining)))]
-
-  def render_ar(self, rect):
-    # big turn card on the camera for the AR view; only distance, arrow and one street name are large
-    if not self.routing:
-      return
-    instruction = ui_state.sm['navInstruction']
-    accent = _nav_accent()
-    # left scrim, then the card, slid left into the room the wheel and ball left
-    rl.draw_rectangle_gradient_h(int(rect.x), int(rect.y), 300, int(rect.height), rl.Color(4, 6, 8, 215), rl.BLANK)
-    tile = rl.Rectangle(rect.x + AR_TILE_X, rect.y + 8, 98, 98)
-    rl.draw_rectangle_rounded(tile, 0.2, 10, accent)
-    direction = instruction.maneuverModifier
-    flip = -1 if 'left' in direction else 1
-    if direction in ('straight', ''):
-      shape = [(0, 14), (0, -12), (-6, -5), (0, -12), (6, -5)]
-    else:
-      shape = [(-flip*9, 14), (-flip*9, -4), (-flip*2, -9), (flip*9, -9), (flip*3, -15), (flip*9, -9), (flip*3, -3)]
-    cx, cy = tile.x + tile.width / 2, tile.y + tile.height / 2 + 2
-    points = [rl.Vector2(cx + 3.0 * px, cy + 3.0 * py) for px, py in shape]
-    dark = rl.Color(6, 10, 8, 255)
-    for a, b in zip(points[:-1], points[1:], strict=True):
-      rl.draw_line_ex(a, b, 14, dark)
-    for point in points:
-      rl.draw_circle_v(point, 7, dark)
-    # progress along this maneuver, like the nav panel's bar
-    key = f'{instruction.maneuverPrimaryText}|{instruction.maneuverType}'
-    if key != self._man_key or instruction.maneuverDistance > self._man_start:
-      self._man_key, self._man_start = key, max(instruction.maneuverDistance, 1.0)
-    progress = float(np.clip(1 - instruction.maneuverDistance / self._man_start, 0, 1))
-    rl.draw_rectangle_rounded(rl.Rectangle(rect.x + AR_BAR_X, tile.y + 4, 6, 90), 1.0, 4, rl.Color(255, 255, 255, 50))
-    if progress > 0.01:
-      rl.draw_rectangle_rounded(rl.Rectangle(rect.x + AR_BAR_X, tile.y + 4 + 90 * (1 - progress), 6, 90 * progress), 1.0, 4, accent)
-    dist = format_distance(max(0, instruction.maneuverDistance)) if instruction.maneuverDistance >= 15 else 'Now'
-    value, _, unit = dist.partition(' ')
-    gui_label(rl.Rectangle(rect.x - 2, rect.y + 96, 260, 100), value, AR_DIST_PX, rl.WHITE, FontWeight.BOLD,
-              alignment_vertical=TextAlignmentVertical.TOP)
-    if unit:
-      vw = measure_text_cached(gui_app.font(FontWeight.BOLD), value, AR_DIST_PX).x
-      gui_label(rl.Rectangle(rect.x + vw + 1, rect.y + 150, 80, 40), unit, AR_UNIT_PX, rl.Color(220, 226, 232, 255), FontWeight.BOLD,
-                alignment_vertical=TextAlignmentVertical.TOP)
-    street = instruction.maneuverPrimaryText
-    gui_label(rl.Rectangle(rect.x + 2, rect.y + rect.height - 44, 320, 40), street, AR_STREET_PX, rl.Color(240, 244, 248, 255), FontWeight.BOLD,
-              alignment_vertical=TextAlignmentVertical.TOP)
-    if instruction.maneuverDistance < AR_ETA_HIDE:
-      return
-    label, val = self._eta_values(instruction)[int(time.monotonic() / ETA_ROTATE) % 3]
-    # a corner vignette like the left side, no card
-    cx, cy = rect.x + rect.width, rect.y + rect.height
-    rl.draw_circle_gradient(rl.Vector2(cx, cy), AR_ETA_VIGNETTE, rl.Color(4, 6, 8, 225), rl.BLANK)
-    gui_label(rl.Rectangle(cx - 300, cy - AR_ETA_PX * FONT_SCALE - 4, 284, AR_ETA_PX * FONT_SCALE), val, AR_ETA_PX, rl.WHITE, FontWeight.BOLD,
-              alignment=TextAlignment.RIGHT, alignment_vertical=TextAlignmentVertical.BOTTOM)
-    gui_label(rl.Rectangle(cx - 300, cy - AR_ETA_PX * FONT_SCALE - 34, 284, 30), label, AR_ETA_LABEL_PX, rl.Color(215, 222, 230, 255), FontWeight.BOLD,
-              alignment=TextAlignment.RIGHT, alignment_vertical=TextAlignmentVertical.BOTTOM)
 
   def _unload_texture(self):
     if self._texture:

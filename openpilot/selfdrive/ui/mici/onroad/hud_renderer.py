@@ -6,6 +6,7 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.ui.mici.onroad import DIMMED_ICON_ALPHA, glow_highlight_texture
 from openpilot.selfdrive.ui.mici.onroad.status import StatusFade, lerp_color
 from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar
+from openpilot.selfdrive.ui.mici.onroad.nav_torque import FlatTorqueBar  # nav-ui hook
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus, ChestnutState
 from openpilot.selfdrive.ui.mici.widgets.fill_icon import draw_progress
 from openpilot.selfdrive.ui.layouts.settings.common import (
@@ -198,6 +199,7 @@ class HudRenderer(Widget):
     self._font_display: rl.Font = gui_app.font(FontWeight.DISPLAY)
 
     self._torque_bar = TorqueBar()
+    self._flat_torque = FlatTorqueBar()  # nav-ui hook: AR view, same math as the stock arc
 
     self._txt_wheel: rl.Texture = gui_app.texture('icons_mici/wheel.png', WHEEL_SIZE, WHEEL_SIZE)
     self._txt_wheel_highlight = glow_highlight_texture('icons_mici/wheel.png', WHEEL_SIZE)
@@ -240,6 +242,7 @@ class HudRenderer(Widget):
 
   def set_torque_bar_hidden(self, hidden: bool):
     self._torque_bar.set_hidden(hidden)
+    self._flat_torque.set_hidden(hidden)  # nav-ui hook
 
   def set_can_draw_top_icons(self, can_draw_top_icons: bool):
     """Set whether to draw the top part of the HUD."""
@@ -249,7 +252,7 @@ class HudRenderer(Widget):
     self._nav_shown = shown
 
   def set_speed_on_right(self, right: bool) -> None:
-    # the AR view keeps its turn card on the left, so MAX moves right; no wheel or compass, a flat steering bar on top
+    # nav-ui hook: AR view keeps the turn card on the left, so MAX moves right, just left of the DM icon
     self._speed_right = right
 
   def set_slot_partner(self, alpha: float, highlight: bool) -> None:
@@ -303,9 +306,10 @@ class HudRenderer(Widget):
   def _render(self, rect: rl.Rectangle) -> None:
     """Render HUD elements to the screen."""
 
-    self._torque_bar.set_flat(self._speed_right)
+    # nav-ui hook: AR view uses a flat bar with the same torque math as the stock arc
+    bar = self._flat_torque if self._speed_right else self._torque_bar
     tb_rect = rl.Rectangle(rect.x + NAV_TORQUE_CX - NAV_TORQUE_WIDTH / 2, rect.y, NAV_TORQUE_WIDTH, rect.height) if self._nav_shown else rect
-    self._torque_bar.render(tb_rect)
+    bar.render(tb_rect)
 
     if self.is_cruise_set:
       self._draw_set_speed(rect)
@@ -321,7 +325,7 @@ class HudRenderer(Widget):
     self._draw_steering_wheel(rect)
 
   def _draw_model_source(self, rect: rl.Rectangle) -> None:
-    if self._speed_right:  # AR view: no icons along the bottom
+    if self._speed_right:  # nav-ui hook: AR view has no icons along the bottom
       return
     custom = custom_onroad_ui()
     shared = self._nav_shown or (custom and compass_size() != COMPASS_LARGE)
@@ -412,7 +416,7 @@ class HudRenderer(Widget):
     return r - 10 - icon.width, b - 10 - icon.height
 
   def _draw_steering_wheel(self, rect: rl.Rectangle) -> None:
-    if self._speed_right:  # AR view: the steering shows as the flat bar on the top edge
+    if self._speed_right:  # nav-ui hook: steering shows as the flat bar on the top edge
       return
     mads = ui_state.sm['selfdriveStateSP'].mads
     mads_active = ui_state.started and mads.enabled and mads.active and not ui_state.engaged
@@ -537,7 +541,8 @@ class HudRenderer(Widget):
       self._max_bbox = None
       return
     # tight 3-digit MAX chrome on mici (shadow + numerals); 1-2 digit is narrower but still overlaps the left-end wheel
-    x = rect.x + rect.width - 207 if self._speed_right else rect.x
+    # 72 px reserved for the DM icon (60 px widget + pads), same as the flat torque bar's right inset
+    x = rect.x + rect.width - 207 - 72 if self._speed_right else rect.x
     y = rect.y
     self._max_bbox = [int(x + 22), int(y + 20), int(x + 207), int(y + 143)]
 

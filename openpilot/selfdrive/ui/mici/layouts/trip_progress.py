@@ -63,7 +63,13 @@ class TripProgressPage(Widget):
       self._log, self._start, self._last_m = pr.SegmentLog(), live.start_wall, 0.0
     sm = ui_state.sm
     ss = sm['selfdriveState']
-    self._state = pr.classify(bool(ss.enabled), str(ss.state), bool(sm['carControl'].latActive))
+    # mads is optional: LAT_ONLY coloring only when the fork exposes selfdriveStateSP
+    mads = False
+    try:
+      mads = 'selfdriveStateSP' in sm
+    except Exception:
+      mads = False
+    self._state = pr.classify(bool(ss.enabled), str(ss.state), bool(sm['carControl'].latActive), mads=mads)
     self._log.add(live.m - self._last_m, self._state)
     self._last_m = live.m
 
@@ -110,9 +116,11 @@ class TripProgressPage(Widget):
 
     # DM icon, the same corner as the AR view, always on
     self._dm.set_should_draw(True)
-    self._dm.set_dimmed(1.0 if not ui_state.started else 0.0 if ui_state.always_on_dm else float(self._state == pr.DISENGAGED))
+    always_on = bool(getattr(ui_state, 'always_on_dm', False))
+    self._dm.set_dimmed(1.0 if not ui_state.started else 0.0 if always_on else float(self._state == pr.DISENGAGED))
     self._dm.set_show_under_alerts(True)
-    self._dm.set_position(x0 + 4, y0 + 4)
+    dm_size = self._dm.rect.width
+    self._dm.set_position(x0 + rect.width - 4 - dm_size, y0 + 4)
     self._dm.render()
 
     bold, med = FontWeight.BOLD, FontWeight.MEDIUM
@@ -132,20 +140,29 @@ class TripProgressPage(Widget):
       self._text('arrive', x0 + rect.width - 14, y0 + rect.height - 44, 20, bold, ARRIVE, right=True)
 
   def _draw_dest(self, x0: float, y0: float, a: float, bold, med) -> None:
-    self._text('driving to', x0 + 68, y0 + 42, 32, med, _fade(MUTED, a))
-    self._text(self._destination(), x0 + 16, y0 + 114, 80, bold, _fade(WHITE, a))
+    self._text('driving to', x0 + 16, y0 + 42, 32, med, _fade(MUTED, a))
+    dest, size, room = self._destination(), 80, self._rect.width - 16 - 4 - self._dm.rect.width - 8
+    while size > 48 and self._width(dest, size, bold) > room:
+      size -= 2
+    self._text(dest, x0 + 16, y0 + 114, size, bold, _fade(WHITE, a))
 
   def _draw_stats(self, x0: float, y0: float, width: float, nums: dict, a: float, bold, med) -> None:
-    cols = [('remaining', nums['remaining']), ('traveled', nums['traveled']), ('time', nums['time']), ('engaged', nums['engaged'])]
-    vs, us, ls = 56, 20, 20
-    widths = [max(self._width(v, vs, bold), self._width(u, us, bold) if u else 0, self._width(lbl, ls, med)) for lbl, (v, u) in cols]
-    gap = max(20.0, (width - 68 - 16 - sum(widths)) / 3)
-    x = x0 + 68
+    cols = [(abbr, nums[key]) for abbr, key in (('rem', 'remaining'), ('trav', 'traveled'), ('time', 'time'), ('eng', 'engaged'))]
+    vs, us, ls, min_gap = 56, 22, 20, 12.0
+    right = width - 4 - self._dm.rect.width - 16
+    while vs >= 40:
+      widths = [max(self._width(v, vs, bold) + (4 + self._width(u, us, bold) if u else 0), self._width(lbl, ls, med)) for lbl, (v, u) in cols]
+      if sum(widths) + min_gap * 3 <= right - 16:
+        break
+      vs -= 2
+      us = max(16, us - 1)
+    gap = max(min_gap, (right - 16 - sum(widths)) / 3)
+    x = x0 + 16
     for (lbl, (v, u)), cw in zip(cols, widths, strict=True):
-      self._text(v, x, y0 + 58, vs, bold, _fade(WHITE, a))
+      vw = self._text(v, x, y0 + 70, vs, bold, _fade(WHITE, a))
       if u:
-        self._text(u, x, y0 + 80, us, bold, _fade(LIGHT, a))
-      self._text(lbl, x, y0 + 104, ls, med, _fade(MUTED, a))
+        self._text(u, x + vw + 4, y0 + 70, us, bold, _fade(LIGHT, a))
+      self._text(lbl, x, y0 + 94, ls, med, _fade(MUTED, a))
       x += cw + gap
 
   def _rgb(self, state: int):

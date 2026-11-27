@@ -28,11 +28,15 @@ BAR_RGB = {
 _OVERRIDE_STATES = ("preEnabled", "overriding")   # the recorder's override layer (connect's engagedGrey)
 
 
-def classify(enabled: bool, state: str, lat_active: bool) -> int:
-  """selfdriveState and carControl to the bar's state. enabled counts as engaged, as in the trip recorder."""
+def classify(enabled: bool, state: str, lat_active: bool, mads: bool = False) -> int:
+  """selfdriveState and carControl to the bar's state. enabled counts as engaged, as in the trip recorder.
+
+  Lateral-only coloring is optional: pass mads=True on forks that expose it (selfdriveStateSP).
+  Without that flag, latActive and not enabled is just disengaged, so the bundle has no MADS dependency.
+  """
   if enabled:
     return OVERRIDE if state in _OVERRIDE_STATES else ENGAGED
-  return LAT_ONLY if lat_active else DISENGAGED     # MADS steering with no cruise
+  return LAT_ONLY if mads and lat_active else DISENGAGED
 
 
 class SegmentLog:

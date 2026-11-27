@@ -92,6 +92,9 @@ Hooks:
 
 The module only needs the Python standard library, `common/params_compat.py`, `common/time_helpers.py`, `common/swaglog.py`, and cereal to read the GPS position.
 
+
+The live trip page in this tree also needs `progress.py` from this package (the distance log, numbers, fade, and peek helpers). Copy it with the rest of tripstats. Lateral-only coloring in `classify` is optional and off unless the caller passes `mads=True`; the package does not import MADS.
+
 ## Details
 
 These are for anyone changing the code.

@@ -5,8 +5,10 @@ def test_classify():
   assert p.classify(True, "enabled", True) == p.ENGAGED
   assert p.classify(True, "overriding", True) == p.OVERRIDE
   assert p.classify(True, "preEnabled", False) == p.OVERRIDE
-  assert p.classify(False, "disabled", True) == p.LAT_ONLY
+  assert p.classify(False, "disabled", True) == p.DISENGAGED
   assert p.classify(False, "disabled", False) == p.DISENGAGED
+  assert p.classify(False, "disabled", True, mads=True) == p.LAT_ONLY
+  assert p.classify(False, "disabled", False, mads=True) == p.DISENGAGED
 
 
 def test_runs_merge_and_span():

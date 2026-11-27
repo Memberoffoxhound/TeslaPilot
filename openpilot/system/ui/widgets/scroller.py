@@ -157,7 +157,7 @@ class _Scroller(Widget):
     self._scroll_enabled = enabled
 
   def set_peek_px(self, px: float) -> None:
-    # a temporary visual shift of the pages, used for the drive-start bounce
+    # nav-ui hook: temporary visual shift of the pages, used for the drive-start bounce
     self._peek_px = px
 
   def _update_state(self):

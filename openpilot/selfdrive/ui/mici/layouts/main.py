@@ -13,7 +13,7 @@ from openpilot.system.ui.widgets.scroller import Scroller
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.tripstats import progress as pr
 from openpilot.selfdrive.ui.mici.layouts.fingerprint_prompt import FingerprintPrompt
-from openpilot.selfdrive.ui.mici.layouts.trip_progress import TripProgressPage
+from openpilot.selfdrive.ui.mici.layouts.trip_progress import TripProgressPage  # nav-ui hook
 from openpilot.selfdrive.ui.mici.widgets.drive_summary_card import DriveSummaryCard
 from openpilot.system.ui.lib.application import gui_app
 

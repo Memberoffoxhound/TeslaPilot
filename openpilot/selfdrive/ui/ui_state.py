@@ -93,7 +93,7 @@ class UIState:
         "deviceMotion",
         "gpsLocation",
         "navInstruction",
-        "navRoute",
+        "navRoute",  # nav-ui hook
         "carOutput",
         "carControl",
         "vehicleParameters",
@@ -121,7 +121,7 @@ class UIState:
     self.is_release = self.params.get_bool("IsReleaseBranch")
     self.always_on_dm: bool = self.params.get_bool("AlwaysOnDM")
     self.navigation_enabled: bool = self.params.get_bool("NavigationEnabled")
-    self.nav_view: int = self.params.get("NavView", return_default=True)
+    self.nav_view: int = self.params.get("NavView", return_default=True)  # nav-ui hook
     self.nav_destination_set: bool = self.params.get("NavDestination") is not None
     self.chestnut_present: bool = False
     self.chestnut_compiled: bool = chestnut_model_ready()  # a big model to load: downloaded or bundled
@@ -369,7 +369,7 @@ class UIState:
     self.always_on_dm = self.params.get_bool("AlwaysOnDM")
     self.personality_param = self.params.get("LongitudinalPersonality", return_default=True)
     self.navigation_enabled = self.params.get_bool("NavigationEnabled")
-    self.nav_view = self.params.get("NavView", return_default=True)
+    self.nav_view = self.params.get("NavView", return_default=True)  # nav-ui hook
     self.nav_destination_set = self.params.get("NavDestination") is not None
     self.chestnut_active = self.params.get("ChestnutActive")
     self.chestnut_loading = self.params.get_bool("ChestnutLoading")

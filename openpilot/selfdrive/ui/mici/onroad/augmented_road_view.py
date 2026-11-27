@@ -13,6 +13,7 @@ from openpilot.selfdrive.ui.mici.onroad.long_indicator import LongIndicator
 from openpilot.selfdrive.ui.mici.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.mici.onroad.navigation import NavigationPanel, PANEL_WIDTH
 from openpilot.selfdrive.ui.mici.onroad.nav_ar import NavAROverlay
+from openpilot.selfdrive.ui.mici.onroad.nav_hud import NavARHud  # nav-ui hook
 from openpilot.selfdrive.ui.mici.onroad.confidence_ball import ConfidenceBall
 from openpilot.selfdrive.ui.mici.onroad.cameraview import CameraView
 from openpilot.selfdrive.ui.layouts.settings.common import custom_onroad_ui, compass_size, COMPASS_LARGE
@@ -43,7 +44,7 @@ WIDE_CAM_MAX_SPEED = 5.0  # m/s (11 mph)
 ROAD_CAM_MIN_SPEED = 10.0  # m/s (22 mph)
 
 CAM_Y_OFFSET = 20
-NAV_VIEW_AR = 0  # NavView: 0 AR overlay, 1 map
+NAV_VIEW_AR = 0  # nav-ui hook: NavView 0 AR overlay, 1 map
 AR_VP_SHIFT = 90  # px, the vanishing point moves right of the turn card
 LEFT_COLUMN_WIDTH = 92
 LONG_RECT_W, LONG_RECT_BOTTOM, LONG_MARGIN = 64, 168, 10  # personality bars end 10 px above the video bottom
@@ -183,6 +184,7 @@ class AugmentedRoadView(CameraView):
 
     self._navigation = NavigationPanel()
     self._nav_ar = NavAROverlay()
+    self._nav_hud = NavARHud()  # nav-ui hook
     self._calibrated = False
     self._ar_shown = False
     self._model_renderer = ModelRenderer()
@@ -318,7 +320,7 @@ class AugmentedRoadView(CameraView):
     elif show_navigation or self._ar_shown:
       self._long_indicator.set_should_draw(False)
     if self._ar_shown:
-      self._navigation.render_ar(rl.Rectangle(self._content_rect.x + 6, self._content_rect.y, self._content_rect.width - 6, self._content_rect.height))
+      self._nav_hud.render(rl.Rectangle(self._content_rect.x + 6, self._content_rect.y, self._content_rect.width - 6, self._content_rect.height))  # nav-ui hook
     self._alert_renderer.render(self._content_rect)
 
     # Draw fake rounded border
@@ -343,11 +345,12 @@ class AugmentedRoadView(CameraView):
     # or in a column along the left edge of the camera when navigation takes the side panel
     left_rect = rl.Rectangle(self._rect.x, self._rect.y, SIDE_PANEL_WIDTH, self._rect.height)
     if self._ar_shown:
-      # AR: only the DM icon, in the top left corner; no wheel, compass or personality bars
+      # AR: only the DM icon, in the top right corner; no wheel, compass or personality bars
       self._driver_state_renderer.set_should_draw(True)
       self._driver_state_renderer.set_dimmed(1.0 if not ui_state.started else 0.0 if ui_state.always_on_dm else self._status.weight(UIStatus.DISENGAGED))
       self._driver_state_renderer.set_show_under_alerts(True)
-      self._driver_state_renderer.set_position(self._content_rect.x + 4, self._content_rect.y + 4)
+      dm_size = self._driver_state_renderer.rect.width
+      self._driver_state_renderer.set_position(self._content_rect.x + self._content_rect.width - 4 - dm_size, self._content_rect.y + 4)
       self._driver_state_renderer.render()
       return
     if show_navigation:
