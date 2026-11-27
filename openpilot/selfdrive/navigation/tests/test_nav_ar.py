@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from openpilot.selfdrive.navigation.ar_overlay import NavAROverlay, flat_fill_xs
-from openpilot.selfdrive.navigation.helpers import nav_layout, route_active
+from openpilot.selfdrive.navigation.helpers import ROUTE_HOLD_S, RouteGate, nav_layout, route_active
 
 
 class _SM:
@@ -183,3 +183,26 @@ def test_route_active_and_stock_layout():
   sm.valid['navRoute'] = True
   assert not route_active(sm)
   assert nav_layout(False)['show_trip'] is False
+
+
+def test_stale_nav_route_is_not_active():
+  # navd stopped, leftover 300-point navRoute must not keep the nav UI on
+  coords = [SimpleNamespace(latitude=38.9, longitude=-90.2 + i * 1e-4) for i in range(300)]
+  sm = _sm(route=[], inst_ok=False, route_ok=True)
+  sm._msgs['navRoute'] = SimpleNamespace(coordinates=coords)
+  sm.valid['navRoute'] = True
+  sm.alive['navRoute'] = True
+  assert len(sm['navRoute'].coordinates) == 300
+  assert not route_active(sm)
+  assert not RouteGate().active(sm, now=1.0)
+
+
+def test_route_gate_holds_after_drop():
+  g = RouteGate()
+  on = _sm(route=[(38.9, -90.2), (38.91, -90.2)], inst_ok=True)
+  off = _sm(route=[(38.9, -90.2), (38.91, -90.2)], inst_ok=False)
+  assert not g.active(off, now=1000.0)
+  assert g.active(on, now=1000.0)
+  assert g.active(off, now=1000.0 + ROUTE_HOLD_S - 0.1)
+  assert not g.active(off, now=1000.0 + ROUTE_HOLD_S + 0.1)
+  assert g.active(on, now=1010.0)

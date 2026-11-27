@@ -10,12 +10,28 @@ def latest_gps_source(sm) -> str | None:
 
 
 def route_active(sm) -> bool:
-  # navd is publishing a live route: a valid instruction, or a route with points
-  if sm.valid['navInstruction'] and sm.alive['navInstruction']:
-    return True
-  if sm.valid['navRoute']:
-    return len(getattr(sm['navRoute'], 'coordinates', []) or []) >= 2
-  return False
+  # navd publishes a valid instruction every second while it has a route; stale in 10 s when navd stops
+  return bool(sm.valid['navInstruction'] and sm.alive['navInstruction'])
+
+
+ROUTE_HOLD_S = 8.0  # keep the nav layout up this long after the last live instruction
+
+
+class RouteGate:
+  # one shared gate so the road view and the trip page agree through a failed reroute
+  def __init__(self, hold_s: float = ROUTE_HOLD_S):
+    self.hold_s = hold_s
+    self._last_t = 0.0
+
+  def active(self, sm, now: float | None = None) -> bool:
+    now = time.monotonic() if now is None else now
+    if route_active(sm):
+      self._last_t = now
+      return True
+    return self._last_t > 0.0 and now - self._last_t < self.hold_s
+
+
+route_gate = RouteGate()
 
 
 def nav_layout(route_on: bool, ar_view: bool = True, ar_ready: bool = False, alerting: bool = False) -> dict:
