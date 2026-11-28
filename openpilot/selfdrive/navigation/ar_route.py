@@ -15,6 +15,7 @@ TIGHT_TURN = (-35.0, 18.0)  # m around a sharp maneuver: the camera cannot see t
 HEADING_FIX_MIN = 80.0  # m of straight model path needed to trust its heading
 HEADING_FIX_MAX = 6.0  # deg
 TIGHT = ('left', 'right', 'sharp left', 'sharp right', 'uturn')
+NEAR_LEG = 8.0  # m, route points this much farther than the nearest still count as under the car
 
 
 def to_car(lat: float, lon: float, bearing_deg: float, route_ll: np.ndarray) -> np.ndarray:
@@ -33,12 +34,31 @@ def resample(pts: np.ndarray, step: float = 2.0) -> np.ndarray:
   return np.column_stack((np.interp(s, cd, pts[:, 0]), np.interp(s, cd, pts[:, 1])))
 
 
+def arc(pts: np.ndarray) -> np.ndarray:
+  return np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(pts, axis=0).T)))) if len(pts) else np.empty(0)
+
+
+def car_index(route_c: np.ndarray) -> int:
+  # nearest point that runs the way the car faces, so an out and back road picks the right leg
+  d = np.hypot(route_c[:, 0], route_c[:, 1])
+  fwd = np.gradient(route_c[:, 0]) > 0 if len(route_c) > 1 else np.ones(len(route_c), dtype=bool)
+  cand = np.flatnonzero((d < d.min() + NEAR_LEG) & fwd)
+  return int(cand[d[cand].argmin()]) if len(cand) else int(d.argmin())
+
+
+def turn_deg(route_c: np.ndarray, cd: np.ndarray, s: float, span: float = 15.0) -> float:
+  # heading change across s on the route, positive to the right
+  p = [np.array([np.interp(v, cd, route_c[:, 0]), np.interp(v, cd, route_c[:, 1])]) for v in (s - span, s, s + span)]
+  a, b = p[1] - p[0], p[2] - p[1]
+  return math.degrees(math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1]))
+
+
 def ahead(route_c: np.ndarray, back: float = 20.0, fwd: float = 900.0) -> np.ndarray:
   # the part of the route from just behind the car to fwd m along it
   if len(route_c) < 2:
     return route_c
-  i = int(np.argmin(np.hypot(route_c[:, 0], route_c[:, 1])))
-  cd = np.concatenate(([0.0], np.cumsum(np.hypot(*np.diff(route_c, axis=0).T))))
+  i = car_index(route_c)
+  cd = arc(route_c)
   keep = (cd >= cd[i] - back) & (cd <= cd[i] + fwd)
   return route_c[keep]
 

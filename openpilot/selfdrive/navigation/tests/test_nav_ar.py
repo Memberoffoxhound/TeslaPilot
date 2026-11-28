@@ -331,3 +331,54 @@ def test_nav_widget_guard_keeps_hud_errors_off_the_overlay():
   assert reason.reason == 'error'
   assert not overlay.ready(now=14.9)
   assert hud.ready(now=14.9)
+
+
+def _nav_sm(route, dist, t, v_ego=10.0, mod='right', typ='turn'):
+  sm = _sm(route=route, v_ego=v_ego)
+  sm._msgs['navInstruction'] = SimpleNamespace(maneuverDistance=dist, maneuverModifier=mod, maneuverType=typ)
+  sm.logMonoTime['navInstruction'] = t
+  return sm
+
+
+def test_maneuver_distance_runs_on_between_instructions():
+  # navd sends once a second; the chevrons must not slide with the car in between
+  route = [(38.9, -90.2), (38.91, -90.2)]
+  ov = NavAROverlay()
+  ov.update(_path(), True, _nav_sm(route, 100.0, 1), now=1000.0)
+  assert abs(ov._man_dist - 100.0) < 1e-6
+  ov.update(_path(), True, _nav_sm(route, 100.0, 1), now=1000.5)
+  assert abs(ov._man_dist - 95.0) < 1e-6
+  ov.update(_path(), True, _nav_sm(route, 90.0, 2), now=1001.0)
+  assert abs(ov._man_dist - 90.0) < 1e-6
+
+
+def test_stuck_navd_drops_the_maneuver():
+  # route 00000211: a blocked reroute froze the instruction at 42 m for 15 s
+  route = [(38.9, -90.2), (38.91, -90.2)]
+  ov = NavAROverlay()
+  ov.update(_path(), True, _nav_sm(route, 42.0, 1), now=1000.0)
+  for k in range(1, 8):
+    ov.update(_path(), True, _nav_sm(route, 42.0, 1, v_ego=0.0), now=1000.0 + k * 0.5)
+  assert ov._man_dist > 1e6
+
+
+def test_arrive_is_not_a_tight_turn():
+  # arriving "on the right" at 2 m used to hide the overlay as a turn
+  route = [(38.9, -90.2), (38.91, -90.2)]
+  ov = NavAROverlay()
+  ov.update(_path(), True, _nav_sm(route, 2.0, 1, typ='arrive'), now=1000.0)
+  assert ov.reason is None
+  ov = NavAROverlay()
+  ov.update(_path(), True, _nav_sm(route, 2.0, 1, typ='turn'), now=1000.0)
+  assert ov.reason == 'turn'
+
+
+def test_route_drawn_stops_past_the_turn():
+  # a far turn used to leave a thin route line across the horizon
+  lat0, lon0 = 38.9, -90.2
+  m = 1 / 111320.0
+  route = [(lat0, lon0), (lat0 + 60 * m, lon0), (lat0 + 60 * m, lon0 + 400 * m / np.cos(np.radians(lat0)))]
+  ov = NavAROverlay()
+  ov.update(_path(), True, _nav_sm(route, 60.0, 1), now=1000.0)
+  assert ov.reason is None
+  assert ov._route[:, 1].max() < 60.0 + 27.0

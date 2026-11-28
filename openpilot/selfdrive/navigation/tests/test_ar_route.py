@@ -78,3 +78,30 @@ def test_fallback_hysteresis():
   assert reason is None and ts == t0 + 2.1
   reason, ts = ar.hold_fallback(None, 'calibrating', t0, t0 + 0.1)
   assert reason == 'calibrating'
+
+
+def test_ahead_keeps_the_road_under_the_car_on_a_long_segment():
+  # route 00000211: a 113 m straight, the nearest vertex was 44 m ahead and the road under the car was cut off
+  route = np.array([[-69.0, -1.3], [44.0, -2.3], [84.0, -2.1], [85.0, 26.0]])
+  old = ar.ahead(route)
+  assert old[0, 0] > 40
+  new = ar.ahead(ar.resample(route, 1.0))
+  assert -21 < new[0, 0] < -18
+
+
+def test_car_index_takes_the_leg_facing_forward():
+  # out and back on one road: the leg behind runs backward, the one under the car forward
+  back = np.column_stack((np.linspace(50, -50, 101), np.full(101, 0.5)))
+  fwd = np.column_stack((np.linspace(-50, 50, 101), np.zeros(101)))
+  route = np.vstack((back, fwd))
+  i = ar.car_index(route)
+  assert i > 101 and abs(route[i, 0]) < 1.5
+
+
+def test_turn_deg_sign():
+  right = np.array([[0.0, 0.0], [20.0, 0.0], [20.0, 20.0]])
+  left = right * np.array([1.0, -1.0])
+  assert ar.turn_deg(right, ar.arc(right), 20.0) > 80
+  assert ar.turn_deg(left, ar.arc(left), 20.0) < -80
+  straight = np.array([[0.0, 0.0], [40.0, 0.0]])
+  assert abs(ar.turn_deg(straight, ar.arc(straight), 20.0)) < 1
