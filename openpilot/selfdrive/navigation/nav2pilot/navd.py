@@ -29,6 +29,7 @@ from openpilot.selfdrive.navigation.nav2pilot.waypoints import DESTINATION_PARAM
 
 PASSED_DISTANCE = 50  # meters; at 130 km/h and 1 Hz the ego is sampled every 36 m
 REQUEST_TIMEOUT = (4.0, 10.0)  # s connect, read; no instruction goes out while a request waits
+KEEP_DISTANCE = 100  # m, a route the ego is farther than this from is dropped, not kept through a failed reroute
 SKIP_DISTANCE = 15  # m, a later step this close to the ego is where it is now
 SKIP_HEADING = 45  # deg, and only when the ego drives the same way along it
 
@@ -183,8 +184,13 @@ class Nav2PilotRouteEngine(RouteEngine):
 
   def should_recompute(self):
     if self.step_idx is not None and self.route is not None and self.last_position is not None and self.step_idx < len(self.route) - 1:
-      if along_path(self.route_geometry[self.step_idx], self.last_position)[1] > REROUTE_DISTANCE and self.skip_ahead():
+      lateral = along_path(self.route_geometry[self.step_idx], self.last_position)[1]
+      if lateral > REROUTE_DISTANCE and self.skip_ahead():
         return False
+      if lateral > KEEP_DISTANCE:
+        # a kept route is only true while the ego is near it; the destination param stays and the retries go on
+        cloudlog.warning("navd: far from the route, dropping it")
+        self.clear_route()
     return super().should_recompute()
 
   def skip_ahead(self) -> bool:

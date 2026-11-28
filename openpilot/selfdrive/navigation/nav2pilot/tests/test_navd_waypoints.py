@@ -251,3 +251,42 @@ class TestRerouteResilience(unittest.TestCase):
     self.assertFalse(engine.should_recompute())
     self.assertEqual(engine.step_idx, 1)
     self.assertEqual(engine.reroute_counter, 0)
+
+
+class TestOfflineWrongTurn(unittest.TestCase):
+  # a kept route must not count down to "destination reached" and erase the destination
+  def test_ninety_seconds_offline_off_route_keeps_the_destination(self):
+    n = 0.0045  # about 500 m
+    steps = [step([0, 0], [0, n], 'depart'), step([0, n], [n, n]), step([n, n], [n, 2 * n]), step([n, 2 * n], [2 * n, 2 * n]), arrive([2 * n, 2 * n])]
+    for s in steps[:-1]:
+      s['distance'], s['duration'] = 500, 40
+    values = {'NavDestination': {'latitude': 2 * n, 'longitude': 2 * n}}
+    engine = route_engine(values)
+    with patch('requests.get', return_value=mapbox_response([steps])):
+      engine.recompute_route(gps_ok=True)
+    valid = []
+    with patch('requests.get', side_effect=requests.exceptions.ConnectionError('no dns')):
+      for t in range(90):
+        # 50 m north on the route, then a wrong turn east at 10 m/s with no signal
+        lon, lat, bearing = (0, t * 0.00009, 0) if t < 5 else (0.00009 * (t - 5), 5 * 0.00009, 90)
+        engine.last_position, engine.last_bearing = (lon, lat), bearing
+        engine.recompute_route(gps_ok=True)
+        engine.send_instruction()
+        valid.append(engine.pm.send.call_args[0][1].valid)
+    self.assertIn('NavDestination', values)
+    self.assertFalse(valid[-1])  # no instruction with wrong numbers
+    self.assertIsNone(engine.step_idx)
+    self.assertTrue(all(valid[:10]))  # near the route it is still shown
+
+  def test_a_gps_glitch_under_the_limit_keeps_the_route(self):
+    values = {'NavDestination': {'latitude': 0, 'longitude': 0.004}}
+    engine = route_engine(values)
+    with patch('requests.get', return_value=mapbox_response(ONE_LEG)):
+      engine.recompute_route(gps_ok=True)
+    engine.last_position = (0.001, 0.0006)  # about 67 m off
+    engine.should_recompute()
+    self.assertIsNotNone(engine.route)
+    engine.last_position = (0.001, 0.0012)  # about 133 m off
+    self.assertTrue(engine.should_recompute())
+    self.assertIsNone(engine.route)
+    self.assertIn('NavDestination', values)
