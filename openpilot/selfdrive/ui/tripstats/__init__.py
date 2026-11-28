@@ -65,6 +65,12 @@ def zone(params):
   return _zone[1]
 
 
+def local_now(params) -> datetime:
+  # wall time in the Day / Week zone (GPS zone, else the system zone); the device clock runs in UTC
+  z = zone(params)
+  return datetime.now(z) if z is not None else datetime.now().astimezone()
+
+
 def _open() -> list[dict]:
   return _held + ([live.summary(wall_now())] if live.active else [])
 

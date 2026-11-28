@@ -114,7 +114,7 @@ class TripProgressPage(Widget):
     # arrive time below the bar, in the lower right corner, on a vignette
     rl.draw_circle_gradient(rl.Vector2(x0 + rect.width, y0 + rect.height), 200, rl.Color(3, 5, 7, 215), rl.BLANK)
     if routing:
-      arrive = datetime.datetime.now() + datetime.timedelta(seconds=max(0.0, nav.timeRemaining))
+      arrive = ts.local_now(ui_state.params) + datetime.timedelta(seconds=max(0.0, nav.timeRemaining))
       self._text(f'{(arrive.hour - 1) % 12 + 1}:{arrive.minute:02d}', x0 + rect.width - 14, y0 + rect.height - 4, 36, bold, WHITE, right=True)
       self._text('arrive', x0 + rect.width - 14, y0 + rect.height - 44, 20, bold, ARRIVE, right=True)
 

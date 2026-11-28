@@ -3,6 +3,7 @@ import time
 import numpy as np
 import raylib_nb as rl
 
+from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.onroad.navigation import format_distance
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.lib.application import FONT_SCALE, FontWeight, TextAlignment, TextAlignmentVertical, gui_app
@@ -23,9 +24,10 @@ ETA_ROTATE = 4.0  # s per value
 COMMA_GREEN = (23, 127, 64)
 
 
-def _eta_values(instruction) -> list[tuple[str, str]]:
+def _eta_values(instruction, now: datetime.datetime | None = None) -> list[tuple[str, str]]:
   seconds = max(0, instruction.timeRemaining)
-  arrive = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+  now = tripstats.local_now(ui_state.params) if now is None else now
+  arrive = now + datetime.timedelta(seconds=seconds)
   return [('arrive', f'{(arrive.hour - 1) % 12 + 1}:{arrive.minute:02d}'), ('time left', f'{max(1, round(seconds / 60))} min'),
           ('distance', format_distance(max(0, instruction.distanceRemaining)))]
 
@@ -46,8 +48,12 @@ class NavARHud:
     tile = rl.Rectangle(rect.x + AR_TILE_X, rect.y + 8, 98, 98)
     rl.draw_rectangle_rounded(tile, 0.2, 10, accent)
     direction = instruction.maneuverModifier
+    arriving = instruction.maneuverType == 'arrive'
     flip = -1 if 'left' in direction else 1
-    if direction in ('straight', ''):
+    if arriving:
+      # a pin, not the turn arrow "arrive on the right" would draw
+      shape = [(0, 14), (0, -2), (-6, -8), (0, -14), (6, -8), (0, -2)]
+    elif direction in ('straight', ''):
       shape = [(0, 14), (0, -12), (-6, -5), (0, -12), (6, -5)]
     else:
       shape = [(-flip*9, 14), (-flip*9, -4), (-flip*2, -9), (flip*9, -9), (flip*3, -15), (flip*9, -9), (flip*3, -3)]
@@ -65,7 +71,7 @@ class NavARHud:
     rl.draw_rectangle_rounded(rl.Rectangle(rect.x + AR_BAR_X, tile.y + 4, 6, 90), 1.0, 4, rl.Color(255, 255, 255, 50))
     if progress > 0.01:
       rl.draw_rectangle_rounded(rl.Rectangle(rect.x + AR_BAR_X, tile.y + 4 + 90 * (1 - progress), 6, 90 * progress), 1.0, 4, accent)
-    dist = format_distance(max(0, instruction.maneuverDistance)) if instruction.maneuverDistance >= 15 else 'Now'
+    dist = format_distance(max(0, instruction.maneuverDistance)) if instruction.maneuverDistance >= 15 else ('Here' if arriving else 'Now')
     value, _, unit = dist.partition(' ')
     gui_label(rl.Rectangle(rect.x - 2, rect.y + 96, 260, 100), value, AR_DIST_PX, rl.WHITE, FontWeight.BOLD,
               alignment_vertical=TextAlignmentVertical.TOP)
@@ -76,9 +82,11 @@ class NavARHud:
     street = instruction.maneuverPrimaryText
     gui_label(rl.Rectangle(rect.x + 2, rect.y + rect.height - 44, 320, 40), street, AR_STREET_PX, rl.Color(240, 244, 248, 255), FontWeight.BOLD,
               alignment_vertical=TextAlignmentVertical.TOP)
-    if instruction.maneuverDistance < AR_ETA_HIDE:
+    # the ETA steps aside for a turn card; arriving there is no turn, so the corner stays
+    if instruction.maneuverDistance < AR_ETA_HIDE and not arriving:
       return
-    label, val = _eta_values(instruction)[int(time.monotonic() / ETA_ROTATE) % 3]
+    values = _eta_values(instruction)
+    label, val = values[0] if arriving else values[int(time.monotonic() / ETA_ROTATE) % 3]
     cx, cy = rect.x + rect.width, rect.y + rect.height
     rl.draw_circle_gradient(rl.Vector2(cx, cy), AR_ETA_VIGNETTE, rl.Color(4, 6, 8, 225), rl.BLANK)
     gui_label(rl.Rectangle(cx - 300, cy - AR_ETA_PX * FONT_SCALE - 4, 284, AR_ETA_PX * FONT_SCALE), val, AR_ETA_PX, rl.WHITE, FontWeight.BOLD,
