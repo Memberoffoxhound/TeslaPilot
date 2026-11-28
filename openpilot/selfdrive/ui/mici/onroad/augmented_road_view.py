@@ -342,7 +342,7 @@ class AugmentedRoadView(CameraView):
     if self._ar_shown:
       hud_rect = rl.Rectangle(self._content_rect.x + 6, self._content_rect.y, self._content_rect.width - 6, self._content_rect.height)
       self._nav_call(self._nav_hud_guard, self._nav_hud.render, hud_rect,
-                     self._model_renderer.theme_rgb)  # nav-ui hook
+                     self._model_renderer.theme_rgb, self._nav_ar.live_distance)  # nav-ui hook
     self._alert_renderer.render(self._content_rect)
 
     # Draw fake rounded border

@@ -1,7 +1,6 @@
 # Live trip page, one swipe right of the camera: driving-to and stats, plus the trip bar.
 from __future__ import annotations
 
-import datetime
 import time
 
 import raylib_nb as rl
@@ -113,9 +112,9 @@ class TripProgressPage(Widget):
 
     # arrive time below the bar, in the lower right corner, on a vignette
     rl.draw_circle_gradient(rl.Vector2(x0 + rect.width, y0 + rect.height), 200, rl.Color(3, 5, 7, 215), rl.BLANK)
-    if routing:
-      arrive = ts.local_now(ui_state.params) + datetime.timedelta(seconds=max(0.0, nav.timeRemaining))
-      self._text(f'{(arrive.hour - 1) % 12 + 1}:{arrive.minute:02d}', x0 + rect.width - 14, y0 + rect.height - 4, 36, bold, WHITE, right=True)
+    arrive = ts.arrive_at(ui_state.params, nav.timeRemaining) if routing else None
+    if arrive is not None:
+      self._text(ts.clock_text(arrive), x0 + rect.width - 14, y0 + rect.height - 4, 36, bold, WHITE, right=True)
       self._text('arrive', x0 + rect.width - 14, y0 + rect.height - 44, 20, bold, ARRIVE, right=True)
 
   def _draw_dest(self, x0: float, y0: float, a: float, bold, med) -> None:

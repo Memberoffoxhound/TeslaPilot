@@ -1,8 +1,8 @@
-import datetime
 import time
 import numpy as np
 import raylib_nb as rl
 
+from openpilot.selfdrive.navigation import hud_text
 from openpilot.selfdrive.ui import tripstats
 from openpilot.selfdrive.ui.mici.onroad.navigation import format_distance
 from openpilot.selfdrive.ui.ui_state import ui_state
@@ -24,12 +24,10 @@ ETA_ROTATE = 4.0  # s per value
 COMMA_GREEN = (23, 127, 64)
 
 
-def _eta_values(instruction, now: datetime.datetime | None = None) -> list[tuple[str, str]]:
-  seconds = max(0, instruction.timeRemaining)
-  now = tripstats.local_now(ui_state.params) if now is None else now
-  arrive = now + datetime.timedelta(seconds=seconds)
-  return [('arrive', f'{(arrive.hour - 1) % 12 + 1}:{arrive.minute:02d}'), ('time left', f'{max(1, round(seconds / 60))} min'),
-          ('distance', format_distance(max(0, instruction.distanceRemaining)))]
+def _eta_values(instruction) -> list[tuple[str, str]]:
+  arrive = tripstats.arrive_at(ui_state.params, instruction.timeRemaining)
+  return hud_text.eta_values(instruction.timeRemaining, format_distance(max(0, instruction.distanceRemaining)),
+                             tripstats.clock_text(arrive) if arrive is not None else None)
 
 
 class NavARHud:
@@ -38,10 +36,14 @@ class NavARHud:
     self._man_key = ''
     self._man_start = 1.0
 
-  def render(self, rect, accent_rgb: tuple[int, int, int] | None = None):
+  def render(self, rect, accent_rgb: tuple[int, int, int] | None = None, distance: float | None = None):
+    # distance is the overlay's carried maneuver distance; 1e9 means navd went quiet, so there is nothing true to show
     if not (ui_state.sm.valid['navInstruction'] and ui_state.sm.alive['navInstruction']):
       return
     instruction = ui_state.sm['navInstruction']
+    dist_now = float(instruction.maneuverDistance) if distance is None else distance
+    if dist_now > 1e6:
+      return
     r, g, b = accent_rgb or COMMA_GREEN
     accent = rl.Color(r, g, b, 255)
     rl.draw_rectangle_gradient_h(int(rect.x), int(rect.y), 300, int(rect.height), rl.Color(4, 6, 8, 215), rl.BLANK)
@@ -65,13 +67,13 @@ class NavARHud:
     for point in points:
       rl.draw_circle_v(point, 7, dark)
     key = f'{instruction.maneuverPrimaryText}|{instruction.maneuverType}'
-    if key != self._man_key or instruction.maneuverDistance > self._man_start:
-      self._man_key, self._man_start = key, max(instruction.maneuverDistance, 1.0)
-    progress = float(np.clip(1 - instruction.maneuverDistance / self._man_start, 0, 1))
+    if key != self._man_key or dist_now > self._man_start:
+      self._man_key, self._man_start = key, max(dist_now, 1.0)
+    progress = float(np.clip(1 - dist_now / self._man_start, 0, 1))
     rl.draw_rectangle_rounded(rl.Rectangle(rect.x + AR_BAR_X, tile.y + 4, 6, 90), 1.0, 4, rl.Color(255, 255, 255, 50))
     if progress > 0.01:
       rl.draw_rectangle_rounded(rl.Rectangle(rect.x + AR_BAR_X, tile.y + 4 + 90 * (1 - progress), 6, 90 * progress), 1.0, 4, accent)
-    dist = format_distance(max(0, instruction.maneuverDistance)) if instruction.maneuverDistance >= 15 else ('Here' if arriving else 'Now')
+    dist = hud_text.card_word(dist_now, instruction.maneuverType) or format_distance(max(0, dist_now))
     value, _, unit = dist.partition(' ')
     gui_label(rl.Rectangle(rect.x - 2, rect.y + 96, 260, 100), value, AR_DIST_PX, rl.WHITE, FontWeight.BOLD,
               alignment_vertical=TextAlignmentVertical.TOP)
@@ -83,10 +85,9 @@ class NavARHud:
     gui_label(rl.Rectangle(rect.x + 2, rect.y + rect.height - 44, 320, 40), street, AR_STREET_PX, rl.Color(240, 244, 248, 255), FontWeight.BOLD,
               alignment_vertical=TextAlignmentVertical.TOP)
     # the ETA steps aside for a turn card; arriving there is no turn, so the corner stays
-    if instruction.maneuverDistance < AR_ETA_HIDE and not arriving:
+    if dist_now < AR_ETA_HIDE and not arriving:
       return
-    values = _eta_values(instruction)
-    label, val = values[0] if arriving else values[int(time.monotonic() / ETA_ROTATE) % 3]
+    label, val = hud_text.eta_pick(_eta_values(instruction), instruction.maneuverType, time.monotonic(), ETA_ROTATE)
     cx, cy = rect.x + rect.width, rect.y + rect.height
     rl.draw_circle_gradient(rl.Vector2(cx, cy), AR_ETA_VIGNETTE, rl.Color(4, 6, 8, 225), rl.BLANK)
     gui_label(rl.Rectangle(cx - 300, cy - AR_ETA_PX * FONT_SCALE - 4, 284, AR_ETA_PX * FONT_SCALE), val, AR_ETA_PX, rl.WHITE, FontWeight.BOLD,

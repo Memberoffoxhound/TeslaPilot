@@ -65,10 +65,18 @@ def zone(params):
   return _zone[1]
 
 
-def local_now(params) -> datetime:
-  # wall time in the Day / Week zone (GPS zone, else the system zone); the device clock runs in UTC
-  z = zone(params)
-  return datetime.now(z) if z is not None else datetime.now().astimezone()
+def arrive_at(params, seconds: float, now: datetime | None = None) -> datetime | None:
+  # arrival wall time in the Day / Week zone (GPS zone, else the system zone). Added in UTC and converted last,
+  # so a clock change on the way is right. None while the clock is not valid. now is for tests (aware, any zone)
+  if now is None:
+    if not system_time_valid():
+      return None
+    now = datetime.now(UTC)
+  return (now.astimezone(UTC) + timedelta(seconds=max(0.0, seconds))).astimezone(zone(params))
+
+
+def clock_text(t: datetime) -> str:
+  return f'{(t.hour - 1) % 12 + 1}:{t.minute:02d}'
 
 
 def _open() -> list[dict]:
