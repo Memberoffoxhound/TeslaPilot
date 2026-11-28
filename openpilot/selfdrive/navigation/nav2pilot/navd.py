@@ -8,20 +8,29 @@
 # - a waypoint closer than PASSED_DISTANCE is passed: it and those before it are dropped, also from the param,
 #   so neither a reroute nor a restarted navd leads back to it
 #
+# Always, with or without waypoints:
+# - a failed reroute to the same destination keeps the last route instead of clearing it
+# - an ego already on a later step (it skipped a turnaround loop) moves to that step instead of rerouting
+#
 # With a Mapbox token sent from the phone (MapboxToken param, see mapbox.py) every route request goes straight to
 # Mapbox with it; without one navd keeps upstream's choice: the MAPBOX_TOKEN variable, else comma's proxy.
+import math
+
 import numpy as np
 import requests
 
 import openpilot.cereal.messaging as messaging
 from openpilot.common.realtime import Ratekeeper
 from openpilot.common.swaglog import cloudlog
-from openpilot.selfdrive.navigation.navd import RECOMPUTE_HOLD, RouteEngine
-from openpilot.selfdrive.navigation.route import local_meters
+from openpilot.selfdrive.navigation.navd import RECOMPUTE_HOLD, REROUTE_DISTANCE, RouteEngine
+from openpilot.selfdrive.navigation.route import along_path, local_meters, nearest_segment
 from openpilot.selfdrive.navigation.nav2pilot.mapbox import MAPBOX_HOST, MAPBOX_TOKEN_PARAM
 from openpilot.selfdrive.navigation.nav2pilot.waypoints import DESTINATION_PARAM, param_with_waypoints, waypoints_from_param
 
 PASSED_DISTANCE = 50  # meters; at 130 km/h and 1 Hz the ego is sampled every 36 m
+REQUEST_TIMEOUT = (4.0, 10.0)  # s connect, read; no instruction goes out while a request waits
+SKIP_DISTANCE = 15  # m, a later step this close to the ego is where it is now
+SKIP_HEADING = 45  # deg, and only when the ego drives the same way along it
 
 
 def leg_steps(legs) -> list:
@@ -100,6 +109,15 @@ class Nav2PilotRouteEngine(RouteEngine):
     return remaining
 
   def calculate_route(self, destination, waypoints=()):
+    # a failed reroute (no signal, no DNS) keeps the route it had; a new destination drops it
+    same = self.route is not None and destination == self.nav_destination and tuple(waypoints) == self.nav_waypoints
+    kept = (self.route, self.route_geometry, self.step_idx, self.nav_destination, self.nav_waypoints)
+    self._calculate_route(destination, waypoints)
+    if self.route is None and same:
+      cloudlog.warning("navd: reroute failed, keeping the last route")
+      self.route, self.route_geometry, self.step_idx, self.nav_destination, self.nav_waypoints = kept
+
+  def _calculate_route(self, destination, waypoints=()):
     self.select_mapbox_token()
     if not waypoints:
       self.nav_waypoints = ()
@@ -141,7 +159,7 @@ class Nav2PilotRouteEngine(RouteEngine):
     coords_str = ';'.join(f'{lon},{lat}' for lon, lat in coordinates)
     url = self.mapbox_host + '/directions/v5/mapbox/driving-traffic/' + coords_str
     try:
-      resp = requests.get(url, params=params, timeout=10)
+      resp = requests.get(url, params=params, timeout=REQUEST_TIMEOUT)
       if resp.status_code != 200:
         cloudlog.event("API request failed", status_code=resp.status_code, text=resp.text, error=True)
       resp.raise_for_status()
@@ -162,6 +180,32 @@ class Nav2PilotRouteEngine(RouteEngine):
   def clear_route(self):
     super().clear_route()
     self.nav_waypoints = ()
+
+  def should_recompute(self):
+    if self.step_idx is not None and self.route is not None and self.last_position is not None and self.step_idx < len(self.route) - 1:
+      if along_path(self.route_geometry[self.step_idx], self.last_position)[1] > REROUTE_DISTANCE and self.skip_ahead():
+        return False
+    return super().should_recompute()
+
+  def skip_ahead(self) -> bool:
+    # a later step can already be under the ego, e.g. after it skipped a turnaround loop
+    if self.last_bearing is None:
+      return False
+    for i in range(self.step_idx + 1, len(self.route)):
+      origin = self.route_geometry[i][0]
+      local = local_meters(self.route_geometry[i], origin)
+      local = local[np.r_[True, np.hypot(*np.diff(local, axis=0).T) > 0.5]]
+      if len(local) < 2:
+        continue
+      seg, _, lateral = nearest_segment(local[:-1], local[1:], local_meters(self.last_position, origin))
+      d = local[seg + 1] - local[seg]
+      off = (math.degrees(math.atan2(d[0], d[1])) - self.last_bearing + 180) % 360 - 180
+      if lateral < SKIP_DISTANCE and abs(off) < SKIP_HEADING:
+        cloudlog.warning(f"navd: skipped to step {i}")
+        self.step_idx = i
+        self.reroute_counter = 0
+        return True
+    return False
 
 
 def main():

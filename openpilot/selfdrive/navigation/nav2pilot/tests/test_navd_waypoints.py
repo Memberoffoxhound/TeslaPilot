@@ -4,6 +4,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from openpilot.common.params import Params
 from openpilot.common.test import OpenpilotTestCase
 from openpilot.selfdrive.navigation.navd import RECOMPUTE_HOLD
@@ -201,3 +203,51 @@ class TestSetNavRoute(OpenpilotTestCase):
     too_many = [{"latitude": 45.4, "longitude": 9.1}] * 21
     assert dispatcher["setNavRoute"](45.47, 9.19, too_many)["success"] == 0
     assert Params().get("NavDestination") is None
+
+
+class TestRerouteResilience(unittest.TestCase):
+  # route 00000211: no DNS on a reroute cleared the route, and the AR view went with it
+  def test_failed_reroute_keeps_the_route(self):
+    values = {'NavDestination': {'latitude': 0, 'longitude': 0.004}}
+    engine = route_engine(values)
+    with patch('requests.get', return_value=mapbox_response(ONE_LEG)):
+      engine.recompute_route(gps_ok=True)
+    route = engine.route
+    with patch('requests.get', side_effect=requests.exceptions.ConnectionError('no dns')):
+      engine.calculate_route((0.004, 0))
+    self.assertIs(engine.route, route)
+    self.assertEqual(engine.step_idx, 0)
+
+  def test_failed_request_to_a_new_destination_clears(self):
+    values = {'NavDestination': {'latitude': 0, 'longitude': 0.004}}
+    engine = route_engine(values)
+    with patch('requests.get', return_value=mapbox_response(ONE_LEG)):
+      engine.recompute_route(gps_ok=True)
+    with patch('requests.get', side_effect=requests.exceptions.ConnectionError('no dns')):
+      engine.calculate_route((0.006, 0))
+    self.assertIsNone(engine.route)
+
+  def test_failed_reroute_with_waypoints_keeps_the_route(self):
+    values = {'NavDestination': {'latitude': 0, 'longitude': 0.004, 'waypoints': [{'latitude': 0, 'longitude': 0.002, 'via': False}]}}
+    engine = route_engine(values)
+    with patch('requests.get', return_value=mapbox_response(TWO_LEGS)) as get:
+      engine.recompute_route(gps_ok=True)
+    self.assertLessEqual(get.call_args.kwargs['timeout'][0], 5)
+    route = engine.route
+    with patch('requests.get', side_effect=requests.exceptions.ConnectTimeout('slow')):
+      engine.calculate_route((0.004, 0), engine.nav_waypoints)
+    self.assertIs(engine.route, route)
+
+  def test_skips_to_a_later_step_under_the_ego(self):
+    # out and back: the ego turns around early and is already on the way back
+    out_back = [[step([0, 0], [0.001, 0], 'depart'), step([0.001, 0], [-0.002, 0]), step([-0.002, 0], [-0.002, 0.001]), arrive([-0.002, 0.001])]]
+    values = {'NavDestination': {'latitude': 0.001, 'longitude': -0.002}}
+    engine = route_engine(values)
+    with patch('requests.get', return_value=mapbox_response(out_back)):
+      engine.recompute_route(gps_ok=True)
+    engine.last_position, engine.last_bearing = (-0.0005, 0), 90  # wrong way along step 1: no skip
+    self.assertFalse(engine.skip_ahead())
+    engine.last_bearing = 270  # heading west, along step 1
+    self.assertFalse(engine.should_recompute())
+    self.assertEqual(engine.step_idx, 1)
+    self.assertEqual(engine.reroute_counter, 0)
