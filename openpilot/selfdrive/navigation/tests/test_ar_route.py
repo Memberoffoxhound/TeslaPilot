@@ -105,3 +105,16 @@ def test_turn_deg_sign():
   assert ar.turn_deg(left, ar.arc(left), 20.0) < -80
   straight = np.array([[0.0, 0.0], [40.0, 0.0]])
   assert abs(ar.turn_deg(straight, ar.arc(straight), 20.0)) < 1
+
+
+def test_no_arrows_on_a_straight_road():
+  # route 00000211: navd said right turn at 42 m on a straight road and the chevrons floated beside it
+  straight = ar.resample(np.array([[0.0, 0.0], [300.0, 0.0]]), 1.0)
+  cd = ar.arc(straight)
+  assert not ar.bends(straight, cd, 42.0, 1.0)
+  corner = ar.resample(np.array([[0.0, 0.0], [60.0, 0.0], [60.0, 60.0]]), 1.0)
+  cd = ar.arc(corner)
+  assert ar.bends(corner, cd, 60.0, 1.0)
+  assert not ar.bends(corner, cd, 60.0, -1.0)  # wrong way
+  gentle = ar.resample(np.array([[0.0, 0.0], [60.0, 0.0], [120.0, 12.0]]), 1.0)  # about 11 degrees
+  assert not ar.bends(gentle, ar.arc(gentle), 60.0, 1.0)

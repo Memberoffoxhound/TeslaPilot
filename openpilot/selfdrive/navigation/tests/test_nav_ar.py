@@ -382,3 +382,26 @@ def test_route_drawn_stops_past_the_turn():
   ov.update(_path(), True, _nav_sm(route, 60.0, 1), now=1000.0)
   assert ov.reason is None
   assert ov._route[:, 1].max() < 60.0 + 27.0
+
+
+def test_carried_distance_counts_the_message_age():
+  # navd stamped the instruction 0.5 s before the UI saw it: 5 m already driven at 10 m/s
+  route = [(38.9, -90.2), (38.91, -90.2)]
+  ov = NavAROverlay()
+  ov.update(_path(), True, _nav_sm(route, 100.0, int(999.5 * 1e9), v_ego=10.0), now=1000.0)
+  assert abs(ov.live_distance - 95.0) < 0.5
+  # a log from another clock is not an age
+  ov = NavAROverlay()
+  ov.update(_path(), True, _nav_sm(route, 100.0, 1), now=1000.0)
+  assert abs(ov.live_distance - 100.0) < 1e-6
+
+
+def test_hud_distance_is_the_overlay_distance():
+  route = [(38.9, -90.2), (38.91, -90.2)]
+  ov = NavAROverlay()
+  ov.update(_path(), True, _nav_sm(route, 100.0, 1), now=1000.0)
+  ov.update(_path(), True, _nav_sm(route, 100.0, 1), now=1000.4)
+  assert abs(ov.live_distance - 96.0) < 1e-6
+  for k in range(1, 8):
+    ov.update(_path(), True, _nav_sm(route, 100.0, 1), now=1000.4 + k * 0.5)
+  assert ov.live_distance > 1e6  # stale navd: the card hides instead of freezing

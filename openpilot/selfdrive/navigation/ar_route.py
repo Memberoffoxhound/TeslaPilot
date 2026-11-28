@@ -15,6 +15,7 @@ TIGHT_TURN = (-35.0, 18.0)  # m around a sharp maneuver: the camera cannot see t
 HEADING_FIX_MIN = 80.0  # m of straight model path needed to trust its heading
 HEADING_FIX_MAX = 6.0  # deg
 TIGHT = ('left', 'right', 'sharp left', 'sharp right', 'uturn')
+ARROW_MIN_TURN = 20.0  # deg, the route has to bend this much at the maneuver
 NEAR_LEG = 8.0  # m, route points this much farther than the nearest still count as under the car
 
 
@@ -51,6 +52,11 @@ def turn_deg(route_c: np.ndarray, cd: np.ndarray, s: float, span: float = 15.0) 
   p = [np.array([np.interp(v, cd, route_c[:, 0]), np.interp(v, cd, route_c[:, 1])]) for v in (s - span, s, s + span)]
   a, b = p[1] - p[0], p[2] - p[1]
   return math.degrees(math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1]))
+
+
+def bends(route_c: np.ndarray, cd: np.ndarray, s: float, turn: float) -> bool:
+  # the route really turns the way navd says at s (turn is +1 right, -1 left); no bend means no arrows
+  return turn * turn_deg(route_c, cd, s) >= ARROW_MIN_TURN
 
 
 def ahead(route_c: np.ndarray, back: float = 20.0, fwd: float = 900.0) -> np.ndarray:

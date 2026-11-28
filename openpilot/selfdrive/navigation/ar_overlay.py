@@ -11,6 +11,7 @@ NAV_STALE_S = 2.5  # s, navd sends every second; older than this it is stuck (a 
 PAST_TURN = 25.0  # m of the new road drawn past the turn
 DRAW_S = (10.0, 120.0, 300.0)  # s of travel, min and max m of route drawn ahead
 NO_TURN = ('arrive', 'depart')
+MAX_AGE_S = 1.5  # s, message age counted against the carried distance; anything else is a clock mismatch
 
 
 def flat_fill_xs(cx: float, half: float, torque: float) -> tuple[float, float]:
@@ -29,6 +30,7 @@ class NavAROverlay:
     self._anchor: np.ndarray | None = None
     self._man_dist, self._man_mod, self._man_type = 1e9, '', ''
     self._nav_t = -1
+    self.live_distance = 1e9
     self._nav_seen = 0.0
     self._odo = 0.0
     self._odo_nav = 0.0
@@ -70,6 +72,7 @@ class NavAROverlay:
     if self.reason is None and (len(self._route_ll) < 2 or not gps_ok or len(path_xyz) < 2):
       self.reason = 'gps' if gps is not None and not gps_ok else 'route'
     self._man_dist, self._man_mod, self._man_type = man_dist, man_mod, man_type
+    self.live_distance = man_dist  # the HUD card shows the same carried distance as the chevrons
     if self.reason is not None:
       return
     need = sm.updated['modelV2'] or sm.updated['navRoute'] or (src is not None and sm.updated[src]) or prev is not None
@@ -112,7 +115,10 @@ class NavAROverlay:
     self._last_now, self._v = now, v
     t = sm.logMonoTime['navInstruction']
     if t != self._nav_t:
-      self._nav_t, self._nav_seen, self._odo_nav = t, now, self._odo
+      # the instruction describes where the car was when navd sent it, so start the odometer that far back
+      age = now - t * 1e-9
+      age = age if 0.0 <= age <= MAX_AGE_S else 0.0
+      self._nav_t, self._nav_seen, self._odo_nav = t, now, self._odo - v * age
     if not sm.valid['navInstruction'] or now - self._nav_seen > NAV_STALE_S:
       return 1e9
     return float(nav.maneuverDistance) - (self._odo - self._odo_nav)

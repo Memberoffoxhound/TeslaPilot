@@ -13,7 +13,6 @@ CHEV_BASE, CHEV_PEAK = 0.30, 0.95  # translucent at rest, flash at peak
 ARROW_STEP, ARROW_CYCLE, ARROW_DECAY = 0.13, 1.3, 0.3  # s, the flash travels in the turn direction
 ARROW_ROWS, ARROW_W, ARROW_H, ARROW_C, ARROW_STEP_M, ARROW_LIFT = 5, 3.0, 3.2, 1.15, 1.6, 2.6  # m
 ARROW_FADE_IN = (6.0, 60.0, 150.0)  # s before the turn, min and max m
-ARROW_MIN_TURN = 20.0  # deg, the route has to bend this much at the maneuver
 ARROW_BLUE = (50, 150, 255)
 
 
@@ -68,7 +67,7 @@ class NavAROverlay(_NavAROverlay):
       return None
     turn = -1.0 if 'left' in self._man_mod else 1.0
     # no bend there means navd and the drawn route disagree: no arrows on a straight road
-    if turn * ar.turn_deg(r, cd, s) < ARROW_MIN_TURN:
+    if not ar.bends(r, cd, s, turn):
       self._anchor = None
       return None
     mp = np.array([np.interp(s, cd, r[:, 0]), np.interp(s, cd, r[:, 1])])
